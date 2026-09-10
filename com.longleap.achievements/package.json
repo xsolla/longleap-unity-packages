@@ -1,0 +1,12 @@
+{
+  "name": "com.longleap.achievements",
+  "version": "0.1.0",
+  "displayName": "LongLeap Achievements",
+  "description": "Achievement system with stat-tracking objectives, cascading unlocks, and hidden achievements.",
+  "unity": "6000.0",
+  "keywords": ["achievements", "goals", "rewards", "longleap"],
+  "dependencies": {
+    "com.longleap.core": "0.1.0",
+    "com.longleap.stats": "0.1.0"
+  }
+}

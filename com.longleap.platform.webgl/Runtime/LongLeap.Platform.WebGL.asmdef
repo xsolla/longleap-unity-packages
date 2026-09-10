@@ -1,0 +1,18 @@
+{
+  "name": "LongLeap.Platform.WebGL",
+  "rootNamespace": "LongLeap.Platform.WebGL",
+  "references": [
+    "LongLeap.Core",
+    "LongLeap.Analytics",
+    "UnityEngine.CoreModule",
+    "Newtonsoft.Json"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

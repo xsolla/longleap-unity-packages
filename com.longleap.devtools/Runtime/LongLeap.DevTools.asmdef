@@ -1,0 +1,17 @@
+{
+  "name": "LongLeap.DevTools",
+  "rootNamespace": "LongLeap.DevTools",
+  "references": [
+    "LongLeap.Core"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "LONGLEAP_DEBUG"
+  ],
+  "versionDefines": []
+}

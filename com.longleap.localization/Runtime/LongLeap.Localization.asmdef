@@ -1,0 +1,17 @@
+{
+  "name": "LongLeap.Localization",
+  "rootNamespace": "LongLeap.Localization",
+  "references": [
+    "Unity.Localization",
+    "Unity.ResourceManager",
+    "Unity.TextMeshPro"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

@@ -1,0 +1,12 @@
+{
+  "name": "com.longleap.null",
+  "version": "0.1.0",
+  "displayName": "LongLeap Null Backend",
+  "description": "Null/stub backend implementations for all LongLeap services. Always succeeds, used for testing and offline mode.",
+  "unity": "6000.0",
+  "keywords": ["null", "stub", "backend", "testing", "longleap"],
+  "dependencies": {
+    "com.longleap.core": "0.1.0",
+    "com.longleap.remoteconfig": "1.0.0"
+  }
+}

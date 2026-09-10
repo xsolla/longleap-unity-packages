@@ -1,0 +1,116 @@
+# LongLeap Core
+
+Foundation package — defines all core abstractions, interfaces, domain types, and the concrete service classes for cloud saves and leaderboards. Other LongLeap packages provide the concrete backend implementations.
+
+---
+
+## Overview
+
+| Module | Defines | Implemented elsewhere |
+|---|---|---|
+| Contracts | `IPlayerPrefs`, `IPersistentStorage`, `IExperimentInfoProvider`, `AbExperimentInfo` | Game-provided |
+| Auth | `IAuthProvider`, `AuthResult`, `UserId`, `IdToken` | `NullAuthProvider`, `FirebaseAnonymousAuthProvider` |
+| Cloud Saves | `ICloudSaveService`/`ICloudSaveProvider`, `CloudSaveKey`, `CloudSaveService`, extensions | `NullCloudSaveProvider`, `FirebaseCloudSaveProvider` |
+| Leaderboards | `ILeaderboardService`/`ILeaderboardProvider`/`ILeaderboard`, `LeaderboardService`, value types | `NullLeaderboardProvider`, `FirebaseLeaderboardProvider` |
+
+## Public API
+
+### Auth
+
+| Type | Kind | Purpose |
+|---|---|---|
+| `IAuthProvider` | Interface | `Task<AuthResult> LoginAsync()` |
+| `AuthResult` | Abstract class | Discriminated union: `Success(Token, Uid)` or `Failure(Error)`. Private constructor |
+| `UserId` | Readonly struct `: IEquatable<UserId>` | Typed wrapper. `Value`, `IsValid`, `None` sentinel, value equality |
+| `IdToken` | Readonly struct `: IEquatable<IdToken>` | Typed wrapper around JWT. `Value`, `IsValid`, `None` sentinel |
+
+### Cloud Saves
+
+| Type | Kind | Purpose |
+|---|---|---|
+| `ICloudSaveService` | Interface, `IDisposable` | `InitializeAsync()`, CRUD with `CloudSaveKey` |
+| `ICloudSaveProvider` | Interface | Provider seam. `LoadAllAsync()`, single-key CRUD |
+| `CloudSaveKey` | Readonly struct, `[Serializable]` | Typed newtype. Validates against forbidden chars (`. $ # [ ] /`) |
+| `CloudSaveService` | Sealed class | Constructor: `(ICloudSaveProvider)`. Offline-first: local cache, dirty tracking, timestamp-based conflict resolution, semaphore-guarded |
+| `CloudSaveProviderExtensions` | Static class | `SetIntAsync`/`GetIntAsync`, `SetFloatAsync`/`GetFloatAsync` on `ICloudSaveProvider` |
+
+### Leaderboards
+
+| Type | Kind | Purpose |
+|---|---|---|
+| `ILeaderboardService` | Interface | `GetBoard(BoardId, SortDirection)`, `FlushAsync()`, `Dispose()`, event `OnTopRankAchieved(BoardId, int)` |
+| `ILeaderboardProvider` | Interface | Provider seam with score submission, top-N, rank, surroundings |
+| `ILeaderboard` | Interface | Per-board handle: `Id`, `SubmitScoreAsync(long)`, `GetTopAsync(int)`, `GetMyRankAsync()`, `GetSurroundingsAsync(int)` |
+| `LeaderboardService` | Sealed class, `IDisposable` | Constructor: `(string prefix, ILeaderboardProvider, IAuthProvider)`. Batching, prefixing, caching, auth fallback, top-rank event |
+| `BoardId` | Readonly struct | Typed newtype: `^[a-zA-Z][a-zA-Z0-9_-]{0,39}$`. `None` sentinel, `IsNone`, `IsValid` |
+| `BoardDefinition` | Readonly struct | `Id` (BoardId) + `Sort` (SortDirection) |
+| `SortDirection` | Enum | `Descending`, `Ascending` |
+| `SubmitResult` | Readonly struct | `IsAccepted`, `IsNewBest`, `Score` |
+| `PlayerRank` | Readonly struct | `Rank` (int?), `Score` (long?), `TotalPlayers` (int) |
+| `LeaderboardEntry` | Readonly struct | `Uid`, `DisplayName`, `Score`, `Rank` (1-based), `Timestamp` |
+| `LeaderboardPage` | Sealed class | `Entries`, `Cursor` (object?), `HasMore`. Static `Empty()` factory |
+
+### Contracts
+
+| Type | Kind | Purpose |
+|---|---|---|
+| `IPlayerPrefs` | Interface | `GetString`/`GetInt`/`GetFloat`(key, default), `Set*`(key, val), `HasKey`, `DeleteKey`, `Save` |
+| `IPersistentStorage` | Interface | Async key-value string storage: `LoadAsync`, `SaveAsync`, `HasKeyAsync`, `DeleteAsync` |
+| `IExperimentInfoProvider` | Interface | `IReadOnlyList<AbExperimentInfo> ActiveExperiments` |
+| `AbExperimentInfo` | Readonly struct | `ExperimentId` (string), `VariantIndex` (int) |
+
+## Initialization
+
+Each service is constructed independently:
+
+```csharp
+var saves = new CloudSaveService(cloudSaveProvider);
+await saves.InitializeAsync();
+
+var leaderboards = new LeaderboardService("v1_", leaderboardProvider, authProvider);
+```
+
+## Usage
+
+### Auth — discriminated union
+
+```csharp
+var result = await authProvider.LoginAsync();
+if (result is AuthResult.Success s) { /* s.Token, s.Uid */ }
+else if (result is AuthResult.Failure f) { /* f.Error */ }
+```
+
+### Cloud Saves
+
+```csharp
+var key = new CloudSaveKey("progress");
+await saves.SetStringAsync(key, "42");
+var value = await saves.GetStringAsync(key);
+```
+
+### Leaderboards
+
+```csharp
+var board = leaderboards.GetBoard(new BoardId("score"), SortDirection.Descending);
+await board.SubmitScoreAsync(1500);
+await leaderboards.FlushAsync();
+var top10 = await board.GetTopAsync(10);
+```
+
+## Internals
+
+### Cloud Saves — conflict resolution
+
+On `InitializeAsync`, compares local and cloud Unix timestamps. Cloud newer -> overwrites local. Local newer -> marks dirty for push. Last-write-wins. Local cache uses `PlayerPrefs` keys: `cloudsave_{key}`, `cloudsave_ts_{key}`, `cloudsave_dirty`.
+
+### Leaderboards — batching
+
+`SubmitScoreAsync` stores best pending score per board. Only the best is kept. `FlushAsync` sends all queued scores in one batch. Uses `SystemInfo.deviceUniqueIdentifier` as UID fallback.
+
+### Leaderboards — prefixing
+
+All board IDs are prefixed at construction (e.g. `"v1_"`) to isolate per-game on shared backends.
+
+### Leaderboards — top-rank event
+
+`OnTopRankAchieved` fires during `FlushAsync` when player rank is <= 10. Only fires once per session per board.

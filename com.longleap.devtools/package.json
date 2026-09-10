@@ -1,0 +1,11 @@
+{
+  "name": "com.longleap.devtools",
+  "version": "0.1.0",
+  "displayName": "LongLeap DevTools",
+  "description": "In-build debug tooling for LongLeap packages. Currently a cloud save viewer; intended as the home for future debug widgets. The runtime assembly only exists when the LONGLEAP_DEBUG scripting define is set.",
+  "unity": "6000.0",
+  "keywords": ["debug", "devtools", "cloudsave", "longleap"],
+  "dependencies": {
+    "com.longleap.core": "0.1.0"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "LongLeap.GamePix.Editor",
+  "rootNamespace": "LongLeap.GamePix.Editor",
+  "references": [],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

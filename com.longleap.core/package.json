@@ -1,0 +1,11 @@
+{
+  "name": "com.longleap.core",
+  "version": "0.1.0",
+  "displayName": "LongLeap Core",
+  "description": "Core interfaces and service implementations for LongLeap packages. Contains shared types, service contracts, and backend-agnostic service logic.",
+  "unity": "6000.0",
+  "keywords": ["services", "leaderboard", "achievement", "auth", "longleap", "core"],
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.0.2"
+  }
+}

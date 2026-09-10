@@ -1,0 +1,17 @@
+{
+  "name": "LongLeap.XsollaId",
+  "rootNamespace": "LongLeap.XsollaId",
+  "references": [
+    "LongLeap.Core",
+    "UnityEngine.CoreModule",
+    "Newtonsoft.Json"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

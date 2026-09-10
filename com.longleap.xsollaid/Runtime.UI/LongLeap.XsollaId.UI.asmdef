@@ -1,0 +1,17 @@
+{
+  "name": "LongLeap.XsollaId.UI",
+  "rootNamespace": "LongLeap.XsollaId.UI",
+  "references": [
+    "LongLeap.XsollaId",
+    "LongLeap.Localization",
+    "Unity.TextMeshPro"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

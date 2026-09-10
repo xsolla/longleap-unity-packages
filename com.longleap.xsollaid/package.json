@@ -1,0 +1,21 @@
+{
+  "name": "com.longleap.xsollaid",
+  "version": "0.1.0",
+  "displayName": "LongLeap Xsolla ID",
+  "description": "Xsolla ID sign-in: OAuth2/OIDC authorization code + PKCE. Contracts and orchestration only; the browser popup and HTTP transport live in the XSOLLA_ID-gated companion assembly. Ships a drop-in account widget (LongLeap.XsollaId.UI) with its prefab under UI/.",
+  "unity": "6000.0",
+  "keywords": [
+    "xsolla",
+    "xsollaid",
+    "auth",
+    "oidc",
+    "oauth2",
+    "longleap"
+  ],
+  "dependencies": {
+    "com.longleap.core": "0.1.0",
+    "com.unity.nuget.newtonsoft-json": "3.0.2",
+    "com.longleap.localization": "0.1.0",
+    "com.unity.textmeshpro": "3.0.0"
+  }
+}

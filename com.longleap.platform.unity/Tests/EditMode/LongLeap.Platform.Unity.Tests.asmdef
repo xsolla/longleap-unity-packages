@@ -1,0 +1,20 @@
+{
+  "name": "LongLeap.Platform.Unity.Tests",
+  "rootNamespace": "",
+  "references": [
+    "LongLeap.Platform.Unity",
+    "LongLeap.Core",
+    "LongLeap.Achievements",
+    "LongLeap.Stats",
+    "Newtonsoft.Json",
+    "UnityEngine.TestRunner",
+    "NUnit.Framework"
+  ],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}

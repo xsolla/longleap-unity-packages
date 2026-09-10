@@ -1,0 +1,19 @@
+{
+  "name": "LongLeap.GamePix",
+  "rootNamespace": "LongLeap.GamePix",
+  "references": [
+    "LongLeap.Core",
+    "GamePix",
+    "UnityEngine.CoreModule"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "GAMEPIX"
+  ],
+  "versionDefines": []
+}

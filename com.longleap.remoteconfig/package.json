@@ -1,0 +1,15 @@
+{
+    "name": "com.longleap.remoteconfig",
+    "version": "1.0.0",
+    "displayName": "LongLeap Remote Config",
+    "description": "Remote configurable game parameters with A/B testing analytics embedding",
+    "unity": "6000.0",
+    "keywords": ["remote-config", "firebase"],
+    "author": {
+        "name": "LongLeap"
+    },
+    "dependencies": {
+        "com.longleap.core": "0.1.0",
+        "com.unity.nuget.newtonsoft-json": "3.0.2"
+    }
+}

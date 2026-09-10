@@ -1,0 +1,14 @@
+{
+  "name": "com.longleap.settings",
+  "version": "0.1.0",
+  "displayName": "LongLeap Settings",
+  "description": "Typed settings system with automatic UI generation, cloud persistence, and enum dropdowns.",
+  "unity": "6000.0",
+  "keywords": ["settings", "preferences", "longleap"],
+  "dependencies": {
+    "com.longleap.core": "0.1.0",
+    "com.longleap.localization": "0.1.0",
+    "com.unity.nuget.newtonsoft-json": "3.0.2",
+    "com.unity.textmeshpro": "3.0.0"
+  }
+}

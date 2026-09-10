@@ -1,0 +1,11 @@
+{
+  "name": "com.longleap.platform.unity",
+  "version": "0.1.0",
+  "displayName": "LongLeap Platform Unity",
+  "description": "Unity platform implementations: file storage, PlayerPrefs storage, streaming assets loader, coroutine timer, PlayerPrefs adapter.",
+  "unity": "6000.0",
+  "keywords": ["platform", "unity", "longleap"],
+  "dependencies": {
+    "com.longleap.core": "0.1.0"
+  }
+}

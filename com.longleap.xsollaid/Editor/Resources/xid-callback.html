@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Signing in…</title>
+<style>
+  html, body {
+    margin: 0; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    background: #231F20; color: #f2f2f2;
+    font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+</style>
+</head>
+<body>
+<p id="status">Signing in…</p>
+<script>
+(function () {
+  // Куда разрешено отдавать результат. targetOrigin у postMessage должен быть
+  // конкретным: с '*' любой сайт, сумевший открыть эту страницу, прочитал бы
+  // живой код авторизации. Сообщение с неподходящим targetOrigin браузер
+  // молча выбрасывает, поэтому просто перебираем список — лишнего не утечёт.
+  //
+  // Список нужен потому, что страница и игра НЕ обязаны быть на одном
+  // origin'е: в портальной сборке игру отдаёт GamePix, а эта страница может
+  // лежать на нашем домене. Добавлять новые адреса игры — здесь.
+  // Портальные origin'ы — оба: игру отдаёт iframe, и его адрес НЕ совпадает с
+  // адресом страницы игры (www.gamepix.com/play/<slug>). Опener у этого окна —
+  // именно iframe, поэтому нужен его origin. Лишняя запись бесплатна: браузер
+  // молча отбрасывает сообщение с неподходящим targetOrigin.
+  var ALLOWED_GAME_ORIGINS = [
+    'http://127.0.0.1:8081',
+    'https://blood-red-snow.pages.dev',
+    'https://bloodredsnow.hel1.your-objectstorage.com',
+    'https://play.gamepix.com',
+    'https://www.gamepix.com'
+  ];
+
+  var params = new URLSearchParams(window.location.search);
+
+  var payload = {
+    type: 'xsolla-id-auth',
+    code: params.get('code') || '',
+    state: params.get('state') || '',
+    // Может прийти access_denied — игрок нажал «отмена».
+    error: params.get('error') || params.get('error_description') || ''
+  };
+
+  var target = window.opener;
+
+  if (!target) {
+    // Открыли страницу напрямую, не из игры. Кода тут нет смысла показывать.
+    document.getElementById('status').textContent =
+      'Nothing to do here — open the game and sign in from there.';
+    return;
+  }
+
+  // Своему origin'у отдаём всегда: случай, когда страница и игра рядом.
+  var origins = ALLOWED_GAME_ORIGINS.slice();
+  if (origins.indexOf(window.location.origin) === -1) {
+    origins.push(window.location.origin);
+  }
+
+  for (var i = 0; i < origins.length; i++) {
+    try {
+      target.postMessage(payload, origins[i]);
+    } catch (e) {
+      // Неподходящий origin — браузер и так отбросит; идём дальше.
+    }
+  }
+
+  // Игра сама закроет окно, получив сообщение. Закрываемся и сами — на
+  // случай, если она этого не сделает.
+  window.setTimeout(function () {
+    window.close();
+  }, 300);
+})();
+</script>
+</body>
+</html>

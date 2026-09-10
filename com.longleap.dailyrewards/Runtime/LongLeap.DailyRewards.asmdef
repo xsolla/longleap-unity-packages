@@ -1,0 +1,16 @@
+{
+  "name": "LongLeap.DailyRewards",
+  "rootNamespace": "LongLeap.DailyRewards",
+  "references": [
+    "LongLeap.Core",
+    "Newtonsoft.Json"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

@@ -1,0 +1,17 @@
+{
+  "name": "LongLeap.Analytics",
+  "rootNamespace": "",
+  "references": [
+    "Newtonsoft.Json",
+    "LongLeap.Core",
+    "UnityEngine.UnityWebRequestModule"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

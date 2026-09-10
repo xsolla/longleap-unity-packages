@@ -1,0 +1,12 @@
+{
+  "name": "com.longleap.dailyrewards",
+  "version": "0.1.0",
+  "displayName": "LongLeap Daily Rewards",
+  "description": "Daily rewards system with streak tracking, cycle management, and configurable claim windows.",
+  "unity": "6000.0",
+  "keywords": ["daily", "rewards", "streak", "calendar", "longleap"],
+  "dependencies": {
+    "com.longleap.core": "0.1.0",
+    "com.unity.nuget.newtonsoft-json": "3.0.2"
+  }
+}

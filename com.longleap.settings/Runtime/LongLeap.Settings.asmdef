@@ -1,0 +1,18 @@
+{
+    "name": "LongLeap.Settings",
+    "rootNamespace": "LongLeap.Settings",
+    "references": [
+        "LongLeap.Core",
+        "LongLeap.Localization",
+        "Newtonsoft.Json",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": []
+}

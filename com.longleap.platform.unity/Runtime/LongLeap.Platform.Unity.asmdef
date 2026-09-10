@@ -1,0 +1,20 @@
+{
+  "name": "LongLeap.Platform.Unity",
+  "rootNamespace": "LongLeap.Platform.Unity",
+  "references": [
+    "LongLeap.Core",
+    "LongLeap.Achievements",
+    "LongLeap.Notifications",
+    "Newtonsoft.Json",
+    "UnityEngine.CoreModule",
+    "UnityEngine.UnityWebRequestModule"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

@@ -1,0 +1,19 @@
+{
+  "name": "LongLeap.XsollaId.Web.Tests",
+  "rootNamespace": "",
+  "references": [
+    "LongLeap.Core",
+    "LongLeap.XsollaId",
+    "LongLeap.XsollaId.Web",
+    "UnityEngine.TestRunner",
+    "NUnit.Framework",
+    "Newtonsoft.Json"
+  ],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS", "XSOLLA_ID"]
+}
