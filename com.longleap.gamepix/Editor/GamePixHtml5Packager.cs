@@ -260,7 +260,7 @@ namespace LongLeap.GamePix.Editor
                     "GamePixHtml5Packager: сборка без сжатия — игрок скачает {0:F0} МБ.\n" +
                     "Сборка из меню GamePix всегда ставит WebGL Compression Format = Disabled " +
                     "(это нужно .gpx, он сжимает сам). Для HTML5-загрузки включите Brotli и " +
-                    "Decompression Fallback в Player Settings и соберите обычным Tools / Build WebGL.",
+                    "Decompression Fallback в Player Settings и соберите через LongLeap / Build Manager.",
                     Mb(unpacked)));
 
             EditorUtility.RevealInFinder(target);

@@ -1,0 +1,17 @@
+{
+  "name": "com.longleap.buildmanager",
+  "version": "0.1.0",
+  "displayName": "LongLeap Build Manager",
+  "description": "Editor window that stages scripting-define and asset-backed build options declared by other packages, applies them in a single batch, and dispatches the build. Option tables, presets, warnings and build targets are discovered through LongLeap.Core.Editor, so this package never references the feature packages and works in projects that lack them.",
+  "unity": "6000.0",
+  "keywords": [
+    "build",
+    "editor",
+    "webgl",
+    "tooling",
+    "longleap"
+  ],
+  "dependencies": {
+    "com.longleap.core": "0.1.0"
+  }
+}

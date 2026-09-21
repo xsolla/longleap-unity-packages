@@ -1,7 +1,9 @@
 {
   "name": "LongLeap.DevTools.Editor",
   "rootNamespace": "LongLeap.DevTools.EditorTools",
-  "references": [],
+  "references": [
+    "LongLeap.Core.Editor"
+  ],
   "includePlatforms": [
     "Editor"
   ],
