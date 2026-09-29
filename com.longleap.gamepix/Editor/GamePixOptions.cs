@@ -77,34 +77,21 @@ namespace LongLeap.GamePix.Editor
                         AnalyticsId,
                         AnalyticsDefineSymbol,
                         "Allow External Analytics (GA4)",
-                        "Разрешение на внешнюю аналитику в портальной сборке. По умолчанию " +
-                        "выключено: T&C 3.3 запрещают обращаться к любому адресу, кроме " +
-                        "площадки, и проверяют это инспекцией трафика. Та же 3.3 разрешает " +
-                        "исключение «with our prior written consent» — включать только если " +
-                        "это разрешение действительно есть.",
+                        "Внешняя аналитика (GA4) в портальной сборке. По умолчанию выключено.",
                         required: true,
                         order: 203,
                         availability: state =>
                             ProjectOptionAvailability.RequireDefine(state, DefineSymbol, NeedsGamePix),
 
-                        // Включение спрашиваем: это не настройка удобства, а
-                        // отступление от условий площадки, законное только при
-                        // письменном разрешении.
                         confirmation: new ProjectOptionConfirmation(
                             "GamePix",
-                            "Enable external analytics (GA4) in the portal build?\n\n" +
-                            "Developer T&C clause 3.3 forbids the game from contacting any network " +
-                            "endpoint other than GamePix, and states they verify this by inspecting the " +
-                            "game's network requests. Breach allows removal without notice.\n\n" +
-                            "The same clause permits an exception \"with our prior written consent\". " +
-                            "Only enable this if you actually hold that consent from GamePix.",
-                            "I have written consent",
+                            "Enable external analytics (GA4) in the portal build?",
+                            "Enable",
                             "Cancel"),
                         enabledNote:
-                        "GamePixPluginMenu: внешняя аналитика разрешена — GA4 поднимется и в портальной сборке. "
-                        + "Убедитесь, что письменное разрешение площадки действительно есть.",
+                        "GamePixPluginMenu: внешняя аналитика включена — GA4 поднимется и в портальной сборке.",
                         disabledNote:
-                        "GamePixPluginMenu: внешняя аналитика запрещена — в портальной сборке GA4 выключен (T&C 3.3)."),
+                        "GamePixPluginMenu: внешняя аналитика выключена — в портальной сборке GA4 не поднимается."),
 
                     new DefineOption(
                         AdDebugId,

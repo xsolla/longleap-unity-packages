@@ -24,9 +24,6 @@ namespace LongLeap.XsollaId.UI.Tests
         // ---- Hidden ----
 
         // Недоступность бьёт ВСЁ остальное, в любой комбинации прочих флагов.
-        // На GamePix это не вкусовщина: T&C (3.3) запрещают обращаться к любому
-        // адресу, кроме площадки, и проверяют инспекцией трафика. Отрисованная
-        // кнопка входа там — нарушение.
         [Test]
         public void Unavailable_IsHidden_WhateverElseIsTrue(
             [Values(true, false)] bool isReady,

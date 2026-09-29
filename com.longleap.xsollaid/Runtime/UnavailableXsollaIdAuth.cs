@@ -10,11 +10,6 @@ namespace LongLeap.XsollaId
     // IsAvailable и прячет блок аккаунта (именно прячет, а не гасит — как
     // HideQuitButtonOnPortal и как кнопка воскрешения в GameOverScreen, когда
     // рекламы на площадке нет вовсе).
-    //
-    // На GamePix это не «на всякий случай», а требование: T&C (3.3) запрещают
-    // обращаться к любому адресу, кроме площадки, и проверяют это инспекцией
-    // трафика. Xsolla ID ходит на id.xsolla.com, поэтому там его быть не
-    // должно ни одним запросом.
     public sealed class UnavailableXsollaIdAuth : IXsollaIdAuth
     {
         public bool IsAvailable => false;

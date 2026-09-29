@@ -6,10 +6,7 @@ namespace LongLeap.XsollaId
     // Заглушка загрузчика на случай, когда картинок нет: портальная сборка или
     // выключенный дефайн XSOLLA_ID.
     //
-    // Парная к UnavailableXsollaIdAuth и по той же причине. На GamePix T&C (3.3)
-    // запрещают обращаться к любому адресу, кроме площадки, и проверяют это
-    // инспекцией трафика — запрос к CDN аватарок такой же посторонний запрос,
-    // как и обращение к id.xsolla.com.
+    // Парная к UnavailableXsollaIdAuth и по той же причине.
     public sealed class UnavailableXsollaIdAvatarLoader : IXsollaIdAvatarLoader
     {
         public bool IsAvailable => false;

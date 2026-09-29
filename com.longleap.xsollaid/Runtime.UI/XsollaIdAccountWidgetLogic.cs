@@ -59,8 +59,7 @@ namespace LongLeap.XsollaId.UI
             bool hasError)
         {
             // Недоступность — окончательный ответ, и он сильнее всего
-            // остального. На GamePix T&C (3.3) запрещают даже один запрос на
-            // сторону, поэтому здесь не «погасить», а «спрятать».
+            // остального, поэтому здесь не «погасить», а «спрятать».
             if (serviceExists && !isAvailable)
                 return AccountWidgetState.Hidden;
 
