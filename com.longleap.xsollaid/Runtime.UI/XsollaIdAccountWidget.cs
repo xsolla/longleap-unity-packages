@@ -17,7 +17,9 @@ namespace LongLeap.XsollaId.UI
     // (пока объект был выключен, события до нас не доходили).
     //
     // Ни одного #if: доступность спрашиваем у IXsollaIdAuth.IsAvailable, а
-    // картинку — у IXsollaIdAvatarLoader, у обоих есть заглушки.
+    // картинку — у IXsollaIdAvatarLoader, у обоих есть заглушки. Видимость
+    // ссылки на BackPack — тоже: она приходит флагом в Bind, потому что зависит
+    // от дефайнов КОНКРЕТНОЙ игры, про которые пакет не знает и знать не должен.
     //
     // Зависимости приходят через Bind и никак иначе. Виджет НИЧЕГО не ищет сам:
     // пакет не знает и не должен знать про локатор сервисов конкретной игры.
@@ -63,6 +65,10 @@ namespace LongLeap.XsollaId.UI
 
         [SerializeField] private TMP_Text nameLabel;
         [SerializeField] private Button logOutButton;
+
+        [Tooltip("Ссылка на рюкзак Xsolla. В префабе лежит РЯДОМ с тремя " +
+            "состояниями-детьми, а не внутри них, поэтому её видимость " +
+            "переключается отдельно — флагом в Bind.")]
         [SerializeField] private Button openBackpackUrl;
 
         [Tooltip("Свёрнутая строка: логотип Xsolla и аватар. Нажатие раскрывает " +
@@ -98,6 +104,11 @@ namespace LongLeap.XsollaId.UI
         // Отданное через Bind. Переживает выключение объекта.
         private IXsollaIdAuth _boundAuth;
         private IXsollaIdAvatarLoader _boundAvatars;
+
+        // Показывать ли ссылку на рюкзак. По умолчанию ДА: так виджет, которому
+        // Bind ещё не позвали, и превью в редакторе выглядят как в сборке, где
+        // ссылка включена. Игра, которой она не нужна, передаёт false явно.
+        private bool _showBackPackLink = true;
 
         // На что подписаны прямо сейчас. null — подписки нет.
         private IXsollaIdAuth _account;
@@ -214,10 +225,17 @@ namespace LongLeap.XsollaId.UI
         // Звать можно когда угодно: и до того, как объект впервые включится, и
         // после. До вызова виджет честно показывает «проверяем» — объявлять
         // гостем игрока, про которого мы ещё ничего не знаем, нельзя.
-        public void Bind(IXsollaIdAuth auth, IXsollaIdAvatarLoader avatars)
+        //
+        // showBackPackLink — показывать ли кнопку рюкзака. Решает игра: рюкзак —
+        // отдельный продукт Xsolla, и в сборке, которая с ним не работает,
+        // ссылка ведёт игрока в пустоту. Дефайном здесь это не решить: пакет
+        // уезжает в другие проекты, где такого дефайна нет вовсе.
+        public void Bind(
+            IXsollaIdAuth auth, IXsollaIdAvatarLoader avatars, bool showBackPackLink = true)
         {
             _boundAuth = auth;
             _boundAvatars = avatars;
+            _showBackPackLink = showBackPackLink;
 
             if (!isActiveAndEnabled)
                 return;
@@ -648,6 +666,16 @@ namespace LongLeap.XsollaId.UI
 
             if (logOutButton != null)
                 logOutButton.interactable = !_signOutPending;
+
+            // ПРЯЧЕМ, а не гасим — как и весь виджет при недоступном входе.
+            //
+            // И делаем это здесь, хотя остальные кнопки видимостью не управляют
+            // вовсе: BackPackBtn лежит в префабе ребёнком КОРНЯ, рядом с тремя
+            // состояниями, а не внутри signedInRoot. Ни одно переключение
+            // состояний её не касается, а сам корень не выключается никогда —
+            // без этой строки кнопка видна всегда, включая Hidden.
+            if (openBackpackUrl != null)
+                SetActiveSafe(openBackpackUrl.gameObject, _showBackPackLink);
         }
 
         // ---- мелочи ----

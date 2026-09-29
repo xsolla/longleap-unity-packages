@@ -47,6 +47,9 @@ SignedIn            вертикальная колонка, ширину обе
 
 ```csharp
 widget.Bind(auth, avatars);   // IXsollaIdAuth, IXsollaIdAvatarLoader
+
+// Третий параметр — показывать ли кнопку рюкзака (по умолчанию да).
+widget.Bind(auth, avatars, showBackPackLink: false);
 ```
 
 `Bind` можно звать когда угодно — и до первого включения объекта, и повторно.
@@ -61,6 +64,12 @@ widget.Bind(auth, avatars);   // IXsollaIdAuth, IXsollaIdAvatarLoader
 GamePix это требование T&C 3.3. Достаточно передать в `Bind` заглушки
 (`UnavailableXsollaIdAuth`, `UnavailableXsollaIdAvatarLoader`) — ни одного `#if`
 в игровом коде не нужно.
+
+**Кнопка рюкзака — исключение, и о нём надо знать.** `BackPackBtn` лежит в
+префабе ребёнком КОРНЯ, рядом с тремя состояниями, а не внутри `SignedIn`:
+переключение состояний её не касается, а корень не выключается никогда. Поэтому
+видимость ей задаёт только флаг `showBackPackLink` — не передадите `false`, и она
+будет видна даже при недоступном входе.
 
 ## Ключи локализации
 
