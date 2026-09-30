@@ -1,0 +1,17 @@
+{
+  "name": "LongLeap.BuildManager.Editor",
+  "rootNamespace": "LongLeap.BuildManager.Editor",
+  "references": [
+    "LongLeap.Core.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}
