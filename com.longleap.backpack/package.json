@@ -1,0 +1,13 @@
+{
+  "name": "com.longleap.backpack",
+  "version": "0.1.0",
+  "displayName": "LongLeap Backpack",
+  "description": "Backpack system for managing items and inventory.",
+  "unity": "6000.0",
+  "keywords": ["backpack", "inventory", "items", "longleap"],
+  "dependencies": {
+    "com.longleap.achievements": "0.1.0",
+    "com.longleap.core": "0.1.0",
+    "com.longleap.stats": "0.1.0"
+  }
+}
