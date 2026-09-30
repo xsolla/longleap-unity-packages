@@ -1,75 +1,37 @@
 #if UNITY_EDITOR
-using System.Collections.Generic;
+using LongLeap.Core.Editor;
 using UnityEditor;
-using UnityEditor.Build;
-using UnityEngine;
 
 namespace LongLeap.DevTools.EditorTools
 {
     // Переключатель отладочных инструментов пакета.
     //
+    // Сама настройка описана в DevToolsOptions — здесь остался только пункт
+    // меню. Иначе нельзя: путь у MenuItem — константа времени компиляции, и
+    // метод нужен на каждый пункт, поэтому генерировать пункты из таблицы не
+    // получится. Зато тело метода теперь одна строка, а подтверждения, каскад,
+    // запись и журнал живут в одном месте на весь проект и совпадают с тем,
+    // что делает окно Build Manager.
+    //
     // У этой сборки НЕТ defineConstraints намеренно: скрипт, который включает
     // LONGLEAP_DEBUG, не может сам его требовать — иначе включить будет нечем.
-    // То же самое сделано в LongLeap.XsollaId.Editor.
+    // То же самое сделано в LongLeap.XsollaId.Editor. Ссылка на
+    // LongLeap.Core.Editor этого не меняет: ссылка — не ограничение, а сама
+    // LongLeap.Core.Editor тоже ничем не ограничена.
     //
-    // Символы правятся только для WebGL: это единственная платформа, для которой
-    // проект их вообще задаёт.
+    // Символы правятся только для WebGL: это единственная платформа, для
+    // которой проект их вообще задаёт. Теперь это записано в одном месте —
+    // ScriptingDefines.Target.
     public static class DevToolsMenu
     {
-        private const string Define = "LONGLEAP_DEBUG";
         private const string MenuPath = "LongLeap/Cloud Save Panel (LONGLEAP_DEBUG)";
 
         [MenuItem(MenuPath, false, 120)]
-        private static void Toggle()
-        {
-            bool enabled = IsEnabled();
-            SetDefine(Define, !enabled);
-
-            Debug.Log(enabled
-                ? "DevTools: cloud save debug panel is off."
-                : "DevTools: cloud save debug panel is on - turn it off before submitting to the portal.");
-        }
+        private static void Toggle() => ProjectOptionMenu.Toggle(DevToolsOptions.DebugId);
 
         [MenuItem(MenuPath, true)]
-        private static bool ToggleValidate()
-        {
-            Menu.SetChecked(MenuPath, IsEnabled());
-            return true;
-        }
-
-        private static bool IsEnabled() => CurrentDefines().Contains(Define);
-
-        private static List<string> CurrentDefines()
-        {
-            string raw = PlayerSettings.GetScriptingDefineSymbols(NamedBuildTarget.WebGL) ?? string.Empty;
-            var defines = new List<string>();
-
-            foreach (string part in raw.Split(';'))
-            {
-                string trimmed = part.Trim();
-                if (trimmed.Length > 0)
-                    defines.Add(trimmed);
-            }
-
-            return defines;
-        }
-
-        private static void SetDefine(string define, bool enabled)
-        {
-            List<string> defines = CurrentDefines();
-
-            if (enabled)
-            {
-                if (!defines.Contains(define))
-                    defines.Add(define);
-            }
-            else
-            {
-                defines.Remove(define);
-            }
-
-            PlayerSettings.SetScriptingDefineSymbols(NamedBuildTarget.WebGL, string.Join(";", defines));
-        }
+        private static bool ToggleValidate() =>
+            ProjectOptionMenu.Validate(MenuPath, DevToolsOptions.DebugId);
     }
 }
 #endif

@@ -20,7 +20,7 @@ namespace LongLeap.XsollaId.UI
     //
     // Sign-in can only be tested in a game built for WebGL: in the editor there
     // is no popup window at all (IsSupported returns false), so the sequence is
-    // Tools / Build WebGL, then python serve.py and http://127.0.0.1:8081/
+    // LongLeap / Build Manager, then python serve.py and http://127.0.0.1:8081/
     // (127.0.0.1 exactly -- localhost is a different origin and OriginGuard
     // will not let it through).
     //

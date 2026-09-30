@@ -26,7 +26,7 @@ In-build debug tooling. Home for on-screen diagnostic widgets; currently one.
 
 ## Editor
 
-`LongLeap / DevTools / Cloud Save Panel (LONGLEAP_DEBUG)` toggles the define (WebGL target only).
+`LongLeap / Cloud Save Panel (LONGLEAP_DEBUG)` toggles the define (WebGL target only).
 `Editor/LongLeap.DevTools.Editor.asmdef` deliberately has **no** `defineConstraints` — a menu
 that enables `LONGLEAP_DEBUG` cannot itself require it.
 

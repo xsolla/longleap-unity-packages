@@ -1,7 +1,9 @@
 {
   "name": "LongLeap.XsollaId.Editor",
   "rootNamespace": "LongLeap.XsollaId.Editor",
-  "references": [],
+  "references": [
+    "LongLeap.Core.Editor"
+  ],
   "includePlatforms": [
     "Editor"
   ],
