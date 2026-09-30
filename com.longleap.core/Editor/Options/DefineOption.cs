@@ -18,9 +18,9 @@ namespace LongLeap.Core.Editor
         //   XSOLLA_ID выключили  -> XSOLLA_ID_DEBUG УБИРАЕТСЯ из списка
         //                           (XsollaIdMenu.SetDefine, «отлаживать
         //                           нечего, если самого входа нет»);
-        //   GAMEPIX выключили    -> GAMEPIX_INJECT_SDK и остальные ОСТАЮТСЯ
+        //   GAMEPIX выключили    -> GAMEPIX_ALLOW_ANALYTICS и остальные ОСТАЮТСЯ
         //                           в списке, просто гаснут пункты меню
-        //                           (ValidateToggleInjectSdk).
+        //                           (ValidateToggleAllowAnalytics).
         //
         // Поэтому общего правила «недоступна — значит выключить» здесь нет:
         // оно тихо изменило бы поведение GamePix. Каскад объявляет только тот,

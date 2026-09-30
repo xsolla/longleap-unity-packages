@@ -21,7 +21,8 @@ namespace LongLeap.GamePix.Editor
     //   1. пункт меню со словом Build, объявленный сборкой, исходники которой
     //      лежат под Assets/Plugins/GamePix. Самый надёжный способ: пункт меню
     //      у вендора обязан быть для людей, и путь меню меняется гораздо реже
-    //      внутренних имён типов;
+    //      внутренних имён типов. Предпочитаем safe-сборку "No override
+    //      textures\sounds", иначе — самый короткий путь;
     //   2. публичный статический метод без аргументов с именем Build/BuildGame/
     //      BuildHtml5/BuildAll на типе, в имени которого есть Builder или
     //      UnityConfigurator — именно эти имена названы в комментариях
@@ -42,6 +43,12 @@ namespace LongLeap.GamePix.Editor
         {
             "Builder", "UnityConfigurator",
         };
+
+        // Вендорный пункт "GamePix/Safe builds/Build and Run (No override
+        // textures\sounds)". Обычный "Build and Run" переписывает импорт
+        // текстур, атласов и звуков в несжатые (AssetsCompression.Uncompressed),
+        // поэтому по умолчанию берём safe-вариант.
+        private const string SafeBuildMenuHint = "No override";
 
         public IEnumerable<ProjectBuildTarget> GetBuildTargets()
         {
@@ -159,6 +166,7 @@ namespace LongLeap.GamePix.Editor
                 return null;
 
             string best = null;
+            string safe = null;
 
             foreach (MethodInfo method in TypeCache.GetMethodsWithAttribute<MenuItem>())
             {
@@ -174,6 +182,11 @@ namespace LongLeap.GamePix.Editor
                         || attribute.menuItem.IndexOf("build", StringComparison.OrdinalIgnoreCase) < 0)
                         continue;
 
+                    // Safe-сборка без переопределения текстур и звуков:
+                    // оставляет импорт-настройки ассетов как есть.
+                    if (attribute.menuItem.IndexOf(SafeBuildMenuHint, StringComparison.OrdinalIgnoreCase) >= 0)
+                        safe = attribute.menuItem;
+
                     // Самый короткий путь — почти наверняка основной пункт
                     // сборки, а не его вариация.
                     if (best == null || attribute.menuItem.Length < best.Length)
@@ -181,7 +194,7 @@ namespace LongLeap.GamePix.Editor
                 }
             }
 
-            return best;
+            return safe ?? best;
         }
 
         private static MethodInfo FindVendorMethod()

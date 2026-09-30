@@ -157,8 +157,10 @@ the window does. The difference is timing — a menu click writes the define
 immediately (and triggers a domain reload), while Build Manager stages it until
 Apply.
 
-`GamePix / Required` carries more than the define: plugin `defineConstraints`,
-external GA4 analytics, and SDK tag injection are options there too.
+`GamePix / Required` carries more than the define: plugin `defineConstraints`
+and external GA4 analytics are options there too. The GamePix SDK v3 tag is not
+an option: `GamePixIndexPostprocessor` always puts it first in `<head>`, as the
+official GamePix guide requires.
 
 All four are **WebGL-target** defines, matching this project's only platform.
 

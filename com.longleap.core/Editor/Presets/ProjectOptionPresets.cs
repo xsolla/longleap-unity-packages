@@ -60,10 +60,9 @@ namespace LongLeap.Core.Editor
         // Проход нужен не один, и это не перестраховка. Пример из текущего
         // состояния проекта, где нет папки Assets/Plugins/GamePix: пресет
         // GamePix ставит GAMEPIX включённым, но настройка недоступна -> её
-        // возвращаем к сохранённому «выключено» -> и ТОЛЬКО ТЕПЕРЬ становятся
-        // недоступны GAMEPIX_INJECT_SDK и GAMEPIX_ALLOW_ANALYTICS, которым
-        // нужен GAMEPIX. За один проход они остались бы включёнными без
-        // GAMEPIX за ними.
+        // возвращаем к сохранённому «выключено» -> и ТОЛЬКО ТЕПЕРЬ становится
+        // недоступен GAMEPIX_ALLOW_ANALYTICS, которому нужен GAMEPIX. За один
+        // проход он остался бы включённым без GAMEPIX за ним.
         public static void Reconcile(IStagedOptionState staged)
         {
             if (staged == null)

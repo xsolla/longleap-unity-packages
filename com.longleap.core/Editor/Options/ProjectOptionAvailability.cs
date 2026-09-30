@@ -30,9 +30,9 @@ namespace LongLeap.Core.Editor
         }
 
         // Самый частый случай: настройка имеет смысл только при включённом
-        // другом дефайне. Именно так GAMEPIX гасит три своих спутника — но
+        // другом дефайне. Именно так GAMEPIX гасит своих спутников — но
         // ТОЛЬКО гасит: значения из списка дефайнов при этом не убираются,
-        // ровно как было в ValidateToggleInjectSdk. Убирать зависимые дефайны
+        // ровно как было в ValidateToggleAllowAnalytics. Убирать зависимые дефайны
         // умеет DefineOption.CascadeOffSymbols, и это другое поведение —
         // единственный его носитель XSOLLA_ID.
         public static ProjectOptionAvailability RequireDefine(

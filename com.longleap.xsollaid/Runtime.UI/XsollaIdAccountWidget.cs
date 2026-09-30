@@ -487,7 +487,7 @@ namespace LongLeap.XsollaId.UI
 
         void OnLogOutClicked()
         {
-            if (_account == null || !_account.IsSignedIn)
+            if (_account == null || !_account.IsSignedIn || !_account.CanSignOut)
                 return;
 
             // Подтверждения нет по решению: выход обратим — гостевой сейв живёт
@@ -665,7 +665,13 @@ namespace LongLeap.XsollaId.UI
             }
 
             if (logOutButton != null)
+            {
                 logOutButton.interactable = !_signOutPending;
+
+                // Где входом владеет площадка, выхода нет вовсе — прячем, а не
+                // гасим, как и остальное недоступное.
+                SetActiveSafe(logOutButton.gameObject, _account == null || _account.CanSignOut);
+            }
 
             // ПРЯЧЕМ, а не гасим — как и весь виджет при недоступном входе.
             //

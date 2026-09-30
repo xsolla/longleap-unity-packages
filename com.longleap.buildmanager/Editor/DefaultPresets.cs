@@ -20,12 +20,6 @@ namespace LongLeap.BuildManager.Editor
         {
             // Портальная сборка.
             //
-            // GAMEPIX_INJECT_SDK здесь ВЫКЛЮЧЕН намеренно. Тег SDK нужен
-            // тест-тулкиту, но в сборку на ревью он идти не должен: там SDK
-            // подставляет издательский конвейер площадки. Из двух ошибок эта
-            // дешевле — забытый тег виден сразу (плагин молча не стартует), а
-            // лишний тег в сборке на ревью замечает уже площадка.
-            //
             // GAMEPIX_ALLOW_ANALYTICS выключен во ВСЕХ пресетах, включая этот:
             // пресет не взводит его одним нажатием, минуя диалог подтверждения.
             yield return new ProjectOptionPreset(
@@ -35,7 +29,6 @@ namespace LongLeap.BuildManager.Editor
                 new Dictionary<string, string>
                 {
                     { "gamepix.enabled", ProjectOption.On },
-                    { "gamepix.inject_sdk", ProjectOption.Off },
                     { "gamepix.allow_analytics", ProjectOption.Off },
                     { "gamepix.ad_debug", ProjectOption.Off },
                     { "xsollaid.enabled", ProjectOption.Off },
@@ -57,7 +50,6 @@ namespace LongLeap.BuildManager.Editor
                     { "xsollaid.enabled", ProjectOption.On },
                     { "xsollaid.debug", ProjectOption.Off },
                     { "gamepix.enabled", ProjectOption.Off },
-                    { "gamepix.inject_sdk", ProjectOption.Off },
                     { "gamepix.allow_analytics", ProjectOption.Off },
                     { "gamepix.ad_debug", ProjectOption.Off },
                     { "devtools.debug", ProjectOption.Off },

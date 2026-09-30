@@ -11,7 +11,6 @@ namespace LongLeap.GamePix.Editor
     //     ограничения по GAMEPIX. Галочка снята — обновление плагина их стёрло,
     //     нажатие вернёт обратно; когда всё на месте, пункт заблокирован;
     //   Required/Allow External Analytics (GA4) — дефайн GAMEPIX_ALLOW_ANALYTICS;
-    //   Required/Inject SDK Tag Into index.html — дефайн GAMEPIX_INJECT_SDK;
     //   Optional/Show Ad Debug Overlay          — дефайн GAMEPIX_AD_DEBUG.
     //
     // Сами настройки описаны в GamePixOptions, а работа с файлами asmdef — в
@@ -46,7 +45,6 @@ namespace LongLeap.GamePix.Editor
         private const string ConstraintsMenuPath = "GamePix/Required/Plugin Has defineConstraints";
         private const string AnalyticsMenuPath = "GamePix/Required/Allow External Analytics (GA4)";
         private const string AdDebugMenuPath = "GamePix/Optional/Show Ad Debug Overlay";
-        private const string InjectSdkMenuPath = "GamePix/Required/Inject SDK Tag Into index.html";
 
         // ---------- Галочка 1: дефайн ----------
 
@@ -85,14 +83,5 @@ namespace LongLeap.GamePix.Editor
         [MenuItem(AdDebugMenuPath, true)]
         private static bool ValidateToggleAdDebug() =>
             ProjectOptionMenu.Validate(AdDebugMenuPath, GamePixOptions.AdDebugId);
-
-        // ---------- Галочка 5: тег SDK в index.html ----------
-
-        [MenuItem(InjectSdkMenuPath, false, 205)]
-        private static void ToggleInjectSdk() => ProjectOptionMenu.Toggle(GamePixOptions.InjectSdkId);
-
-        [MenuItem(InjectSdkMenuPath, true)]
-        private static bool ValidateToggleInjectSdk() =>
-            ProjectOptionMenu.Validate(InjectSdkMenuPath, GamePixOptions.InjectSdkId);
     }
 }

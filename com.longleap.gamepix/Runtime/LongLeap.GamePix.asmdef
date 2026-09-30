@@ -3,6 +3,8 @@
   "rootNamespace": "LongLeap.GamePix",
   "references": [
     "LongLeap.Core",
+    "Newtonsoft.Json",
+    "LongLeap.XsollaId",
     "GamePix",
     "UnityEngine.CoreModule"
   ],

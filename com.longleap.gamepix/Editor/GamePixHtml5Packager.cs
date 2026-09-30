@@ -21,9 +21,10 @@ namespace LongLeap.GamePix.Editor
     //   2. index.html должен лежать в корне архива, а не внутри вложенной папки.
     //   3. Артефакты конвейера .gpx в HTML5-загрузке лишние: MethodMap.tsv на
     //      21 МБ, appinfo.json, libunity-gpx.a и сам .gpx.
-    //   4. Тег внешнего SDK со страницы надо снять. На HTML5-маршруте площадка
-    //      отдаёт нашу страницу, и лишний скрипт определит window.GamePix раньше,
-    //      чем она подставит свой — реклама сломается.
+    //   4. Тег GamePix SDK v3 первым скриптом в <head> обязателен по
+    //      официальному гайду — его ставит GamePixIndexPostprocessor, и здесь он
+    //      остаётся. Снимаем только старый dev-SDK (gpxlib): у него нет методов
+    //      рекламы, а window.GamePix он займёт.
     //
     // Ассеты не пережимает и ничего не пересобирает: только упаковывает то, что
     // уже собрано, и честно рассказывает, что получилось.
@@ -40,9 +41,9 @@ namespace LongLeap.GamePix.Editor
                 "MethodMap.tsv", "appinfo.json", "libunity-gpx.a", ".DS_Store", "Thumbs.db"
             };
 
-        // Скрипт SDK, подставленный в страницу нами или вендором.
-        private static readonly Regex ExternalSdkTag = new Regex(
-            "[ \\t]*<script src=\"https?://[^\"]*(gamepix|gpxlib)[^\"]*\"></script>\\r?\\n?",
+        // Старый dev-SDK, который раньше вставлял GamePixIndexPostprocessor.
+        private static readonly Regex LegacySdkTag = new Regex(
+            "[ \\t]*<script src=\"https?://[^\"]*gpxlib[^\"]*\"></script>\\r?\\n?",
             RegexOptions.IgnoreCase);
 
         [MenuItem(MenuPath, false, 300)]
@@ -69,22 +70,17 @@ namespace LongLeap.GamePix.Editor
             }
 
             string html = File.ReadAllText(indexPath);
-            bool stripSdk = false;
-
-            if (ExternalSdkTag.IsMatch(html))
-            {
-                // Спрашиваем, а не решаем сами: для тест-тулкита тег как раз нужен,
-                // а для загрузки на площадку он всё ломает.
-                stripSdk = EditorUtility.DisplayDialog("GamePix",
-                    "Страница подключает внешний скрипт SDK.\n\n" +
-                    "Для загрузки на площадку его надо убрать: она подставляет свой SDK, " +
-                    "а наш определит window.GamePix раньше и реклама не заработает.\n\n" +
-                    "Для прогона в тест-тулките тег, наоборот, нужен.",
-                    "Убрать (загрузка на площадку)", "Оставить (тест-тулкит)");
-            }
+            // Спрашивать нечего: старый SDK не нужен ни площадке, ни тест-тулкиту.
+            bool stripSdk = LegacySdkTag.IsMatch(html);
 
             if (stripSdk)
-                html = ExternalSdkTag.Replace(html, string.Empty);
+                html = LegacySdkTag.Replace(html, string.Empty);
+
+            if (!html.Contains("integration.gamepix.com/sdk/"))
+            {
+                Debug.LogWarning("GamePixHtml5Packager: в index.html нет тега GamePix SDK v3 — " +
+                                 "по гайду он обязателен. Пересоберите игру с включённым GAMEPIX.");
+            }
 
             string defaultName = SanitizeFileName(Application.productName) + "-html5.zip";
             string target = EditorUtility.SaveFilePanel(

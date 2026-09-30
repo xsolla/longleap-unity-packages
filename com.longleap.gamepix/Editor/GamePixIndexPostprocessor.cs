@@ -18,8 +18,7 @@ namespace LongLeap.GamePix.Editor
     //
     // Живёт в пакете, а не в Assets: обе правки не знают ничего про конкретную
     // игру — это чистая починка вендорного пайплайна, нужная любому проекту
-    // LongLeap, который едет на GamePix. Здесь же лежит и меню, которое включает
-    // дефайн GAMEPIX_INJECT_SDK, так что переключатель и его потребитель рядом.
+    // LongLeap, который едет на GamePix.
     //
     // Делает две вещи:
     //
@@ -29,37 +28,29 @@ namespace LongLeap.GamePix.Editor
     //    что не влезло, обрезается — вместе с кнопками у правого и нижнего краёв.
     //    Правила площадки требуют обратного: вписываться вплоть до 640x480.
     //
-    // 2. Тег SDK — только под GAMEPIX_INJECT_SDK. Плагин без объекта
-    //    window.GamePix молча не стартует (в его glue стоит
+    // 2. Тег SDK — всегда, первым скриптом в <head>. Это обязательный пункт
+    //    официального гайда GamePix ("Import the SDK inside your index.html
+    //    MANDATORY ... as first script in the <head> section"). Без объекта
+    //    window.GamePix плагин молча не стартует (в его glue стоит
     //    `typeof GamePix === "undefined"` → return), и игра показывает пустой
-    //    канвас. В .gpx на ревью тег не нужен: там SDK подставляет издательский
-    //    конвейер площадки, и подсунуть ему не тот SDK было бы хуже.
+    //    канвас.
     public sealed class GamePixIndexPostprocessor : IPostprocessBuildWithReport
     {
         public int callbackOrder => 0;
 
-        // ВНИМАНИЕ: это старый публичный SDK. У него вложенный API
-        // (GamePix.game.gameLoaded, GamePix.on.*) и НЕТ методов рекламы, тогда
-        // как плагин ждёт плоский v4-API (GamePix.rewardAd, GamePix.updateScore).
-        // Игра с ним загрузится, но реклама работать не будет — именно поэтому
-        // в тест-тулките показы всегда отклонялись.
-        //
-        // Настоящий SDK найден: это gamepix.sdk.js, который площадка сама
-        // подключает на странице игры (UMD-бандл, ставит глобальный GamePix,
-        // внутри есть rewardAd/interstitialAd/updateScore/gameLoaded/CONST).
-        // Копия лежит в Toolkit/other_game/.../gamepix.sdk.js.download.
-        // Точный URL получить не удалось: страницу Chrome сохранил с локальной
-        // ссылкой, а h5.gamepix.com отдаёт 403 всем, кроме браузера. Судя по
-        // разметке, он под https://h5.gamepix.com/sdk/ — посмотрите в DevTools
-        // на вкладке Network на странице игры и подставьте сюда.
-        //
-        // Для загрузки на площадку тег НЕ нужен: в HTML5-сборках она вставляет
-        // свой (в сохранённой странице чужой игры он стоит в конце body с async
-        // и пустым id — почерк вставки на их стороне). Дефайн GAMEPIX_INJECT_SDK
-        // нужен только для локального прогона и тест-тулкита.
-        private const string SdkUrl = "https://gamepix.blob.core.windows.net/gpxlib/dev/gamepix.js";
+        // URL из официального гайда GamePix.
+        private const string SdkUrl = "https://integration.gamepix.com/sdk/v3/gamepix.sdk.js";
 
-        private const string LoaderTag = "<script src=\"Build/html5.loader.js\"></script>";
+        private const string SdkTag = "<script src=\"" + SdkUrl + "\"></script>";
+
+        // Старый dev-SDK, который раньше вставлял этот постпроцесс по дефайну
+        // GAMEPIX_INJECT_SDK. У него вложенный API без методов рекламы, так что
+        // рядом с настоящим SDK он только мешает — вычищаем, если попался.
+        private static readonly Regex LegacySdkTag = new Regex(
+            @"[ \t]*<script src=""https?://gamepix\.blob\.core\.windows\.net/gpxlib/[^""]*""></script>\r?\n?",
+            RegexOptions.IgnoreCase);
+
+        private static readonly Regex HeadOpen = new Regex(@"<head(\s[^>]*)?>", RegexOptions.IgnoreCase);
 
         // Ищем канвас по элементу, а НЕ по строке с конкретными пикселями.
         // Раньше здесь стоял литерал "width: 960px; height: 600px", и когда
@@ -161,24 +152,28 @@ namespace LongLeap.GamePix.Editor
 
         private static string InjectSdkTag(string html)
         {
-#if GAMEPIX_INJECT_SDK
-            if (html.Contains(SdkUrl))
-                return html;
+            html = LegacySdkTag.Replace(html, string.Empty);
 
-            if (!html.Contains(LoaderTag))
+            Match head = HeadOpen.Match(html);
+
+            if (!head.Success)
             {
-                Debug.LogWarning("GamePixIndexPostprocessor: не найден тег загрузчика Unity — " +
-                                 "SDK не вставлен, index.html изменился в новой версии Unity?");
+                Debug.LogError("GamePixIndexPostprocessor: в index.html нет <head> — " +
+                               "обязательный тег GamePix SDK не вставлен.");
                 return html;
             }
 
-            // Строго ПЕРЕД загрузчиком: плагин ищет window.GamePix уже на старте.
-            html = html.Replace(LoaderTag,
-                "<script src=\"" + SdkUrl + "\"></script>\n    " + LoaderTag);
+            // Тег уже стоит первым элементом <head> — повторный постпроцесс
+            // той же папки ничего не меняет.
+            int afterHead = head.Index + head.Length;
+            if (html.Substring(afterHead).TrimStart().StartsWith(SdkTag))
+                return html;
 
-            Debug.LogWarning("GamePixIndexPostprocessor: в index.html вставлен тег SDK для тест-тулкита. " +
-                             "В сборку на ревью это попадать не должно — выключите GAMEPIX_INJECT_SDK.");
-#endif
+            // Стоит, но не первым — переносим наверх: гайд требует первый скрипт.
+            html = html.Replace(SdkTag, string.Empty);
+            html = html.Insert(afterHead, "\n    " + SdkTag);
+
+            Debug.Log("GamePixIndexPostprocessor: тег GamePix SDK вставлен первым скриптом в <head>.");
             return html;
         }
     }

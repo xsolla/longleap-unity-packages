@@ -50,6 +50,14 @@ namespace LongLeap.XsollaId
         // Текущая сессия либо null, если игрок не вошёл.
         XsollaIdSession Current { get; }
 
+        // Можно ли выйти из аккаунта из игры. false там, где входом владеет
+        // площадка (GamePix SDK): выхода у неё нет, и следующий же запрос
+        // вернул бы игрока обратно. UI по этому признаку прячет кнопку выхода.
+        //
+        // Реализация по умолчанию — чтобы не трогать все остальные входы и
+        // тестовые подделки ради одного исключения.
+        bool CanSignOut => true;
+
         // Слушателей обязательно отписывать в паре (OnEnable/OnDisable).
         event Action<XsollaIdSession> SignedIn;
         event Action SignedOut;

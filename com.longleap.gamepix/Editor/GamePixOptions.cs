@@ -9,13 +9,11 @@ namespace LongLeap.GamePix.Editor
         public const string ConstraintsId = "gamepix.constraints";
         public const string AnalyticsId = "gamepix.allow_analytics";
         public const string AdDebugId = "gamepix.ad_debug";
-        public const string InjectSdkId = "gamepix.inject_sdk";
 
         public const string DefineSymbol = "GAMEPIX";
 
         private const string AnalyticsDefineSymbol = "GAMEPIX_ALLOW_ANALYTICS";
         private const string AdDebugDefineSymbol = "GAMEPIX_AD_DEBUG";
-        private const string InjectSdkDefineSymbol = "GAMEPIX_INJECT_SDK";
 
         private const string PluginMissing =
             "Assets/Plugins/GamePix is missing — install the vendor plugin first. "
@@ -107,23 +105,6 @@ namespace LongLeap.GamePix.Editor
                         "GamePixPluginMenu: экранный журнал рекламы включён — оверлей появится в игре сам, префаб не нужен. "
                         + "Перед отправкой на ревью выключите.",
                         disabledNote: "GamePixPluginMenu: экранный журнал рекламы выключен."),
-
-                    new DefineOption(
-                        InjectSdkId,
-                        InjectSdkDefineSymbol,
-                        "Inject SDK Tag Into index.html",
-                        "Вставлять ли тег SDK в index.html после билда. Нужно тест-тулкиту: " +
-                        "без window.GamePix плагин молча не стартует. В сборку на ревью не " +
-                        "идёт — там SDK подставляет издательский конвейер площадки.",
-                        required: true,
-                        order: 205,
-                        availability: state =>
-                            ProjectOptionAvailability.RequireDefine(state, DefineSymbol, NeedsGamePix),
-                        enabledNote:
-                        "GamePixPluginMenu: тег SDK будет вставляться в index.html — это для тест-тулкита. "
-                        + "Перед сборкой на ревью выключите: площадка подставляет свой SDK сама.",
-                        disabledNote:
-                        "GamePixPluginMenu: тег SDK в index.html больше не вставляется (режим для .gpx на ревью)."),
                 });
         }
 
