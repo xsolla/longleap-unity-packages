@@ -1,0 +1,18 @@
+{
+    "name": "LongLeap.Backpack",
+    "rootNamespace": "LongLeap.Backpack",
+    "references": [
+        "LongLeap.Core",
+        "LongLeap.Stats",
+        "LongLeap.Achievements"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

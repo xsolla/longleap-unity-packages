@@ -1,0 +1,19 @@
+{
+    "name": "LongLeap.Backpack.Editor",
+    "rootNamespace": "LongLeap.Backpack.Editor",
+    "references": [
+        "GUID:9cfba8c56f431084c9d8feef66707ce2",
+        "GUID:74c8740600335f04085673c4549245ff"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
