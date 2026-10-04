@@ -35,6 +35,16 @@
         "com.unity.nuget.newtonsoft-json": "3.0.2"
       }
     },
+    "com.longleap.backpack": {
+      "version": "file:com.longleap.backpack",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.longleap.achievements": "0.1.0",
+        "com.longleap.core": "0.1.0",
+        "com.longleap.stats": "0.1.0"
+      }
+    },
     "com.longleap.buildmanager": {
       "version": "file:com.longleap.buildmanager",
       "depth": 0,
