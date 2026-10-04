@@ -42,6 +42,10 @@ public sealed class GamePixAdsProviderTests
         public readonly List<int> Scores = new();
 
         public void UpdateScore(int score) => Scores.Add(score);
+
+        public void HappyMoment() { }
+
+        public void SadMoment() { }
     }
 
     private FakeAds _ads;
