@@ -30,6 +30,8 @@ namespace LongLeap.Backpack
     public sealed class BackPackEndpoint
     {
         public const string DefaultEventsPath = "/events";
+        public const string DefaultRewardsPath = "/rewards";
+        public const string DefaultItemsPath = "/backpack/items";
 
         [Tooltip("Адрес BackPack-сервера — схема, хост и порт, без пути. " +
             "Пустая строка это выключатель: события никуда не уходят, а ачивки " +
@@ -40,6 +42,16 @@ namespace LongLeap.Backpack
             "пустое поле означает путь по умолчанию — на пустой путь запрос ушёл бы " +
             "в корень сервера и тихо не дошёл бы до нужной ручки.")]
         [SerializeField] private string _eventsPath = DefaultEventsPath;
+
+        [Tooltip("Путь ручки, отдающей содержимое рюкзака игрока: " +
+            "GET {baseUrl}{rewardsPath}?xsollaId=…&gameId=…. Ведущий слеш дописывается " +
+            "сам, пустое поле — путь по умолчанию.")]
+        [SerializeField] private string _rewardsPath = DefaultRewardsPath;
+
+        [Tooltip("Путь ручки, удаляющей предметы из рюкзака (так предмет и тратится " +
+            "при активации): DELETE {baseUrl}{itemsPath}?xsollaId=…&sku=…. Ведущий слеш " +
+            "дописывается сам, пустое поле — путь по умолчанию.")]
+        [SerializeField] private string _itemsPath = DefaultItemsPath;
 
         [Tooltip("Идентификатор игры на стороне сервера — поле gameId в теле запроса. " +
             "Не совпадёт с зарегистрированным — сервер откажет, и ачивки перестанут " +
@@ -53,11 +65,18 @@ namespace LongLeap.Backpack
         }
 
         // Второй — для значений по умолчанию у нового ассета и для тестов.
-        public BackPackEndpoint(string baseUrl, string gameId, string eventsPath = DefaultEventsPath)
+        public BackPackEndpoint(
+            string baseUrl,
+            string gameId,
+            string eventsPath = DefaultEventsPath,
+            string rewardsPath = DefaultRewardsPath,
+            string itemsPath = DefaultItemsPath)
         {
             _baseUrl = baseUrl;
             _gameId = gameId;
             _eventsPath = eventsPath;
+            _rewardsPath = rewardsPath;
+            _itemsPath = itemsPath;
         }
 
         // Пробелы срезаем: адрес и id почти всегда приезжают копированием, и
@@ -71,27 +90,31 @@ namespace LongLeap.Backpack
 
         public string GameId => _gameId?.Trim();
 
-        // Путь, наоборот, нормализуем: пустой путь и путь без ведущего слеша —
+        // Пути, наоборот, нормализуем: пустой путь и путь без ведущего слеша —
         // не выключатель, а опечатка, и оба дали бы запрос не туда.
-        public string EventsPath
-        {
-            get
-            {
-                string path = _eventsPath?.Trim();
+        public string EventsPath => NormalizePath(_eventsPath, DefaultEventsPath);
 
-                if (string.IsNullOrEmpty(path))
-                    return DefaultEventsPath;
+        public string RewardsPath => NormalizePath(_rewardsPath, DefaultRewardsPath);
 
-                return path[0] == '/' ? path : "/" + path;
-            }
-        }
+        public string ItemsPath => NormalizePath(_itemsPath, DefaultItemsPath);
 
         // Заполнено ли настолько, чтобы вообще отправлять.
         public bool IsConfigured => !string.IsNullOrEmpty(BaseUrl) && !string.IsNullOrEmpty(GameId);
 
         public override string ToString() =>
             $"baseUrl={(string.IsNullOrEmpty(BaseUrl) ? "none" : BaseUrl)}, " +
-            $"eventsPath={EventsPath}, gameId={(string.IsNullOrEmpty(GameId) ? "none" : GameId)}";
+            $"eventsPath={EventsPath}, rewardsPath={RewardsPath}, itemsPath={ItemsPath}, " +
+            $"gameId={(string.IsNullOrEmpty(GameId) ? "none" : GameId)}";
+
+        private static string NormalizePath(string value, string fallback)
+        {
+            string path = value?.Trim();
+
+            if (string.IsNullOrEmpty(path))
+                return fallback;
+
+            return path[0] == '/' ? path : "/" + path;
+        }
     }
 
     // Настройки BackPack-сервера: куда отправлять события ачивок и от имени
@@ -125,6 +148,10 @@ namespace LongLeap.Backpack
         // Действуют только на СОЗДАНИЕ ассета: у существующего поля приезжают
         // из YAML и об этих строках ничего не знают.
         public const string DefaultEventsPath = BackPackEndpoint.DefaultEventsPath;
+
+        public const string DefaultRewardsPath = BackPackEndpoint.DefaultRewardsPath;
+
+        public const string DefaultItemsPath = BackPackEndpoint.DefaultItemsPath;
 
         public const string DefaultLocalBaseUrl = "http://127.0.0.1:5066";
 
@@ -191,6 +218,10 @@ namespace LongLeap.Backpack
         public string GameId => Active.GameId;
 
         public string EventsPath => Active.EventsPath;
+
+        public string RewardsPath => Active.RewardsPath;
+
+        public string ItemsPath => Active.ItemsPath;
 
         // Заполнено ли настолько, чтобы вообще отправлять. Отдельно от
         // BackPackService.IsAvailable: тот отвечает про собранный сервис, а

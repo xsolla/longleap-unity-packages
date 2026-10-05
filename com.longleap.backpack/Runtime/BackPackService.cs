@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -82,6 +83,126 @@ namespace LongLeap.Backpack
             : $"BackPackReply(failed, error={Error})";
     }
 
+    // Ответ на «есть ли связь с BackPack-сервером» (см. CheckConnectionAsync).
+    // Error — для лога: "not_configured", "transport: …", "http_502".
+    public readonly struct BackPackConnectionResult
+    {
+        public bool IsConnected { get; }
+        public string Error { get; }
+
+        private BackPackConnectionResult(bool isConnected, string error)
+        {
+            IsConnected = isConnected;
+            Error = error;
+        }
+
+        public static BackPackConnectionResult Connected() => new BackPackConnectionResult(true, null);
+
+        public static BackPackConnectionResult Failed(string error) =>
+            new BackPackConnectionResult(false, error ?? "unknown_error");
+
+        public override string ToString() => IsConnected
+            ? "BackPackConnection(ok)"
+            : $"BackPackConnection(failed, error={Error})";
+    }
+
+    // Итог удаления ОДНОГО предмета рюкзака (см. DeleteItemAsync).
+    //
+    // IsDeleted — только если сервер отчитался, что удалил именно этот
+    // экземпляр СЕЙЧАС (outcome "item_deleted"). Код ответа ничего не решает:
+    // сервер отвечает 200 и тогда, когда Backpack не удалил предмет
+    // ("backpack_failed"), и когда предмета уже не было ("item_already_gone").
+    // По IsDeleted игра выдаёт товар — значит, ошибиться в сторону «удалён»
+    // нельзя ни при каком ответе.
+    public readonly struct BackPackDeleteResult
+    {
+        public const string OutcomeDeleted = "item_deleted";
+        public const string OutcomeAlreadyGone = "item_already_gone";
+
+        public bool IsDeleted { get; }
+
+        // Что сервер сказал про этот предмет ("item_already_gone",
+        // "backpack_failed") или null, если до отчёта не дошло.
+        public string Outcome { get; }
+
+        // Для лога: причина, если не удалён.
+        public string Error { get; }
+
+        private BackPackDeleteResult(bool isDeleted, string outcome, string error)
+        {
+            IsDeleted = isDeleted;
+            Outcome = outcome;
+            Error = error;
+        }
+
+        public static BackPackDeleteResult Deleted() => new BackPackDeleteResult(true, OutcomeDeleted, null);
+
+        public static BackPackDeleteResult Failed(string error, string outcome = null) =>
+            new BackPackDeleteResult(false, outcome, error ?? "unknown_error");
+
+        public override string ToString() => IsDeleted
+            ? "BackPackDelete(deleted)"
+            : $"BackPackDelete(not deleted, outcome={Outcome ?? "none"}, error={Error})";
+    }
+
+    // Один предмет рюкзака игрока — элемент items из ответа
+    // GET /rewards?xsollaId=…&gameId=….
+    //
+    // Имена полей — контракт сервера, как и у BackPackEventBody. Поля, а не
+    // свойства — по той же причине, что у остальных DTO здесь: так их
+    // заполняет Newtonsoft без оглядки на стриппинг сеттеров под IL2CPP.
+    //
+    // Sku — тип предмета, Id — конкретный экземпляр в рюкзаке (по нему предмет
+    // и удаляют: удаление по sku сносит ВСЕ предметы этого типа).
+    //
+    // Rewards — ключи наград из reward_items.json сервера по SKU: что игра
+    // выдаёт за этот предмет. Что значит каждый ключ, знает игра, а не сервер.
+    public sealed class BackPackRewardItem
+    {
+        [JsonProperty("id")] public string Id;
+        [JsonProperty("sku")] public string Sku;
+        [JsonProperty("name")] public string Name;
+        [JsonProperty("description")] public string Description;
+        [JsonProperty("iconUrl")] public string IconUrl;
+        [JsonProperty("createdAt")] public string CreatedAt;
+        [JsonProperty("rewards")] public string[] Rewards;
+    }
+
+    // Разобранный ответ на запрос рюкзака.
+    //
+    // Items никогда не null: при неудаче — пустой список, чтобы экран мог
+    // перерисоваться по нему без проверок. Error — для лога, не для игрока:
+    // "no_xsolla_id", "not_configured", "http_400: invalid_xsolla_id"…
+    public readonly struct BackPackRewardsReply
+    {
+        private static readonly BackPackRewardItem[] NoItems = Array.Empty<BackPackRewardItem>();
+
+        public bool Success { get; }
+        public IReadOnlyList<BackPackRewardItem> Items { get; }
+
+        // 0 — до сервера не дошли (нет сети, не настроено, нет xsollaID).
+        public long StatusCode { get; }
+        public string Error { get; }
+
+        private BackPackRewardsReply(bool success, IReadOnlyList<BackPackRewardItem> items, long statusCode, string error)
+        {
+            Success = success;
+            Items = items ?? NoItems;
+            StatusCode = statusCode;
+            Error = error;
+        }
+
+        public static BackPackRewardsReply Ok(IReadOnlyList<BackPackRewardItem> items) =>
+            new BackPackRewardsReply(true, items, 200, null);
+
+        public static BackPackRewardsReply Failed(string error, long statusCode = 0) =>
+            new BackPackRewardsReply(false, null, statusCode, error ?? "unknown_error");
+
+        public override string ToString() => Success
+            ? $"BackPackRewardsReply(ok, items={Items.Count})"
+            : $"BackPackRewardsReply(failed, status={StatusCode}, error={Error})";
+    }
+
     // Отправка игровых событий на BackPack-сервер.
     //
     // Своих умолчаний у сервиса нет: адрес, путь и gameId приходят снаружи, из
@@ -102,54 +223,69 @@ namespace LongLeap.Backpack
     {
         private const int TimeoutSeconds = 10;
 
-        // Ручка рюкзака. Путь фиксированный, в отличие от eventsPath: настраивать
-        // его никто не просил, а зашитая здесь строка честнее пустого поля в
-        // ассете, о котором все забудут.
-        private const string BackpackItemsPath = "/backpack/items";
+        // Проверку связи ждёт игрок, нажавший «Start», — дольше держать его нельзя.
+        // Не уложился сервер — считаем, что связи нет, и игра стартует без него.
+        private const int ConnectionCheckTimeoutSeconds = 5;
 
         private readonly string _baseUrl;
         private readonly string _url;
+        private readonly string _rewardsUrl;
+        private readonly string _itemsUrl;
         private readonly string _gameId;
         private readonly Func<string> _xsollaIdProvider;
         private readonly Func<string, string, Task<BackPackHttpReply>> _handler;
         private readonly Func<string, Task<BackPackHttpReply>> _deleteHandler;
+        private readonly Func<string, Task<BackPackHttpReply>> _getHandler;
+        private readonly Func<string, Task<BackPackHttpReply>> _connectionCheckHandler;
 
         // xsollaIdProvider — делегат, а не строка: xsollaID появляется не в
         // момент создания сервиса, а когда игрок войдёт (или когда тихо
         // восстановится сессия), и меняется при выходе-входе.
         //
-        // baseUrl, gameId и eventsPath — без значений по умолчанию: все три
-        // берутся из BackPackConfigSO, и подставленное здесь умолчание молча
-        // расходилось бы с ассетом.
+        // baseUrl, gameId и пути — без значений по умолчанию: всё берётся из
+        // BackPackConfigSO, и подставленное здесь умолчание молча расходилось
+        // бы с ассетом.
         //
         // handler подменяют тесты: он получает (url, тело) и отдаёт сырой
         // ответ, поэтому проверять разбор json-а можно без сервера.
-        // deleteHandler — то же самое для DELETE, где тела запроса нет.
+        // deleteHandler и getHandler — то же самое для DELETE и GET, где тела
+        // запроса нет.
         public BackPackService(
             Func<string> xsollaIdProvider,
             string baseUrl,
             string gameId,
             string eventsPath,
+            string rewardsPath = null,
+            string itemsPath = null,
             Func<string, string, Task<BackPackHttpReply>> handler = null,
-            Func<string, Task<BackPackHttpReply>> deleteHandler = null)
+            Func<string, Task<BackPackHttpReply>> deleteHandler = null,
+            Func<string, Task<BackPackHttpReply>> getHandler = null)
         {
             _baseUrl = string.IsNullOrEmpty(baseUrl) ? null : baseUrl.TrimEnd('/');
 
             // Пустой путь не заменяем умолчанием (его подставляет конфиг, ему
-            // виднее), а считаем сервис ненастроенным: запрос по одному
+            // виднее), а считаем ручку ненастроенной: запрос по одному
             // baseUrl ушёл бы в корень сервера и до нужной ручки не дошёл.
-            _url = _baseUrl == null || string.IsNullOrEmpty(eventsPath)
-                ? null
-                : _baseUrl + eventsPath;
+            _url = Combine(_baseUrl, eventsPath);
+            _rewardsUrl = Combine(_baseUrl, rewardsPath);
+            _itemsUrl = Combine(_baseUrl, itemsPath);
             _gameId = gameId;
             _xsollaIdProvider = xsollaIdProvider;
             _handler = handler ?? SendAsync;
             _deleteHandler = deleteHandler ?? SendDeleteAsync;
+            _getHandler = getHandler ?? (url => SendGetAsync(url, TimeoutSeconds));
+
+            // Подменённый тестом GET отвечает и за проверку связи: отдельная
+            // подмена ради одного таймаута тестам ни к чему.
+            _connectionCheckHandler = getHandler ?? (url => SendGetAsync(url, ConnectionCheckTimeoutSeconds));
         }
 
         // Настроен ли сервис вообще. Проверяется до отправки, чтобы пустой
         // конфиг не превращался в запрос по битому адресу.
         public bool IsAvailable => !string.IsNullOrEmpty(_url) && !string.IsNullOrEmpty(_gameId);
+
+        // Можно ли спросить рюкзак: адрес, путь ручки и gameId на месте.
+        public bool IsRewardsAvailable => !string.IsNullOrEmpty(_rewardsUrl) && !string.IsNullOrEmpty(_gameId);
 
         // Есть ли, от чьего имени отправлять. Отдельно от IsAvailable: гость —
         // не поломка конфига, а обычное состояние до входа.
@@ -199,22 +335,97 @@ namespace LongLeap.Backpack
             return Parse(raw);
         }
 
-        // Дальше — две ОТЛАДОЧНЫЕ ручки удаления. Обе живут на сервере только в
-        // среде Development (в остальных отвечают 404), обе требуют xsollaID —
-        // удаляется всегда прогресс конкретного игрока, никакого «удалить у
-        // всех» здесь нет и быть не может.
+        // GET {rewardsPath}?xsollaId=…&gameId=…
+        //
+        // Что лежит в рюкзаке у вошедшего игрока. Та же гарантия, что у
+        // SendEventAsync: исключения наружу не летят, любой сбой — Failed с
+        // причиной. Коды, которые отдаёт сервер: 400 invalid_xsolla_id,
+        // 404 unknown_game, 502 — сбой самого Backpack.
+        public async Task<BackPackRewardsReply> GetRewardsAsync()
+        {
+            if (!IsRewardsAvailable)
+                return BackPackRewardsReply.Failed("not_configured");
+
+            string xsollaId = XsollaId;
+
+            if (string.IsNullOrEmpty(xsollaId))
+                return BackPackRewardsReply.Failed("no_xsolla_id");
+
+            var url = new StringBuilder(_rewardsUrl)
+                .Append("?xsollaId=").Append(UnityWebRequest.EscapeURL(xsollaId));
+
+            Append(url, "gameId", _gameId);
+
+            BackPackHttpReply raw;
+
+            try
+            {
+                raw = await _getHandler(url.ToString());
+            }
+            catch (Exception e)
+            {
+                return BackPackRewardsReply.Failed($"transport: {e.Message}");
+            }
+
+            return ParseRewards(raw);
+        }
+
+        // Есть ли связь с сервером — до того, как вести игрока в рюкзак.
+        //
+        // Стучимся в ту же ручку рюкзака, только без xsollaID, а не в корень
+        // сервера: у этой ручки CORS настроен наверняка (игра ходит в неё и так),
+        // а без CORS браузер в WebGL уронил бы ответ, и живой сервер выглядел бы
+        // недоступным. Без xsollaID сервер ответит 400 — это и есть «связь есть»:
+        // важен сам факт ответа, а не его содержимое.
+        //
+        // Связи НЕТ, если ответа не было вовсе (сеть, таймаут) или код 5xx:
+        // 502/522 отдаёт и Cloudflare, когда сервер за ним лежит, и сам сервер,
+        // когда у него отвалился Backpack, — рюкзак в обоих случаях не загрузится.
+        public async Task<BackPackConnectionResult> CheckConnectionAsync()
+        {
+            if (!IsRewardsAvailable)
+                return BackPackConnectionResult.Failed("not_configured");
+
+            var url = new StringBuilder(_rewardsUrl)
+                .Append("?gameId=").Append(UnityWebRequest.EscapeURL(_gameId));
+
+            BackPackHttpReply raw;
+
+            try
+            {
+                raw = await _connectionCheckHandler(url.ToString());
+            }
+            catch (Exception e)
+            {
+                return BackPackConnectionResult.Failed($"transport: {e.Message}");
+            }
+
+            if (raw.IsTransportError)
+                return BackPackConnectionResult.Failed($"transport: {raw.TransportError}");
+
+            if (raw.StatusCode >= 500)
+                return BackPackConnectionResult.Failed($"http_{raw.StatusCode}");
+
+            return BackPackConnectionResult.Connected();
+        }
+
+        // Дальше — ручки удаления. Обе требуют xsollaID — удаляется всегда
+        // прогресс конкретного игрока, никакого «удалить у всех» здесь нет и
+        // быть не может.
         //
         // Ответ отдаём СЫРЫМ (BackPackHttpReply), а не разобранным: тело у них
         // не в форме BackPackEventReplyBody — это отчёт со списком строк, и
         // нужен он ровно для того, чтобы лечь в лог целиком. Заводить под него
         // DTO значило бы тащить форму отладочного отчёта в игровой код.
 
-        // DELETE /backpack/items?xsollaId=…[&sku=…][&itemId=…]
+        // DELETE {itemsPath}?xsollaId=…[&sku=…][&itemId=…]
         //
         // Убирает предметы из рюкзака игрока. Без sku и itemId — весь рюкзак.
+        // Игра зовёт её, когда игрок активирует предмет: активация и есть
+        // трата, предмет уходит из рюкзака.
         public Task<BackPackHttpReply> DeleteBackpackItemsAsync(string sku = null, string itemId = null)
         {
-            if (string.IsNullOrEmpty(_baseUrl))
+            if (string.IsNullOrEmpty(_itemsUrl))
                 return Task.FromResult(BackPackHttpReply.Transport("not_configured"));
 
             string xsollaId = XsollaId;
@@ -222,8 +433,7 @@ namespace LongLeap.Backpack
             if (string.IsNullOrEmpty(xsollaId))
                 return Task.FromResult(BackPackHttpReply.Transport("no_xsolla_id"));
 
-            var url = new StringBuilder(_baseUrl)
-                .Append(BackpackItemsPath)
+            var url = new StringBuilder(_itemsUrl)
                 .Append("?xsollaId=").Append(UnityWebRequest.EscapeURL(xsollaId));
 
             Append(url, "sku", sku);
@@ -232,9 +442,28 @@ namespace LongLeap.Backpack
             return SendDeleteSafeAsync(url.ToString());
         }
 
+        // Удалить из рюкзака ОДИН конкретный экземпляр — так игра тратит предмет.
+        //
+        // Только по itemId: по sku сервер сносит все предметы этого типа и
+        // заодно чистит reward_claims (награду можно было бы получить заново).
+        // С одним itemId ни того, ни другого не происходит.
+        //
+        // Удалён ли предмет, решает отчёт в теле, а не код ответа: сервер
+        // отвечает 200 на любой исход (см. BackPackDeleteResult).
+        public async Task<BackPackDeleteResult> DeleteItemAsync(string itemId)
+        {
+            if (string.IsNullOrEmpty(itemId))
+                return BackPackDeleteResult.Failed("no_item_id");
+
+            var raw = await DeleteBackpackItemsAsync(itemId: itemId);
+
+            return ParseDelete(raw, itemId);
+        }
+
         // DELETE /events?xsollaId=&gameId=…[&eventId=…][&sku=…]&backpack=&force=
         //
-        // Убирает записи о выданных наградах — то, чем сервер защищается от
+        // ОТЛАДОЧНАЯ: живёт на сервере только в среде Development (в остальных
+        // отвечает 404). Убирает записи о выданных наградах — то, чем сервер защищается от
         // повторной выдачи. Без них те же события выдадут награду заново, и
         // именно это обычно и нужно при проверке.
         //
@@ -270,6 +499,9 @@ namespace LongLeap.Backpack
 
             return SendDeleteSafeAsync(url.ToString());
         }
+
+        private static string Combine(string baseUrl, string path) =>
+            baseUrl == null || string.IsNullOrEmpty(path) ? null : baseUrl + path;
 
         private static void Append(StringBuilder url, string name, string value)
         {
@@ -327,6 +559,89 @@ namespace LongLeap.Backpack
                 return BackPackReply.Failed($"http_{raw.StatusCode}_with_success_body");
 
             return BackPackReply.Ok(parsed.RewardGranted, parsed.RewardId);
+        }
+
+        private static BackPackDeleteResult ParseDelete(BackPackHttpReply raw, string itemId)
+        {
+            if (raw.IsTransportError)
+                return BackPackDeleteResult.Failed($"transport: {raw.TransportError}");
+
+            if (!raw.IsHttpSuccess)
+                return BackPackDeleteResult.Failed($"http_{raw.StatusCode}: {raw.Body}");
+
+            if (string.IsNullOrWhiteSpace(raw.Body))
+                return BackPackDeleteResult.Failed($"http_{raw.StatusCode}_empty_body");
+
+            BackPackDeleteReplyBody parsed;
+
+            try
+            {
+                parsed = JsonConvert.DeserializeObject<BackPackDeleteReplyBody>(raw.Body);
+            }
+            catch (Exception e)
+            {
+                return BackPackDeleteResult.Failed($"bad_json: {e.Message}");
+            }
+
+            // Отчёта про НАШ предмет нет — значит, сервер его не трогал (не нашёл,
+            // либо удалил что-то другое). Считать это удалением нельзя.
+            if (parsed?.Items != null)
+            {
+                foreach (var entry in parsed.Items)
+                {
+                    if (entry == null || !string.Equals(entry.ItemId, itemId, StringComparison.Ordinal))
+                        continue;
+
+                    return string.Equals(entry.Outcome, BackPackDeleteResult.OutcomeDeleted, StringComparison.Ordinal)
+                        ? BackPackDeleteResult.Deleted()
+                        : BackPackDeleteResult.Failed(entry.Error ?? entry.Outcome ?? "no_outcome", entry.Outcome);
+                }
+            }
+
+            return BackPackDeleteResult.Failed($"item_not_in_report: {raw.Body}");
+        }
+
+        private static BackPackRewardsReply ParseRewards(BackPackHttpReply raw)
+        {
+            if (raw.IsTransportError)
+                return BackPackRewardsReply.Failed($"transport: {raw.TransportError}");
+
+            // Код ошибки ("invalid_xsolla_id") сервер кладёт в тело — отдаём его
+            // целиком: формы у тела ошибки мы не знаем, а в логе оно нужнее всего.
+            if (!raw.IsHttpSuccess)
+                return BackPackRewardsReply.Failed($"http_{raw.StatusCode}: {raw.Body}", raw.StatusCode);
+
+            if (string.IsNullOrWhiteSpace(raw.Body))
+                return BackPackRewardsReply.Failed($"http_{raw.StatusCode}_empty_body", raw.StatusCode);
+
+            BackPackRewardsReplyBody parsed;
+
+            try
+            {
+                parsed = JsonConvert.DeserializeObject<BackPackRewardsReplyBody>(raw.Body);
+            }
+            catch (Exception e)
+            {
+                return BackPackRewardsReply.Failed($"bad_json: {e.Message}", raw.StatusCode);
+            }
+
+            if (parsed == null)
+                return BackPackRewardsReply.Failed($"http_{raw.StatusCode}_bad_json", raw.StatusCode);
+
+            // Пустые элементы (null в массиве) отбрасываем здесь, чтобы экрану не
+            // пришлось проверять каждый.
+            var items = new List<BackPackRewardItem>();
+
+            if (parsed.Items != null)
+            {
+                foreach (var item in parsed.Items)
+                {
+                    if (item != null)
+                        items.Add(item);
+                }
+            }
+
+            return BackPackRewardsReply.Ok(items);
         }
 
         // eventId — ключ идемпотентности, поэтому он ДЕТЕРМИНИРОВАННЫЙ, а не
@@ -418,6 +733,50 @@ namespace LongLeap.Backpack
             }
 
             return new BackPackHttpReply(request.responseCode, request.downloadHandler?.text, null);
+        }
+
+        // Форма та же, что у SendDeleteAsync, только UnityWebRequest.Get
+        // downloadHandler приносит сам.
+        private static async Task<BackPackHttpReply> SendGetAsync(string url, int timeoutSeconds)
+        {
+            using var request = UnityWebRequest.Get(url);
+            request.timeout = timeoutSeconds;
+            request.SetRequestHeader("Accept", "application/json");
+
+            UnityWebRequestAsyncOperation operation = request.SendWebRequest();
+
+            while (!operation.isDone)
+                await Task.Yield();
+
+            if (request.result == UnityWebRequest.Result.ConnectionError ||
+                request.result == UnityWebRequest.Result.DataProcessingError)
+            {
+                return BackPackHttpReply.Transport($"GET {url} — {request.error}");
+            }
+
+            return new BackPackHttpReply(request.responseCode, request.downloadHandler?.text, null);
+        }
+
+        // Тело ответа на DELETE /backpack/items: отчёт по каждому предмету.
+        private sealed class BackPackDeleteReplyBody
+        {
+            [JsonProperty("items")] public BackPackDeleteReplyItem[] Items;
+        }
+
+        private sealed class BackPackDeleteReplyItem
+        {
+            [JsonProperty("itemId")] public string ItemId;
+            [JsonProperty("outcome")] public string Outcome;
+            [JsonProperty("error")] public string Error;
+        }
+
+        // Тело ответа на GET /rewards. Приватное, как и BackPackEventReplyBody:
+        // наружу уходит BackPackRewardsReply.
+        private sealed class BackPackRewardsReplyBody
+        {
+            [JsonProperty("xsollaId")] public string XsollaId;
+            [JsonProperty("gameId")] public string GameId;
+            [JsonProperty("items")] public BackPackRewardItem[] Items;
         }
 
         // Тело ответа. Приватный DTO: наружу отдаём BackPackReply, чтобы форма
