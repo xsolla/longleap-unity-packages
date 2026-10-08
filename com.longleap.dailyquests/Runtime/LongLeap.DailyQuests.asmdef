@@ -1,0 +1,17 @@
+{
+  "name": "LongLeap.DailyQuests",
+  "rootNamespace": "LongLeap.DailyQuests",
+  "references": [
+    "LongLeap.Core",
+    "LongLeap.Stats",
+    "Newtonsoft.Json"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

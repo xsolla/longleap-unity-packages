@@ -2,7 +2,7 @@
 
 <https://gitea.longleap.games/Long_Leap_Games/Packages>
 
-Shared Unity package library for LongLeap games. 17 UPM packages in a single Git
+Shared Unity package library for LongLeap games. 18 UPM packages in a single Git
 repo, consumed as a submodule at `Packages/LongLeap` and referenced from the host
 project with `file:` paths.
 
@@ -101,6 +101,7 @@ Consequences worth knowing before you add anything:
 | `com.longleap.stats` | Hierarchical stat tree (`kill:monk:grunt`), wildcard subscriptions, accumulate/max cascading, cloud-persisted. | core |
 | `com.longleap.achievements` | Goals with objectives; progress derived from stat subscriptions, unlocks fire notifications. | core, stats |
 | `com.longleap.dailyrewards` | Streaks, cycles (`Once`/`Loop`), grace period, UTC reset window, calendar view-model. | core |
+| `com.longleap.dailyquests` | JSON-defined quest pool, weighted daily set per UTC reset window, progress derived from stats (delta since issue), rewards claimed by the player. | core, stats |
 | `com.longleap.settings` | Typed settings (bool / int / float / enum) with auto-generated UI and per-group cloud persistence. | core, localization |
 | `com.longleap.analytics` | Pluggable analytics with GA4 Measurement Protocol, two-level batching, A/B experiment auto-tagging. Caller drives flush — no internal timer. | core |
 | `com.longleap.remoteconfig` | Typed remote parameters via Firebase Remote Config REST (no Firebase SDK), PlayerPrefs cache, A/B experiment info. | core |

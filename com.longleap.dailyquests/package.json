@@ -1,0 +1,13 @@
+{
+  "name": "com.longleap.dailyquests",
+  "version": "0.1.0",
+  "displayName": "LongLeap Daily Quests",
+  "description": "Daily quests: a JSON-defined pool rotated every UTC reset window, progress derived from stats, rewards claimed manually by the player.",
+  "unity": "6000.0",
+  "keywords": ["quests", "daily", "missions", "rewards", "longleap"],
+  "dependencies": {
+    "com.longleap.core": "0.1.0",
+    "com.longleap.stats": "0.1.0",
+    "com.unity.nuget.newtonsoft-json": "3.0.2"
+  }
+}
