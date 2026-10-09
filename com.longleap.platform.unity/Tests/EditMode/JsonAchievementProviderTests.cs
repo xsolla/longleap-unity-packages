@@ -1,44 +1,42 @@
-using System;
-using System.IO;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using LongLeap.Achievements;
 using LongLeap.Platform.Unity;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace LongLeap.Platform.Unity.Tests
 {
     [TestFixture]
     public class JsonAchievementProviderTests
     {
-        private string _tempDir;
+        private Dictionary<string, string> _files;
 
         [SetUp]
         public void Setup()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), "JsonAchievementProviderTests_" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(_tempDir);
-        }
-
-        [TearDown]
-        public void Teardown()
-        {
-            if (Directory.Exists(_tempDir))
-                Directory.Delete(_tempDir, true);
+            _files = new Dictionary<string, string>();
         }
 
         private void WriteManifest(params string[] files)
         {
-            var manifest = new { files };
-            File.WriteAllText(Path.Combine(_tempDir, "manifest.json"),
-                JsonConvert.SerializeObject(manifest));
+            _files[JsonAchievementProvider.ManifestFileName] = JsonConvert.SerializeObject(new { files });
         }
 
         private void WriteFile(string fileName, string content)
         {
-            File.WriteAllText(Path.Combine(_tempDir, fileName), content);
+            _files[fileName] = content;
+        }
+
+        private Task<AchievementDefinition[]> Load()
+        {
+            var provider = new JsonAchievementProvider(
+                name => _files.TryGetValue(name, out var text) ? text : null);
+            return provider.LoadAsync();
         }
 
         [Test]
@@ -60,8 +58,7 @@ namespace LongLeap.Platform.Unity.Tests
   ]
 }");
 
-            var provider = new StreamingAssetsAchievementProvider(_tempDir);
-            var definitions = await provider.LoadAsync();
+            var definitions = await Load();
 
             Assert.AreEqual(1, definitions.Length);
             var def = definitions[0];
@@ -91,8 +88,7 @@ namespace LongLeap.Platform.Unity.Tests
   ]
 }");
 
-            var provider = new StreamingAssetsAchievementProvider(_tempDir);
-            var definitions = await provider.LoadAsync();
+            var definitions = await Load();
 
             Assert.AreEqual(1, definitions.Length);
             var obj = definitions[0].Objectives[0];
@@ -105,7 +101,7 @@ namespace LongLeap.Platform.Unity.Tests
         }
 
         [Test]
-        public async Task Load_TwoFiles_MergesCorrectly()
+        public async Task Load_TwoFiles_MergesInManifestOrder()
         {
             WriteManifest("combat.json", "heroes.json");
 
@@ -135,12 +131,9 @@ namespace LongLeap.Platform.Unity.Tests
   ]
 }");
 
-            var provider = new StreamingAssetsAchievementProvider(_tempDir);
-            var definitions = await provider.LoadAsync();
+            var definitions = await Load();
 
-            Assert.AreEqual(2, definitions.Length);
-            Assert.IsTrue(definitions.Any(d => d.Id.Value == "ach_kill"));
-            Assert.IsTrue(definitions.Any(d => d.Id.Value == "all_heroes"));
+            Assert.AreEqual(new[] { "ach_kill", "all_heroes" }, definitions.Select(d => d.Id.Value).ToArray());
         }
 
         [Test]
@@ -161,8 +154,7 @@ namespace LongLeap.Platform.Unity.Tests
   ]
 }");
 
-            var provider = new StreamingAssetsAchievementProvider(_tempDir);
-            var definitions = await provider.LoadAsync();
+            var definitions = await Load();
 
             Assert.AreEqual(1, definitions.Length);
             Assert.AreEqual(1, definitions[0].Prerequisites.Length);
@@ -187,8 +179,7 @@ namespace LongLeap.Platform.Unity.Tests
   ]
 }");
 
-            var provider = new StreamingAssetsAchievementProvider(_tempDir);
-            var definitions = await provider.LoadAsync();
+            var definitions = await Load();
 
             Assert.IsTrue(definitions[0].IsHidden);
         }
@@ -211,18 +202,50 @@ namespace LongLeap.Platform.Unity.Tests
 }");
             WriteFile("corrupt.json", "{ this is not valid json!!! }");
 
-            var provider = new StreamingAssetsAchievementProvider(_tempDir);
-            var definitions = await provider.LoadAsync();
+            var definitions = await Load();
 
             Assert.AreEqual(1, definitions.Length);
             Assert.AreEqual("ach_valid", definitions[0].Id.Value);
         }
 
         [Test]
-        public async Task MissingManifest_ReturnsEmptyArray()
+        public async Task MissingListedFile_LogsError_OtherFilesLoaded()
         {
-            var provider = new StreamingAssetsAchievementProvider(_tempDir);
-            var definitions = await provider.LoadAsync();
+            WriteManifest("valid.json", "missing.json");
+            WriteFile("valid.json", @"
+{
+  ""achievements"": [
+    { ""id"": ""ach_valid"", ""group"": ""test"", ""objectives"": [] }
+  ]
+}");
+
+            LogAssert.Expect(LogType.Error, new Regex("missing\\.json"));
+
+            var definitions = await Load();
+
+            Assert.AreEqual(1, definitions.Length);
+        }
+
+        [Test]
+        public async Task MissingManifest_LogsError_ReturnsEmptyArray()
+        {
+            LogAssert.Expect(LogType.Error, new Regex("manifest\\.json not found"));
+
+            var definitions = await Load();
+
+            Assert.IsNotNull(definitions);
+            Assert.IsEmpty(definitions);
+        }
+
+        // Ровно то, что случилось на GamePix: на месте манифеста пришла HTML-страница.
+        [Test]
+        public async Task CorruptManifest_LogsError_ReturnsEmptyArray()
+        {
+            WriteFile(JsonAchievementProvider.ManifestFileName, "<!DOCTYPE html><html></html>");
+
+            LogAssert.Expect(LogType.Error, new Regex("Failed to parse manifest\\.json"));
+
+            var definitions = await Load();
 
             Assert.IsNotNull(definitions);
             Assert.IsEmpty(definitions);
@@ -232,8 +255,8 @@ namespace LongLeap.Platform.Unity.Tests
         public async Task EmptyManifest_ReturnsEmptyArray()
         {
             WriteManifest();
-            var provider = new StreamingAssetsAchievementProvider(_tempDir);
-            var definitions = await provider.LoadAsync();
+
+            var definitions = await Load();
 
             Assert.IsNotNull(definitions);
             Assert.IsEmpty(definitions);
@@ -256,8 +279,7 @@ namespace LongLeap.Platform.Unity.Tests
   ]
 }");
 
-            var provider = new StreamingAssetsAchievementProvider(_tempDir);
-            var definitions = await provider.LoadAsync();
+            var definitions = await Load();
 
             Assert.AreEqual(1, definitions.Length);
             Assert.AreEqual("ach_test", definitions[0].Id.Value);

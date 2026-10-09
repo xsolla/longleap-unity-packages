@@ -6,8 +6,7 @@
     "LongLeap.Achievements",
     "LongLeap.Notifications",
     "Newtonsoft.Json",
-    "UnityEngine.CoreModule",
-    "UnityEngine.UnityWebRequestModule"
+    "UnityEngine.CoreModule"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

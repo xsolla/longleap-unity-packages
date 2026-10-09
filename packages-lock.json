@@ -61,6 +61,16 @@
         "com.unity.nuget.newtonsoft-json": "3.0.2"
       }
     },
+    "com.longleap.dailyquests": {
+      "version": "file:com.longleap.dailyquests",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.longleap.core": "0.1.0",
+        "com.longleap.stats": "0.1.0",
+        "com.unity.nuget.newtonsoft-json": "3.0.2"
+      }
+    },
     "com.longleap.dailyrewards": {
       "version": "file:com.longleap.dailyrewards",
       "depth": 0,

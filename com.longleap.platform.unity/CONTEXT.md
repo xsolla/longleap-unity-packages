@@ -10,7 +10,7 @@ Unity-specific platform implementations for core and package interfaces.
 
 **CoroutineTimer** — Implements `ITimer` (from `com.longleap.notifications`) using Unity coroutines.
 
-**StreamingAssetsAchievementProvider** — Implements `IAchievementProvider`. Loads achievement definitions from JSON files in `StreamingAssets`. Supports multi-file manifests and graceful error handling.
+**ResourcesAchievementProvider** — Implements `IAchievementProvider`. Loads achievement definitions from JSON files in `Resources/Achievements` (inside the build, no network). Parsing is delegated to **JsonAchievementProvider**, which supports multi-file manifests and logs errors on a missing or corrupt manifest.
 
 ## Relationships
 

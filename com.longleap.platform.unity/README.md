@@ -9,7 +9,8 @@ Platform adapter layer — Unity-specific implementations of abstract contracts 
 | `UnityPlayerPrefsAdapter` | Sealed class `: IPlayerPrefs` | Wraps `UnityEngine.PlayerPrefs` static into `IPlayerPrefs` interface |
 | `PlayerPrefsPersistentStorage` | Sealed class `: IPersistentStorage` | Key-value storage backed by `PlayerPrefs` |
 | `FilePersistentStorage` | Sealed class `: IPersistentStorage` | Key-value storage backed by filesystem; atomic writes via temp file |
-| `StreamingAssetsAchievementProvider` | Sealed class `: IAchievementProvider` | Loads achievement definitions from `StreamingAssets/Achievements/` |
+| `ResourcesAchievementProvider` | Sealed class `: IAchievementProvider` | Loads achievement definitions from `Resources/Achievements/` |
+| `JsonAchievementProvider` | Sealed class `: IAchievementProvider` | Parses manifest + achievement JSON from any text source |
 | `CoroutineTimer` | Sealed class `: ITimer` | One-shot timer via Unity coroutines (`WaitForSecondsRealtime`) |
 
 ## Usage
@@ -39,14 +40,22 @@ await storage.SaveAsync("profile", json);
 
 Operations run on the thread pool via `Task.Run`. Writes use `temp -> delete -> move` for atomicity.
 
-### StreamingAssetsAchievementProvider
+### ResourcesAchievementProvider
 
 ```csharp
-IAchievementProvider provider = new StreamingAssetsAchievementProvider();
+IAchievementProvider provider = new ResourcesAchievementProvider(); // Resources/Achievements/
 AchievementDefinition[] achievements = await provider.LoadAsync();
 ```
 
-In Editor uses `File.ReadAllText`; in builds uses `UnityWebRequest`.
+Reads `manifest.json` and the files it lists via `Resources.Load<TextAsset>`. The JSON ships inside the build — no HTTP requests, so it works on portals that rehost the build (e.g. GamePix). Completes synchronously; call from the main thread. A missing or corrupt manifest is logged as an error: an empty definition set silently ungates everything gated by achievements.
+
+### JsonAchievementProvider
+
+```csharp
+IAchievementProvider provider = new JsonAchievementProvider(fileName => LoadText(fileName));
+```
+
+Same manifest/file format from any text source (`fileName → text`, `null` if missing). Used by `ResourcesAchievementProvider` and by tests.
 
 ### CoroutineTimer
 
@@ -69,5 +78,5 @@ Each class implements exactly one upstream interface and delegates to a single U
 | `UnityPlayerPrefsAdapter` | `IPlayerPrefs` | `UnityEngine.PlayerPrefs` |
 | `PlayerPrefsPersistentStorage` | `IPersistentStorage` | `UnityEngine.PlayerPrefs` |
 | `FilePersistentStorage` | `IPersistentStorage` | `System.IO.File` |
-| `StreamingAssetsAchievementProvider` | `IAchievementProvider` | `File.ReadAllText` / `UnityWebRequest` |
+| `ResourcesAchievementProvider` | `IAchievementProvider` | `Resources.Load<TextAsset>` |
 | `CoroutineTimer` | `ITimer` | `MonoBehaviour.StartCorotine` |
