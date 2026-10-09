@@ -17,13 +17,19 @@ namespace LongLeap.XsollaId.Web
         public string ContentType { get; }
         public string BearerToken { get; }
 
-        public HttpCall(string method, string url, string body = null, string contentType = null, string bearerToken = null)
+        // Timeout for this request in seconds; 0 means the shared default. Large
+        // save batches on a slow network don't fit into the default 10 s.
+        public int TimeoutSeconds { get; }
+
+        public HttpCall(string method, string url, string body = null, string contentType = null, string bearerToken = null,
+            int timeoutSeconds = 0)
         {
             Method = method;
             Url = url;
             Body = body;
             ContentType = contentType;
             BearerToken = bearerToken;
+            TimeoutSeconds = timeoutSeconds;
         }
     }
 
@@ -75,6 +81,10 @@ namespace LongLeap.XsollaId.Web
             _handler(new HttpCall(
                 "POST", url, EncodeForm(form), "application/x-www-form-urlencoded", bearerToken));
 
+        // An arbitrary request: cloud saves need PUT and DELETE with a JSON body,
+        // and a second transport just for them is not worth it.
+        public Task<HttpReply> RequestAsync(HttpCall call) => _handler(call);
+
         public static string EncodeForm(IReadOnlyDictionary<string, string> form)
         {
             var sb = new StringBuilder();
@@ -96,7 +106,7 @@ namespace LongLeap.XsollaId.Web
         private static async Task<HttpReply> SendAsync(HttpCall call)
         {
             using var request = new UnityWebRequest(call.Url, call.Method);
-            request.timeout = TimeoutSeconds;
+            request.timeout = call.TimeoutSeconds > 0 ? call.TimeoutSeconds : TimeoutSeconds;
             request.downloadHandler = new DownloadHandlerBuffer();
 
             if (!string.IsNullOrEmpty(call.Body))
