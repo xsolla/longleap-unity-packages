@@ -16,8 +16,9 @@ namespace LongLeap.DailyQuests
     /// Невыбранная до сброса награда сгорает вместе с набором.
     ///
     /// Смена периода ленивая: таймера нет, проверка идёт при каждом обращении
-    /// (GetActive, Claim, изменение стата). Игра, открытая через полночь,
-    /// получит новый набор при первом же взгляде на квесты.
+    /// (GetActive, ClaimAsync, изменение стата, Tick). Игра, открытая через
+    /// полночь, получит новый набор при первом же взгляде на квесты; открытый
+    /// UI квестов зовёт Tick, чтобы набор сменился у игрока на глазах.
     /// </summary>
     public sealed class DailyQuestService : IDailyQuestService
     {
@@ -35,6 +36,7 @@ namespace LongLeap.DailyQuests
         private DailyQuestSettings _settings = new();
         private DailyQuestsState _state;
         private bool _ready;
+        private Task<bool> _saving = Task.FromResult(true);
 
         public event Action Changed;
 
@@ -88,6 +90,21 @@ namespace LongLeap.DailyQuests
                 return;
             }
 
+            bool unreadable = state.IsUnreadable;
+            if (unreadable)
+            {
+                // Сейв есть, но не читается. Что из сегодняшнего набора уже
+                // забрано — неизвестно, а выбор детерминирован: выдай мы набор
+                // заново, он, скорее всего, совпал бы со старым, и награды
+                // забрали бы второй раз. Поэтому до следующего сброса квестов нет.
+                Debug.LogWarning("DailyQuestService: сохранение не читается — новый набор будет после ближайшего сброса.");
+                state = new DailyQuestsState
+                {
+                    PeriodStartUtcTicks = LastResetUtc(_utcNow()).Ticks,
+                    Withheld = true
+                };
+            }
+
             _state = state;
             _state.Active ??= Array.Empty<ActiveQuestState>();
 
@@ -97,9 +114,10 @@ namespace LongLeap.DailyQuests
 
             if (!EnsureCurrentPeriod())
             {
-                bool dirty = ReconcileActive();
+                bool dirty = unreadable;
+                dirty |= ReconcileActive();
                 dirty |= EvaluateCompletion(notify: true);
-                if (dirty) Save();
+                if (dirty) await Save();
             }
         }
 
@@ -143,7 +161,9 @@ namespace LongLeap.DailyQuests
             }
         }
 
-        public bool Claim(QuestId questId)
+        public void Tick() => EnsureCurrentPeriod();
+
+        public async Task<bool> ClaimAsync(QuestId questId)
         {
             if (!_ready) return false;
 
@@ -155,17 +175,32 @@ namespace LongLeap.DailyQuests
             if (!entry.IsCompleted)
             {
                 // Стат мог вырасти без события (статы подняли позже нас) — сверяемся.
-                if (EvaluateCompletion(notify: true)) Save();
-                if (!entry.IsCompleted) return false;
+                bool latched = EvaluateCompletion(notify: true);
+                if (latched) _ = Save();
+
+                if (!entry.IsCompleted)
+                {
+                    // Этот квест не выполнен, но могли защёлкнуться другие — UI должен узнать.
+                    if (latched) RaiseChanged();
+                    return false;
+                }
             }
 
-            // Сперва помечаем забранным и пишем, потом начисляем: упади игра
-            // между этими шагами — игрок потеряет одну награду, но не получит
-            // бесконечные.
-            entry.IsClaimed = true;
-            Save();
-
             var def = _definitions[questId];
+
+            // Сперва помечаем забранным и дожидаемся записи, потом начисляем:
+            // упади игра между этими шагами — игрок потеряет одну награду, но
+            // не получит её дважды. Флаг ставится до await, так что второе
+            // нажатие, пока идёт запись, получит false.
+            entry.IsClaimed = true;
+            if (!await Save())
+            {
+                // Отметка не записалась — не начисляем: после перезапуска квест
+                // оказался бы не забран, и награду взяли бы снова.
+                entry.IsClaimed = false;
+                return false;
+            }
+
             try
             {
                 _bridge?.ApplyRewards(new QuestClaimResult
@@ -240,6 +275,7 @@ namespace LongLeap.DailyQuests
                 avoid: previous);
 
             _state.PeriodStartUtcTicks = periodStartTicks;
+            _state.Withheld = false;
             _state.Active = picked.Select(CreateEntry).ToArray();
 
             // Absolute-цель может оказаться набранной сразу. Отдельного события
@@ -276,7 +312,8 @@ namespace LongLeap.DailyQuests
                 kept.Add(entry);
             }
 
-            int missing = _settings.DailyCount - kept.Count;
+            // Набор на период намеренно не выдан — добирать нечего.
+            int missing = _state.Withheld ? 0 : _settings.DailyCount - kept.Count;
             if (missing > 0)
             {
                 var extra = DailyQuestSelector.Pick(
@@ -338,7 +375,10 @@ namespace LongLeap.DailyQuests
             return added;
         }
 
-        /// <summary>Защёлкнуть выполненные квесты. true — хоть один выполнился.</summary>
+        /// <summary>
+        /// Защёлкнуть набранные цели, а за ними — квесты, у которых набраны все.
+        /// true — что-то защёлкнулось, состояние надо сохранить.
+        /// </summary>
         private bool EvaluateCompletion(bool notify)
         {
             bool changed = false;
@@ -347,7 +387,27 @@ namespace LongLeap.DailyQuests
             {
                 if (entry.IsCompleted) continue;
                 if (!_definitions.TryGetValue(new QuestId(entry.QuestId), out var def)) continue;
-                if (!def.Objectives.All(o => ComputeProgress(entry, o).IsComplete)) continue;
+
+                bool allDone = true;
+                foreach (var obj in def.Objectives)
+                {
+                    var baseline = BaselineOf(entry, obj);
+                    if (baseline is { IsCompleted: true }) continue;
+
+                    if (!ComputeProgress(entry, obj).IsComplete)
+                    {
+                        allDone = false;
+                        continue;
+                    }
+
+                    if (baseline != null)
+                    {
+                        baseline.IsCompleted = true;
+                        changed = true;
+                    }
+                }
+
+                if (!allDone) continue;
 
                 entry.IsCompleted = true;
                 changed = true;
@@ -361,21 +421,23 @@ namespace LongLeap.DailyQuests
 
         private QuestProgress ComputeProgress(ActiveQuestState entry, QuestObjective obj)
         {
-            if (entry.IsCompleted)
+            var baseline = BaselineOf(entry, obj);
+
+            if (entry.IsCompleted || baseline is { IsCompleted: true })
                 return new QuestProgress(obj.StatTarget, obj.StatTarget);
 
             long value = ReadStat(obj.StatPath);
 
             if (obj.Mode == QuestProgressMode.Delta)
-            {
-                var baseline = entry.Baselines?.FirstOrDefault(b => b != null && b.ObjectiveId == obj.Id.Value);
                 value -= baseline?.Value ?? value;
-            }
 
             // Обрезаем по цели: «57/50» в UI никому не нужно.
             value = Math.Max(0, Math.Min(value, obj.StatTarget));
             return new QuestProgress((int)value, obj.StatTarget);
         }
+
+        private static ObjectiveBaseline BaselineOf(ActiveQuestState entry, QuestObjective obj) =>
+            entry.Baselines?.FirstOrDefault(b => b != null && b.ObjectiveId == obj.Id.Value);
 
         private long ReadStat(string path) => _stats?.GetAggregate(PathOf(path)) ?? 0;
 
@@ -425,7 +487,8 @@ namespace LongLeap.DailyQuests
             {
                 if (entry.IsCompleted) continue;
                 if (!_definitions.TryGetValue(new QuestId(entry.QuestId), out var def)) continue;
-                if (def.Objectives.Any(o => PathOf(o.StatPath) == path)) return true;
+                if (def.Objectives.Any(o => PathOf(o.StatPath) == path && BaselineOf(entry, o) is not { IsCompleted: true }))
+                    return true;
             }
             return false;
         }
@@ -505,15 +568,27 @@ namespace LongLeap.DailyQuests
                 Debug.LogWarning($"DailyQuestService: {warning}");
         }
 
-        private async void Save()
+        /// <summary>
+        /// Записать состояние. Записи идут строго по очереди — следующая ждёт
+        /// предыдущую, иначе старое состояние могло бы лечь поверх нового.
+        /// Пишется то, что в памяти на момент записи, а не на момент вызова.
+        /// false — запись не удалась (ошибка уже в логе).
+        /// </summary>
+        private Task<bool> Save() => _saving = SaveAfter(_saving);
+
+        private async Task<bool> SaveAfter(Task previous)
         {
+            await previous;
+
             try
             {
                 await _store.SaveAsync(_state);
+                return true;
             }
             catch (Exception e)
             {
                 Debug.LogError($"DailyQuestService: ошибка сохранения состояния: {e.Message}");
+                return false;
             }
         }
     }

@@ -17,9 +17,24 @@ namespace LongLeap.DailyQuests
         /// <summary>Начало периода, на который выдан текущий набор (UTC ticks). 0 — набора ещё не было.</summary>
         public long PeriodStartUtcTicks;
 
+        /// <summary>
+        /// На этот период набор намеренно не выдаётся (сейв был нечитаем — см.
+        /// <see cref="IsUnreadable"/>): не добирать его до следующего сброса.
+        /// </summary>
+        public bool Withheld;
+
         public ActiveQuestState[] Active = Array.Empty<ActiveQuestState>();
 
+        /// <summary>
+        /// Сейв есть, но прочитать его не вышло (битый или от более новой
+        /// версии). Не сохраняется — это пометка от хранилища для сервиса.
+        /// </summary>
+        [NonSerialized]
+        public bool IsUnreadable;
+
         public static DailyQuestsState Empty() => new DailyQuestsState();
+
+        public static DailyQuestsState Unreadable() => new DailyQuestsState { IsUnreadable = true };
     }
 
     [Serializable]
@@ -44,5 +59,11 @@ namespace LongLeap.DailyQuests
     {
         public string ObjectiveId;
         public long Value;
+
+        /// <summary>
+        /// Цель набрана. Защёлка на каждую цель отдельно: «10k за заезд + 30
+        /// грайндов» засчитается, даже если грайнды добраны в другом заезде.
+        /// </summary>
+        public bool IsCompleted;
     }
 }

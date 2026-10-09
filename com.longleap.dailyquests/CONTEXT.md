@@ -28,7 +28,7 @@ _Avoid_: Collect, redeem
 
 ## Quest lifecycle
 
-`InProgress` → `Completed` (all objectives met; latched — stays completed even if the stat later drops) → `Claimed`.
+`InProgress` → `Completed` (all objectives met; each objective is latched on its own — it stays met even if the stat later drops) → `Claimed` (only after the claim is persisted).
 
 ## Relationships
 

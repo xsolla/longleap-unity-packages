@@ -40,8 +40,10 @@ namespace LongLeap.DailyQuests
             _storage.SaveAsync(_storageKey, JsonConvert.SerializeObject(state));
 
         /// <summary>
-        /// Разбор сохранения. Пусто или битое — чистое состояние: квесты просто
-        /// выдадутся заново. Версия новее нашей — тоже чистое, читать её мы не умеем.
+        /// Разбор сохранения. Пусто — чистое состояние: сейва ещё не было.
+        /// Битое или версия новее нашей — <see cref="DailyQuestsState.Unreadable"/>:
+        /// что сегодня уже забрано, неизвестно, и сервис не выдаёт набор до
+        /// следующего сброса.
         /// </summary>
         public static DailyQuestsState Parse(string json)
         {
@@ -51,16 +53,22 @@ namespace LongLeap.DailyQuests
             try
             {
                 var state = JsonConvert.DeserializeObject<DailyQuestsState>(json);
-                if (state == null || state.Version > DailyQuestsState.CurrentVersion)
+                if (state == null)
                     return DailyQuestsState.Empty();
+
+                if (state.Version > DailyQuestsState.CurrentVersion)
+                {
+                    Debug.LogWarning($"JsonDailyQuestStateStore: сохранение версии {state.Version}, а мы умеем {DailyQuestsState.CurrentVersion}.");
+                    return DailyQuestsState.Unreadable();
+                }
 
                 state.Active ??= Array.Empty<ActiveQuestState>();
                 return state;
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"JsonDailyQuestStateStore: сохранение не читается ({e.Message}) — начинаю заново.");
-                return DailyQuestsState.Empty();
+                Debug.LogWarning($"JsonDailyQuestStateStore: сохранение не читается ({e.Message}).");
+                return DailyQuestsState.Unreadable();
             }
         }
     }

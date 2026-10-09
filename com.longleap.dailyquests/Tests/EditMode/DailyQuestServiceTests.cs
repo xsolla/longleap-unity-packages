@@ -29,6 +29,25 @@ namespace LongLeap.DailyQuests.Tests
             public Task SaveAsync(DailyQuestsState state) => Task.CompletedTask;
         }
 
+        /// <summary>Запись висит, пока не откроют <see cref="Gate"/>.</summary>
+        private sealed class GatedStore : IDailyQuestStateStore
+        {
+            public TaskCompletionSource<bool> Gate;
+            public Task<DailyQuestsState> LoadAsync() => Task.FromResult(DailyQuestsState.Empty());
+            public async Task SaveAsync(DailyQuestsState state)
+            {
+                if (Gate != null) await Gate.Task;
+            }
+        }
+
+        private sealed class FailingSaveStore : IDailyQuestStateStore
+        {
+            public bool Fail;
+            public Task<DailyQuestsState> LoadAsync() => Task.FromResult(DailyQuestsState.Empty());
+            public Task SaveAsync(DailyQuestsState state) =>
+                Fail ? Task.FromException(new InvalidOperationException("disk full")) : Task.CompletedTask;
+        }
+
         private sealed class ConfigProvider : IDailyQuestProvider
         {
             public DailyQuestConfig Config;
@@ -90,6 +109,19 @@ namespace LongLeap.DailyQuests.Tests
                     new QuestObjective { Id = new QuestObjectiveId("o0"), StatPath = stat, StatTarget = target, Mode = mode }
                 },
                 Rewards = new[] { new QuestReward { Key = new QuestRewardKey("soft"), Amount = soft } }
+            };
+
+        /// <summary>«Набери 100 очков за заезд + 3 грайнда».</summary>
+        private static QuestDefinition ScoreAndGrind(string id) =>
+            new QuestDefinition
+            {
+                Id = new QuestId(id),
+                Objectives = new[]
+                {
+                    new QuestObjective { Id = new QuestObjectiveId("score"), StatPath = "run_score", StatTarget = 100, Mode = QuestProgressMode.Absolute },
+                    new QuestObjective { Id = new QuestObjectiveId("grind"), StatPath = "grind", StatTarget = 3 }
+                },
+                Rewards = new[] { new QuestReward { Key = new QuestRewardKey("soft"), Amount = 1 } }
             };
 
         private static DailyQuestConfig Config(int dailyCount, params QuestDefinition[] quests) =>
@@ -213,6 +245,48 @@ namespace LongLeap.DailyQuests.Tests
         }
 
         [Test]
+        public async Task MultiObjective_EachObjectiveIsLatched()
+        {
+            _provider.Config = Config(1, ScoreAndGrind("combo"));
+            await Start();
+
+            _stats.Set(RunScore, 120); // очки набраны в одном заезде
+            _stats.Set(RunScore, 0);   // новый заезд — счёт обнулился
+            _stats.Add(Grind, 3);      // грайнды добраны уже в нём
+
+            Assert.AreEqual(QuestState.Completed, Only().State);
+        }
+
+        [Test]
+        public async Task LatchedObjective_ShowsFullProgress_AfterStatDrops()
+        {
+            _provider.Config = Config(1, ScoreAndGrind("combo"));
+            await Start();
+
+            _stats.Set(RunScore, 120);
+            _stats.Set(RunScore, 0);
+
+            var status = Only();
+            Assert.AreEqual(QuestState.InProgress, status.State);
+            Assert.AreEqual(new QuestProgress(100, 100), status.ObjectiveProgresses[0].Progress);
+            Assert.AreEqual(new QuestProgress(0, 3), status.ObjectiveProgresses[1].Progress);
+        }
+
+        [Test]
+        public async Task LatchedObjective_SurvivesRestart()
+        {
+            _provider.Config = Config(1, ScoreAndGrind("combo"));
+            await Start();
+            _stats.Set(RunScore, 120);
+            _stats.Set(RunScore, 0);
+
+            await Start();
+            _stats.Add(Grind, 3);
+
+            Assert.AreEqual(QuestState.Completed, Only().State);
+        }
+
+        [Test]
         public async Task StatChange_RaisesChanged()
         {
             _provider.Config = Config(1, Quest("grind_50", "grind", 50, 5));
@@ -234,8 +308,8 @@ namespace LongLeap.DailyQuests.Tests
             await Start();
             _stats.Add(Grind, 50);
 
-            Assert.IsTrue(_service.Claim(new QuestId("grind_50")));
-            Assert.IsFalse(_service.Claim(new QuestId("grind_50")));
+            Assert.IsTrue(await _service.ClaimAsync(new QuestId("grind_50")));
+            Assert.IsFalse(await _service.ClaimAsync(new QuestId("grind_50")));
 
             Assert.AreEqual(1, _bridge.Claims.Count);
             Assert.AreEqual("soft", _bridge.Claims[0].Rewards[0].Key.Value);
@@ -251,8 +325,65 @@ namespace LongLeap.DailyQuests.Tests
             await Start();
             _stats.Add(Grind, 49);
 
-            Assert.IsFalse(_service.Claim(new QuestId("grind_50")));
+            Assert.IsFalse(await _service.ClaimAsync(new QuestId("grind_50")));
             Assert.AreEqual(0, _bridge.Claims.Count);
+        }
+
+        [Test]
+        public async Task Claim_UnfinishedQuest_StillReportsOtherQuestsCompleted()
+        {
+            _provider.Config = Config(2, Quest("grind_50", "grind", 50, 5), Quest("ollie_20", "ollie", 20, 3));
+            await Start();
+            _stats.SetAggregate(Ollie, 20); // стат вырос без события
+            int raised = 0;
+            _service.Changed += () => raised++;
+
+            Assert.IsFalse(await _service.ClaimAsync(new QuestId("grind_50")));
+
+            Assert.AreEqual(1, raised);
+            Assert.AreEqual(QuestState.Completed, _service.GetStatus(new QuestId("ollie_20")).State);
+        }
+
+        [Test]
+        public async Task Claim_GrantsRewardOnlyAfterClaimIsSaved()
+        {
+            _provider.Config = Config(1, Quest("grind_50", "grind", 50, 5));
+            var store = new GatedStore();
+            await Start(store);
+            _stats.Add(Grind, 50);
+
+            store.Gate = new TaskCompletionSource<bool>();
+            var claim = _service.ClaimAsync(new QuestId("grind_50"));
+
+            Assert.IsFalse(claim.IsCompleted);
+            Assert.AreEqual(0, _bridge.Claims.Count, "награда не должна прийти раньше записи");
+            Assert.IsFalse(await _service.ClaimAsync(new QuestId("grind_50")), "второе нажатие во время записи");
+
+            store.Gate.SetResult(true);
+
+            Assert.IsTrue(await claim);
+            Assert.AreEqual(1, _bridge.Claims.Count);
+        }
+
+        [Test]
+        public async Task Claim_SaveFailed_GrantsNothing_AndCanBeRetried()
+        {
+            _provider.Config = Config(1, Quest("grind_50", "grind", 50, 5));
+            var store = new FailingSaveStore();
+            await Start(store);
+            _stats.Add(Grind, 50);
+
+            store.Fail = true;
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("ошибка сохранения"));
+
+            Assert.IsFalse(await _service.ClaimAsync(new QuestId("grind_50")));
+            Assert.AreEqual(0, _bridge.Claims.Count);
+            Assert.AreEqual(QuestState.Completed, Only().State);
+
+            store.Fail = false;
+
+            Assert.IsTrue(await _service.ClaimAsync(new QuestId("grind_50")));
+            Assert.AreEqual(1, _bridge.Claims.Count);
         }
 
         [Test]
@@ -260,8 +391,8 @@ namespace LongLeap.DailyQuests.Tests
         {
             await Start();
 
-            Assert.IsFalse(_service.Claim(new QuestId("nope")));
-            Assert.IsFalse(_service.Claim(QuestId.None));
+            Assert.IsFalse(await _service.ClaimAsync(new QuestId("nope")));
+            Assert.IsFalse(await _service.ClaimAsync(QuestId.None));
         }
 
         [Test]
@@ -272,7 +403,7 @@ namespace LongLeap.DailyQuests.Tests
 
             _service.ForceComplete(new QuestId("grind_50"));
 
-            Assert.IsTrue(_service.Claim(new QuestId("grind_50")));
+            Assert.IsTrue(await _service.ClaimAsync(new QuestId("grind_50")));
         }
 
         // --- сохранение -------------------------------------------------------
@@ -297,12 +428,12 @@ namespace LongLeap.DailyQuests.Tests
             _provider.Config = Config(1, Quest("grind_50", "grind", 50, 5));
             await Start();
             _stats.Add(Grind, 50);
-            _service.Claim(new QuestId("grind_50"));
+            await _service.ClaimAsync(new QuestId("grind_50"));
 
             await Start();
 
             Assert.AreEqual(QuestState.Claimed, Only().State);
-            Assert.IsFalse(_service.Claim(new QuestId("grind_50")));
+            Assert.IsFalse(await _service.ClaimAsync(new QuestId("grind_50")));
             Assert.AreEqual(1, _bridge.Claims.Count);
         }
 
@@ -339,10 +470,42 @@ namespace LongLeap.DailyQuests.Tests
             await Start(new UnavailableStore());
 
             Assert.IsEmpty(_service.GetActive());
-            Assert.IsFalse(_service.Claim(new QuestId("grind_50")));
+            Assert.IsFalse(await _service.ClaimAsync(new QuestId("grind_50")));
+        }
+
+        [Test]
+        public async Task UnreadableSave_NoQuestsUntilNextReset()
+        {
+            _storage.Data[JsonDailyQuestStateStore.DefaultStorageKey] = "{ broken";
+
+            await Start();
+            Assert.IsEmpty(_service.GetActive(), "что сегодня уже забрано — неизвестно");
+
+            await Start();
+            Assert.IsEmpty(_service.GetActive(), "перезапуск в тот же день не добирает набор");
+
+            _now = _now.AddDays(1);
+            Assert.AreEqual(1, _service.GetActive().Length);
         }
 
         // --- смена периода ------------------------------------------------------
+
+        [Test]
+        public async Task Tick_AfterReset_IssuesNewSetAndRaisesChanged()
+        {
+            await Start();
+            int raised = 0;
+            _service.Changed += () => raised++;
+
+            _service.Tick();
+            Assert.AreEqual(0, raised, "тот же период — ничего не происходит");
+
+            _now = _now.AddDays(1);
+            _service.Tick();
+
+            Assert.AreEqual(1, raised);
+            Assert.AreEqual(2, _bridge.Rotations.Count);
+        }
 
         [Test]
         public async Task NewPeriod_IssuesNewSet_AndResetsBaseline()
@@ -368,7 +531,7 @@ namespace LongLeap.DailyQuests.Tests
             _now = _now.AddDays(1);
 
             Assert.AreEqual(QuestState.InProgress, Only().State);
-            Assert.IsFalse(_service.Claim(new QuestId("grind_50")));
+            Assert.IsFalse(await _service.ClaimAsync(new QuestId("grind_50")));
         }
 
         [Test]

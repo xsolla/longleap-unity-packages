@@ -88,24 +88,47 @@ namespace LongLeap.DailyQuests.Tests
                     new ActiveQuestState
                     {
                         QuestId = "q", IsCompleted = true, IsClaimed = false,
-                        Baselines = new[] { new ObjectiveBaseline { ObjectiveId = "o0", Value = 7 } }
+                        Baselines = new[] { new ObjectiveBaseline { ObjectiveId = "o0", Value = 7, IsCompleted = true } }
                     }
-                }
+                },
+                Withheld = true,
+                IsUnreadable = true
             };
 
             var parsed = JsonDailyQuestStateStore.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(state));
 
             Assert.AreEqual(42, parsed.PeriodStartUtcTicks);
+            Assert.IsTrue(parsed.Withheld);
+            Assert.IsFalse(parsed.IsUnreadable, "пометка хранилища не сохраняется");
             Assert.AreEqual("q", parsed.Active[0].QuestId);
             Assert.IsTrue(parsed.Active[0].IsCompleted);
             Assert.AreEqual(7, parsed.Active[0].Baselines[0].Value);
+            Assert.IsTrue(parsed.Active[0].Baselines[0].IsCompleted);
         }
 
         [Test]
-        public void StateStore_Parse_NewerVersion_StartsClean()
+        public void StateStore_Parse_Empty_IsFreshStart()
+        {
+            var parsed = JsonDailyQuestStateStore.Parse("");
+
+            Assert.IsFalse(parsed.IsUnreadable);
+            Assert.AreEqual(0, parsed.PeriodStartUtcTicks);
+        }
+
+        [Test]
+        public void StateStore_Parse_Broken_IsUnreadable()
+        {
+            var parsed = JsonDailyQuestStateStore.Parse("{ broken");
+
+            Assert.IsTrue(parsed.IsUnreadable);
+        }
+
+        [Test]
+        public void StateStore_Parse_NewerVersion_IsUnreadable()
         {
             var parsed = JsonDailyQuestStateStore.Parse(@"{ ""Version"": 999, ""PeriodStartUtcTicks"": 5 }");
 
+            Assert.IsTrue(parsed.IsUnreadable);
             Assert.AreEqual(0, parsed.PeriodStartUtcTicks);
         }
     }
