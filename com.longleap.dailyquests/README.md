@@ -45,7 +45,7 @@
 | Тип | Что это |
 |---|---|
 | `IDailyQuestService` / `DailyQuestService` | Сервис. `GetActive()`, `GetStatus(id)`, `ClaimAsync(id)`, `Tick()`, `ClaimableCount`, `TimeUntilReset`, событие `Changed`, отладка: `ForceComplete`, `DebugSkipToNextResetWindow`, `Reset` |
-| `IDailyQuestProvider` | Откуда конфиг. Готовые: `StreamingAssetsDailyQuestProvider`, `JsonDailyQuestProvider` |
+| `IDailyQuestProvider` | Откуда конфиг. Готовые: `ResourcesDailyQuestProvider`, `JsonDailyQuestProvider` |
 | `IDailyQuestStateStore` | Где состояние. Готовый: `JsonDailyQuestStateStore(IPersistentStorage)` |
 | `IDailyQuestGameBridge` | `OnQuestsRotated`, `OnQuestCompleted`, `ApplyRewards` — игра начисляет награду здесь |
 | `QuestStatus` | Снимок квеста для UI: `Definition`, `State` (`InProgress`/`Completed`/`Claimed`), `ObjectiveProgresses`, `TotalProgress`, `CanClaim` |
@@ -58,14 +58,14 @@
 
 ```csharp
 var service = new DailyQuestService(
-    provider: new StreamingAssetsDailyQuestProvider(),       // StreamingAssets/DailyQuests/daily_quests.json
+    provider: new ResourcesDailyQuestProvider(),             // Resources/DailyQuests/daily_quests.json
     store:    new JsonDailyQuestStateStore(persistentStorage),
     bridge:   myBridge,                                       // optional
     stats:    statSystem);                                    // optional, без него прогресса нет
 await service.InitializeAsync();
 ```
 
-`StreamingAssetsDailyQuestProvider` кеширует задачу чтения: его можно создать и вызвать `LoadAsync()` в начале загрузки, а сервису отдать позже — он получит готовый результат.
+`ResourcesDailyQuestProvider` читает `TextAsset` через `Resources.Load` — JSON внутри билда, без HTTP, поэтому работает и на порталах, которые перепаковывают билд (GamePix). Читает один раз и кеширует задачу: его можно создать и вызвать `LoadAsync()` в начале загрузки (на главном потоке), а сервису отдать позже — он получит готовый результат. Нет файла или битый JSON — пустой пул и ошибка в лог.
 
 ## Использование в UI
 

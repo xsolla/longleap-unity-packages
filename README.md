@@ -124,7 +124,7 @@ from the Package Manager.
 
 | Package | What it is | Depends on |
 |---|---|---|
-| `com.longleap.platform.unity` | `PlayerPrefs` adapter, file and PlayerPrefs persistent storage, coroutine timer, StreamingAssets achievement loader. | core |
+| `com.longleap.platform.unity` | `PlayerPrefs` adapter, file and PlayerPrefs persistent storage, coroutine timer, Resources achievement loader. | core |
 | `com.longleap.platform.webgl` | GA4 backend over JS interop, as an alternative to `UnityWebRequest` on WebGL. | core, analytics |
 
 **Identity**
