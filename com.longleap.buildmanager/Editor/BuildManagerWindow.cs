@@ -231,9 +231,12 @@ namespace LongLeap.BuildManager.Editor
 
                 // Односторонняя настройка, которая уже сделана, — это как
                 // погасший пункт ремонта asmdef-ов: чинить больше нечего.
+                // Смотрим на СОХРАНЁННОЕ значение, как и меню: по отложенному
+                // строка гасла сразу после щелчка, а PrunePending в Apply
+                // выбрасывал правку как «недоступную» — ремонт не делался.
                 if (availability.IsAvailable
                     && option.OneWay
-                    && _staged.GetValue(option.Id) == ProjectOption.On)
+                    && _staged.GetSavedValue(option.Id) == ProjectOption.On)
                 {
                     return ProjectOptionAvailability.Blocked("Already in place — nothing to do.");
                 }

@@ -27,10 +27,10 @@ namespace LongLeap.Core.Editor
 
         // Не названные явно настройки уводятся в своё «выключено».
         //
-        // Это то, что позволяет пресету «Pure» означать «никаких дефайнов» без
-        // перечисления символов, которых в этом проекте может и не быть, и
-        // заставляет переход GamePix -> Xsolla ID действительно выключить
-        // GAMEPIX, а не оставить его включённым.
+        // This is what lets the "Local" preset mean "sign-in and no other
+        // defines" without listing symbols this project may not even have, and
+        // what makes switching GamePix -> Xsolla ID really turn GAMEPIX off
+        // instead of leaving it on.
         //
         // Не трогает настройки без естественного «выключено» (выбор среды) и
         // односторонние (ремонт asmdef-ов): сбрасывать их некуда, да и нечем.

@@ -77,7 +77,12 @@ namespace LongLeap.Core.Leaderboards
                     Debug.Log($"[Leaderboard] Service: Submitted board={fullBoardId.Value} score={score} → {(accepted ? "accepted" : "rejected")}");
                     if (accepted)
                     {
-                        InvalidateCache(fullBoardId);
+                        // The caches are keyed by the board id WITHOUT the prefix
+                        // (see GetTopInternalAsync). Invalidating by fullBoardId
+                        // missed them whenever the prefix was set (Editor and
+                        // development builds), and the board kept showing the
+                        // pre-submit result until the scene reloaded.
+                        InvalidateCache(boardId);
 
                         var rank = await _provider.GetPlayerRankAsync(fullBoardId, sort, uid);
                         if (rank.Rank.HasValue && rank.Rank.Value <= TopRankThreshold)

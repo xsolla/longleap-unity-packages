@@ -31,7 +31,11 @@ namespace LongLeap.BuildManager.Editor
                     { "gamepix.enabled", ProjectOption.On },
                     { "gamepix.allow_analytics", ProjectOption.Off },
                     { "gamepix.ad_debug", ProjectOption.Off },
-                    { "xsollaid.enabled", ProjectOption.Off },
+
+                    // On for the portal too: the sign-in itself comes from the
+                    // GamePix SDK (XsollaIdAuthGamePix), but cloud saves and
+                    // leaderboards on our server live in the XSOLLA_ID assembly.
+                    { "xsollaid.enabled", ProjectOption.On },
                     { "xsollaid.debug", ProjectOption.Off },
                     { "devtools.debug", ProjectOption.Off },
 
@@ -53,20 +57,23 @@ namespace LongLeap.BuildManager.Editor
                     { "gamepix.allow_analytics", ProjectOption.Off },
                     { "gamepix.ad_debug", ProjectOption.Off },
                     { "devtools.debug", ProjectOption.Off },
-                    { "backpack.environment", "Development" },
+                    { "backpack.environment", "Production" },
                 },
                 "Self-hosted HTML5 build with Xsolla ID sign-in.");
 
-            // Ничего лишнего: ни площадки, ни входа, ни отладки.
+            // Local development: Xsolla ID sign-in against the RewardService
+            // running on this machine (127.0.0.1). Everything not named here,
+            // GamePix and the debug panels included, is switched off.
             yield return new ProjectOptionPreset(
-                "pure",
-                "Pure",
+                "local",
+                "Local",
                 30,
                 new Dictionary<string, string>
                 {
+                    { "xsollaid.enabled", ProjectOption.On },
                     { "backpack.environment", "Local" },
                 },
-                "Plain WebGL build: no portal, no sign-in, no debug panels.");
+                "Local WebGL build: Xsolla ID sign-in, BackPack and cloud saves on the local server, no portal, no debug panels.");
         }
     }
 }

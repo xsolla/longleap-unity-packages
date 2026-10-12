@@ -22,7 +22,20 @@ namespace LongLeap.Core.CloudSaves
         private const string IndexKey = "cloudsave_index";
         private const string TsLocalSuffix = "_ts";
 
+        // Pause before a batch push: writes that come in a row (a stats flush,
+        // applying the save choice) accumulate during it and go out as one
+        // request instead of one each.
+        private const int BatchDebounceMs = 500;
+
+        // Size cap for one batch, by value length. The server accepts bodies up
+        // to 10 MB; JSON escaping inflates strings, so we keep a margin.
+        private const long MaxBatchChars = 3L * 1024 * 1024;
+
         private readonly ICloudSaveProvider _provider;
+
+        // The same provider if it can write in batches, otherwise null. Decides
+        // the push mode — see ScheduleBatchPush.
+        private readonly ICloudSaveBatchProvider _batch;
         private readonly IPlayerPrefs _prefs;
         private readonly Dictionary<string, string> _cache = new Dictionary<string, string>();
         private readonly Dictionary<string, long> _timestamps = new Dictionary<string, long>();
@@ -44,10 +57,24 @@ namespace LongLeap.Core.CloudSaves
         private bool _initialized;
         private bool _disposed;
 
+        // The key index and the dirty set have been loaded from PlayerPrefs.
+        //
+        // Separate from _initialized: the service is used BEFORE InitializeAsync
+        // too — at startup the save switch takes a snapshot from it and applies
+        // the player's choice before the cloud is loaded. Without loading this
+        // state, the very first write would overwrite the index and the dirty
+        // set with its single key, and every other key would be lost for
+        // clearing and pushing.
+        private bool _stateLoaded;
+
+        // A batch push is already scheduled and hasn't started yet.
+        private bool _batchPushScheduled;
+
         public CloudSaveService(ICloudSaveProvider provider, IPlayerPrefs playerPrefs)
         {
             _provider = provider ?? throw new ArgumentNullException(nameof(provider));
             _prefs = playerPrefs ?? throw new ArgumentNullException(nameof(playerPrefs));
+            _batch = provider as ICloudSaveBatchProvider;
         }
 
         public async Task InitializeAsync()
@@ -58,8 +85,7 @@ namespace LongLeap.Core.CloudSaves
             {
                 if (_initialized) return;
 
-                LoadDirtyKeys();
-                LoadKnownKeys();
+                EnsureStateLoadedLocked();
 
                 foreach (var k in new List<string>(_dirtyKeys))
                 {
@@ -133,6 +159,8 @@ namespace LongLeap.Core.CloudSaves
             await _lock.WaitAsync();
             try
             {
+                EnsureStateLoadedLocked();
+
                 var ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
                 _cache[keyStr] = value;
@@ -164,6 +192,18 @@ namespace LongLeap.Core.CloudSaves
             //
             // Ждать отправку по-прежнему можно (метод её awaits) — просто теперь это
             // ожидание касается только того, кто сам решил дождаться.
+            //
+            // A batch provider is the exception: the write accumulates and goes
+            // out in a batch a bit later. We can't wait for it here — callers
+            // write keys one at a time and await each, so every batch would
+            // hold a single key. Nothing can be lost: the key stays dirty in
+            // PlayerPrefs until the provider confirms the write.
+            if (_batch != null)
+            {
+                ScheduleBatchPush();
+                return;
+            }
+
             await PushDirtyKeysAsync();
         }
 
@@ -173,6 +213,8 @@ namespace LongLeap.Core.CloudSaves
             await _lock.WaitAsync();
             try
             {
+                EnsureStateLoadedLocked();
+
                 var keyStr = key.Value;
                 if (_cache.TryGetValue(keyStr, out string value))
                     return value;
@@ -209,6 +251,8 @@ namespace LongLeap.Core.CloudSaves
             await _lock.WaitAsync();
             try
             {
+                EnsureStateLoadedLocked();
+
                 var snapshot = new Dictionary<string, CloudSaveEntry>(_cache.Count);
 
                 foreach (var pair in _cache)
@@ -218,6 +262,23 @@ namespace LongLeap.Core.CloudSaves
                         : GetLocalTimestamp(pair.Key);
 
                     snapshot[pair.Key] = new CloudSaveEntry(pair.Value, ts);
+                }
+
+                // Plus keys nobody has read this session: they exist only in
+                // PlayerPrefs. The cache used to be enough — the cloud loaded
+                // everything into it at startup. A guest save now lives only
+                // locally with no cloud behind it, and without the index the
+                // snapshot would see only what has been read so far, i.e.
+                // almost nothing.
+                foreach (var key in _knownKeys)
+                {
+                    if (snapshot.ContainsKey(key))
+                        continue;
+
+                    var value = _prefs.GetString(CloudKey(key), null);
+
+                    if (value != null)
+                        snapshot[key] = new CloudSaveEntry(value, GetLocalTimestamp(key));
                 }
 
                 return snapshot;
@@ -250,6 +311,8 @@ namespace LongLeap.Core.CloudSaves
             await _lock.WaitAsync();
             try
             {
+                EnsureStateLoadedLocked();
+
                 var keyStr = key.Value;
                 _cache.Remove(keyStr);
                 _timestamps.Remove(keyStr);
@@ -267,7 +330,26 @@ namespace LongLeap.Core.CloudSaves
                 _lock.Release();
             }
 
+            // The delete goes out in the same batch as writes — see SetStringAsync.
+            if (_batch != null)
+            {
+                ScheduleBatchPush();
+                return;
+            }
+
             await PushDirtyKeysAsync();
+        }
+
+        // Push everything dirty right now and wait for the cloud to answer.
+        //
+        // Needed before a scene reload when the save owner changes: with a
+        // batch provider, writes wait for their batch, and leaving the scene
+        // without pushing them would leave them until the next launch — which,
+        // having switched owners, clears the mirror together with them.
+        public Task FlushPendingAsync()
+        {
+            ThrowIfDisposed();
+            return PushDirtyKeysAsync();
         }
 
         public async Task DeleteAllAsync()
@@ -277,6 +359,7 @@ namespace LongLeap.Core.CloudSaves
             await _lock.WaitAsync();
             try
             {
+                EnsureStateLoadedLocked();
                 ForgetLocalLocked();
                 _prefs.Save();
             }
@@ -306,6 +389,7 @@ namespace LongLeap.Core.CloudSaves
             await _lock.WaitAsync();
             try
             {
+                EnsureStateLoadedLocked();
                 ForgetLocalLocked();
                 _prefs.Save();
 
@@ -378,9 +462,57 @@ namespace LongLeap.Core.CloudSaves
             }
         }
 
+        // Schedule a batch push unless one is already scheduled.
+        //
+        // Fire-and-forget on purpose: writes that arrive during the pause catch
+        // up with the already scheduled push and go out with it. The pause is
+        // measured with a Stopwatch and Task.Yield, not Task.Delay: WebGL has no
+        // thread pool, and Task.Delay never wakes up there.
+        private async void ScheduleBatchPush()
+        {
+            if (_batchPushScheduled || _disposed)
+                return;
+
+            _batchPushScheduled = true;
+
+            try
+            {
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+
+                while (watch.ElapsedMilliseconds < BatchDebounceMs)
+                {
+                    await Task.Yield();
+
+                    if (_disposed)
+                        return;
+                }
+            }
+            finally
+            {
+                _batchPushScheduled = false;
+            }
+
+            try
+            {
+                await PushDirtyKeysAsync();
+            }
+            catch (Exception ex)
+            {
+                // async void: an exception escaping from here would crash the
+                // app. The keys stay dirty and go out with the next push.
+                Debug.LogWarning($"{nameof(CloudSaveService)}: batch push failed: {ex.Message}");
+            }
+        }
+
         private async Task PushDirtyKeysCoreAsync()
         {
             if (_disposed) return;
+
+            if (_batch != null)
+            {
+                await PushDirtyKeysBatchAsync();
+                return;
+            }
 
             await _pushLock.WaitAsync();
             try
@@ -457,6 +589,145 @@ namespace LongLeap.Core.CloudSaves
             {
                 _pushLock.Release();
             }
+        }
+
+        // Batch push: all dirty keys in a few large requests instead of one
+        // request per key.
+        //
+        // A key is cleared only if it hasn't been rewritten since the snapshot:
+        // otherwise a new value written during the request would count as
+        // delivered even though the cloud got the old one.
+        private async Task PushDirtyKeysBatchAsync()
+        {
+            await _pushLock.WaitAsync();
+            try
+            {
+                var entries = new Dictionary<string, CloudSaveEntry>();
+                var deletes = new List<string>();
+
+                await _lock.WaitAsync();
+                try
+                {
+                    foreach (var key in _dirtyKeys)
+                    {
+                        if (_cache.TryGetValue(key, out var value))
+                        {
+                            long ts = _timestamps.TryGetValue(key, out var t) ? t : 0;
+                            entries[key] = new CloudSaveEntry(value, ts);
+                        }
+                        else
+                        {
+                            deletes.Add(key);
+                        }
+                    }
+                }
+                finally
+                {
+                    _lock.Release();
+                }
+
+                if (entries.Count == 0 && deletes.Count == 0) return;
+
+                Debug.Log($"{nameof(CloudSaveService)}: pushing {entries.Count} keys and {deletes.Count} deletes in batches...");
+
+                int pushed = 0;
+
+                foreach (var chunk in SplitIntoBatches(entries, deletes))
+                {
+                    try
+                    {
+                        await _batch.SetManyAsync(chunk.entries, chunk.deletes);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Don't send the remaining batches: the network is most
+                        // likely the same, and anything undelivered stays dirty
+                        // and goes out next time.
+                        Debug.LogWarning($"{nameof(CloudSaveService)}: batch push failed: {ex.Message}");
+                        break;
+                    }
+
+                    await _lock.WaitAsync();
+                    try
+                    {
+                        foreach (var pair in chunk.entries)
+                        {
+                            bool unchanged =
+                                _cache.TryGetValue(pair.Key, out var current) &&
+                                current == pair.Value.Value &&
+                                _timestamps.TryGetValue(pair.Key, out var ts) &&
+                                ts == pair.Value.TimestampUnixSeconds;
+
+                            if (unchanged)
+                                _dirtyKeys.Remove(pair.Key);
+                        }
+
+                        foreach (var key in chunk.deletes)
+                        {
+                            if (!_cache.ContainsKey(key))
+                                _dirtyKeys.Remove(key);
+                        }
+
+                        SaveDirtyKeys();
+                    }
+                    finally
+                    {
+                        _lock.Release();
+                    }
+
+                    pushed += chunk.entries.Count + chunk.deletes.Count;
+                }
+
+                if (pushed > 0)
+                    Debug.Log($"{nameof(CloudSaveService)}: pushed {pushed} keys");
+            }
+            finally
+            {
+                _pushLock.Release();
+            }
+        }
+
+        // Split the push into batches so none hits the request body limit.
+        // Deletes are tiny and ride along with the first batch.
+        private static IEnumerable<(Dictionary<string, CloudSaveEntry> entries, List<string> deletes)> SplitIntoBatches(
+            Dictionary<string, CloudSaveEntry> entries, List<string> deletes)
+        {
+            var current = new Dictionary<string, CloudSaveEntry>();
+            var currentDeletes = deletes;
+            long size = 0;
+
+            foreach (var pair in entries)
+            {
+                long entrySize = pair.Key.Length + (pair.Value.Value?.Length ?? 0);
+
+                if (current.Count > 0 && size + entrySize > MaxBatchChars)
+                {
+                    yield return (current, currentDeletes);
+
+                    current = new Dictionary<string, CloudSaveEntry>();
+                    currentDeletes = new List<string>();
+                    size = 0;
+                }
+
+                current[pair.Key] = pair.Value;
+                size += entrySize;
+            }
+
+            if (current.Count > 0 || currentDeletes.Count > 0)
+                yield return (current, currentDeletes);
+        }
+
+        // Load the key index and the dirty set from PlayerPrefs. Once per
+        // service lifetime, ONLY under _lock. See _stateLoaded.
+        private void EnsureStateLoadedLocked()
+        {
+            if (_stateLoaded)
+                return;
+
+            LoadDirtyKeys();
+            LoadKnownKeys();
+
+            _stateLoaded = true;
         }
 
         // Формат конверта живёт в CloudSaveEnvelope: его же читает сводка чужого

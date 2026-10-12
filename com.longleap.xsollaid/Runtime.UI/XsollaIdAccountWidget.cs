@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Threading.Tasks;
 using LongLeap.Localization;
@@ -109,6 +110,12 @@ namespace LongLeap.XsollaId.UI
         // Bind ещё не позвали, и превью в редакторе выглядят как в сборке, где
         // ссылка включена. Игра, которой она не нужна, передаёт false явно.
         private bool _showBackPackLink = true;
+
+        // What the "Sign in" button does instead of the widget's own sign-in.
+        // null means the widget signs in by itself. A game whose sign-in lives on
+        // a separate screen (with the save owner chosen before the menu) passes
+        // the transition to that screen here.
+        private Action _signInRequested;
 
         // На что подписаны прямо сейчас. null — подписки нет.
         private IXsollaIdAuth _account;
@@ -230,12 +237,18 @@ namespace LongLeap.XsollaId.UI
         // отдельный продукт Xsolla, и в сборке, которая с ним не работает,
         // ссылка ведёт игрока в пустоту. Дефайном здесь это не решить: пакет
         // уезжает в другие проекты, где такого дефайна нет вовсе.
+        //
+        // signInRequested replaces the widget's own sign-in on the "Sign in"
+        // button (see _signInRequested). null means the widget signs in by
+        // itself, as before.
         public void Bind(
-            IXsollaIdAuth auth, IXsollaIdAvatarLoader avatars, bool showBackPackLink = true)
+            IXsollaIdAuth auth, IXsollaIdAvatarLoader avatars, bool showBackPackLink = true,
+            Action signInRequested = null)
         {
             _boundAuth = auth;
             _boundAvatars = avatars;
             _showBackPackLink = showBackPackLink;
+            _signInRequested = signInRequested;
 
             if (!isActiveAndEnabled)
                 return;
@@ -380,6 +393,13 @@ namespace LongLeap.XsollaId.UI
                 Debug.LogError(
                     "XsollaIdAccountWidget: sign-in clicked while the service is missing " +
                     "or unavailable — the button should not be here.", this);
+                return;
+            }
+
+            // The game owns sign-in — hand it the click and do nothing else.
+            if (_signInRequested != null)
+            {
+                _signInRequested();
                 return;
             }
 
