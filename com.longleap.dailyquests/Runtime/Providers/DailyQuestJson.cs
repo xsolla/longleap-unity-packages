@@ -41,7 +41,10 @@ namespace LongLeap.DailyQuests
                 Settings = new DailyQuestSettings
                 {
                     DailyCount = dto.settings?.dailyCount ?? DailyQuestSettings.DefaultDailyCount,
-                    ResetHourUtc = dto.settings?.resetHourUtc ?? 0
+                    ResetHourUtc = dto.settings?.resetHourUtc ?? 0,
+                    UniqueCategories = dto.settings?.uniqueCategories ?? false,
+                    HardestLast = dto.settings?.hardestLast ?? false,
+                    SlotDifficulties = dto.settings?.slotDifficulties ?? Array.Empty<int>()
                 },
                 Quests = dto.quests?
                     .Where(q => q != null)
@@ -56,6 +59,8 @@ namespace LongLeap.DailyQuests
             {
                 Id = string.IsNullOrEmpty(q.id) ? QuestId.None : new QuestId(q.id),
                 Weight = q.weight ?? 1,
+                Categories = q.categories ?? Array.Empty<string>(),
+                Difficulty = q.difficulty ?? 0,
                 Objectives = q.objectives?
                     .Select((o, i) => o == null ? null : MapObjective(q.id, o, i))
                     .ToArray() ?? Array.Empty<QuestObjective>(),
@@ -105,12 +110,17 @@ namespace LongLeap.DailyQuests
         {
             public int? dailyCount;
             public int? resetHourUtc;
+            public bool? uniqueCategories;
+            public bool? hardestLast;
+            public int[] slotDifficulties;
         }
 
         private sealed class QuestDto
         {
             public string id;
             public int? weight;
+            public string[] categories;
+            public int? difficulty;
             public ObjectiveDto[] objectives;
             public RewardDto[] rewards;
         }

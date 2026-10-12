@@ -9,5 +9,9 @@ namespace LongLeap.DailyQuests
 
         /// <summary>Час по UTC, в который набор квестов меняется на новый.</summary>
         public int ResetHourUtc { get; init; }
+
+        public bool UniqueCategories { get; init; }
+        public bool HardestLast { get; init; }
+        public int[] SlotDifficulties { get; init; } = System.Array.Empty<int>();
     }
 }

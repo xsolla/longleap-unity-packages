@@ -272,7 +272,8 @@ namespace LongLeap.DailyQuests
                 _pool,
                 _settings.DailyCount,
                 Seed(periodStartTicks),
-                avoid: previous);
+                avoid: previous,
+                settings: _settings);
 
             _state.PeriodStartUtcTicks = periodStartTicks;
             _state.Withheld = false;
@@ -320,7 +321,9 @@ namespace LongLeap.DailyQuests
                     _pool,
                     missing,
                     Seed(_state.PeriodStartUtcTicks) + kept.Count,
-                    exclude: ActiveIds(kept));
+                    exclude: ActiveIds(kept),
+                    settings: _settings,
+                    selected: kept.Select(e => _definitions[new QuestId(e.QuestId)]).ToArray());
 
                 foreach (var def in extra)
                     kept.Add(CreateEntry(def));
@@ -328,7 +331,9 @@ namespace LongLeap.DailyQuests
                 dirty |= extra.Count > 0;
             }
 
-            _state.Active = kept.ToArray();
+            _state.Active = _settings.HardestLast
+                ? kept.OrderBy(e => _definitions[new QuestId(e.QuestId)].Difficulty).ToArray()
+                : kept.ToArray();
             return dirty;
         }
 
