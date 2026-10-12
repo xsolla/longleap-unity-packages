@@ -79,6 +79,60 @@ namespace LongLeap.Core.Tests
             Assert.IsFalse(result.IsAccepted);
         }
 
+        // Regression: with a prefix (Editor, development builds) an accepted
+        // submit did not invalidate the cached top, so the board kept showing
+        // what it had before the run until the scene reloaded.
+        [Test]
+        public async Task FlushAsync_AcceptedScore_RefreshesCachedTop_WithPrefix()
+        {
+            var provider = new RecordingProvider();
+            var service = new LeaderboardService("dev_", provider, _auth);
+            var board = service.GetBoard(_killBoard, SortDirection.Descending);
+
+            var before = await board.GetTopAsync(10);
+            Assert.AreEqual(0, before.Entries.Count, "the board starts empty and that result is cached");
+
+            await board.SubmitScoreAsync(100);
+            await service.FlushAsync();
+
+            var after = await board.GetTopAsync(10);
+            Assert.AreEqual(1, after.Entries.Count, "the accepted score must replace the cached empty top");
+            Assert.AreEqual(100, after.Entries[0].Score);
+            Assert.AreEqual("dev_kills", provider.LastBoard.Value, "the provider gets the prefixed id");
+        }
+
+        // Keeps submitted scores and serves them back as the top.
+        private sealed class RecordingProvider : ILeaderboardProvider
+        {
+            private readonly System.Collections.Generic.List<LeaderboardEntry> _entries =
+                new System.Collections.Generic.List<LeaderboardEntry>();
+
+            public BoardId LastBoard { get; private set; }
+
+            public Task<bool> SubmitScoreAsync(BoardId boardId, string uid, long score, string displayName,
+                SortDirection sort)
+            {
+                LastBoard = boardId;
+                _entries.Add(new LeaderboardEntry(uid, displayName, score, _entries.Count + 1, 0));
+                return Task.FromResult(true);
+            }
+
+            public Task<LeaderboardPage> GetTopAsync(BoardId boardId, SortDirection sort, int count) =>
+                Task.FromResult(new LeaderboardPage(
+                    new System.Collections.Generic.List<LeaderboardEntry>(_entries), null, false));
+
+            public Task<PlayerRank> GetPlayerRankAsync(BoardId boardId, SortDirection sort, string uid) =>
+                Task.FromResult(new PlayerRank(_entries.Count > 0 ? 1 : (int?)null, null, _entries.Count));
+
+            public Task<LeaderboardPage> GetSurroundingsAsync(BoardId boardId, SortDirection sort, string uid,
+                int radius) =>
+                Task.FromResult(LeaderboardPage.Empty());
+
+            public void Dispose()
+            {
+            }
+        }
+
         private sealed class TestConfig
         {
             public bool UseMockProvider { get; }

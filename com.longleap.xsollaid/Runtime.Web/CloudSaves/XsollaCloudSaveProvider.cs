@@ -70,21 +70,23 @@ namespace LongLeap.XsollaId.Web
                 ["ts"] = ts
             };
 
-            HttpReply reply = await SendAsync("PUT", KeyUrl(key), body.ToString(Formatting.None));
+            string url = KeyUrl(key);
+            HttpReply reply = await SendAsync("PUT", url, body.ToString(Formatting.None));
 
-            EnsureSuccess(reply, $"SetStringAsync '{key.Value}'");
+            EnsureSuccess(reply, $"SetStringAsync '{key.Value}'", "PUT", url);
         }
 
         public async Task<string> GetStringAsync(CloudSaveKey key)
         {
-            HttpReply reply = await _http.GetAsync(KeyUrl(key) + Query());
+            string url = KeyUrl(key) + Query();
+            HttpReply reply = await _http.GetAsync(url);
 
             if (reply.StatusCode == 404)
                 return null;
 
             if (!reply.IsSuccess)
             {
-                LogFailure(reply, $"GetStringAsync '{key.Value}'");
+                LogFailure(reply, $"GetStringAsync '{key.Value}'", "GET", url);
                 return null;
             }
 
@@ -105,9 +107,10 @@ namespace LongLeap.XsollaId.Web
 
         public async Task DeleteKeyAsync(CloudSaveKey key)
         {
-            HttpReply reply = await SendAsync("DELETE", KeyUrl(key) + Query(), null);
+            string url = KeyUrl(key) + Query();
+            HttpReply reply = await SendAsync("DELETE", url, null);
 
-            EnsureSuccess(reply, $"DeleteKeyAsync '{key.Value}'");
+            EnsureSuccess(reply, $"DeleteKeyAsync '{key.Value}'", "DELETE", url);
         }
 
         // Never throws: CloudSaveService calls it from InitializeAsync, and a
@@ -130,9 +133,10 @@ namespace LongLeap.XsollaId.Web
 
         public async Task DeleteAllAsync()
         {
-            HttpReply reply = await SendAsync("DELETE", _baseUrl + SavesPath + Query(), null);
+            string url = _baseUrl + SavesPath + Query();
+            HttpReply reply = await SendAsync("DELETE", url, null);
 
-            EnsureSuccess(reply, "DeleteAllAsync");
+            EnsureSuccess(reply, "DeleteAllAsync", "DELETE", url);
         }
 
         public async Task SetManyAsync(
@@ -183,11 +187,12 @@ namespace LongLeap.XsollaId.Web
                 ["entries"] = payload
             };
 
+            string url = _baseUrl + SavesPath;
             HttpReply reply = await _http.RequestAsync(new HttpCall(
-                "PUT", _baseUrl + SavesPath, body.ToString(Formatting.None), "application/json",
+                "PUT", url, body.ToString(Formatting.None), "application/json",
                 timeoutSeconds: BatchTimeoutSeconds));
 
-            EnsureSuccess(reply, $"SetManyAsync ({payload.Count} keys)");
+            EnsureSuccess(reply, $"SetManyAsync ({payload.Count} keys)", "PUT", url);
         }
 
         // The account's whole save, already unpacked. null means it could not be
@@ -196,11 +201,12 @@ namespace LongLeap.XsollaId.Web
         // compared without knowing what the account holds.
         public async Task<IReadOnlyDictionary<string, CloudSaveEntry>> TryLoadEntriesAsync()
         {
-            HttpReply reply = await _http.GetAsync(_baseUrl + SavesPath + Query());
+            string url = _baseUrl + SavesPath + Query();
+            HttpReply reply = await _http.GetAsync(url);
 
             if (!reply.IsSuccess)
             {
-                LogFailure(reply, "LoadAllAsync");
+                LogFailure(reply, "LoadAllAsync", "GET", url);
                 return null;
             }
 
@@ -240,21 +246,34 @@ namespace LongLeap.XsollaId.Web
         private string Query() =>
             $"?xsollaId={Uri.EscapeDataString(_accountId)}&gameId={Uri.EscapeDataString(_gameId)}";
 
-        private static void EnsureSuccess(HttpReply reply, string what)
+        private static void EnsureSuccess(HttpReply reply, string what, string method, string url)
         {
             if (reply.IsSuccess)
                 return;
 
-            throw new InvalidOperationException($"{nameof(XsollaCloudSaveProvider)}: {what} failed — {Describe(reply)}");
+            throw new InvalidOperationException($"{nameof(XsollaCloudSaveProvider)}: {what} failed — {Describe(reply, method, url)}");
         }
 
-        private static void LogFailure(HttpReply reply, string what) =>
-            Debug.LogWarning($"{nameof(XsollaCloudSaveProvider)}: {what} failed — {Describe(reply)}");
+        private static void LogFailure(HttpReply reply, string what, string method, string url) =>
+            Debug.LogWarning($"{nameof(XsollaCloudSaveProvider)}: {what} failed — {Describe(reply, method, url)}");
 
-        private static string Describe(HttpReply reply) =>
-            reply.IsTransportError
-                ? reply.TransportError
-                : $"HTTP {reply.StatusCode} {Truncate(reply.Body)}";
+        // Method and URL go into the message: a bare "HTTP 404" with an empty
+        // body does not say which endpoint is missing. The query only carries
+        // xsollaId and gameId, no tokens, so the URL is safe to log.
+        private static string Describe(HttpReply reply, string method, string url)
+        {
+            string request = $"{method} {url}";
+
+            if (reply.IsTransportError)
+                return $"{reply.TransportError} ({request})";
+
+            string body = string.IsNullOrEmpty(reply.Body) ? "<empty body>" : Truncate(reply.Body);
+            string hint = reply.StatusCode == 404 && string.IsNullOrEmpty(reply.Body)
+                ? " — the route is likely not deployed on the server (check baseUrl and that the /saves endpoints are live)"
+                : string.Empty;
+
+            return $"HTTP {reply.StatusCode} {body} ({request}){hint}";
+        }
 
         private static string Truncate(string body) =>
             string.IsNullOrEmpty(body) || body.Length <= 200 ? body : body.Substring(0, 200) + "…";
