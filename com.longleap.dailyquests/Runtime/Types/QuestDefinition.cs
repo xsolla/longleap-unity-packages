@@ -11,6 +11,9 @@ namespace LongLeap.DailyQuests
         /// </summary>
         public int Weight { get; init; } = 1;
 
+        public string[] Categories { get; init; } = System.Array.Empty<string>();
+        public int Difficulty { get; init; }
+
         public QuestObjective[] Objectives { get; init; }
 
         public QuestReward[] Rewards { get; init; }
