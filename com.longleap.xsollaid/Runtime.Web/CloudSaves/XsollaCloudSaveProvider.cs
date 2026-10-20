@@ -26,7 +26,9 @@ namespace LongLeap.XsollaId.Web
     // The player is identified by xsollaId (sub) without a token — same as rewards.
     public sealed class XsollaCloudSaveProvider : ICloudSaveProvider, ICloudSaveBatchProvider
     {
-        private const string SavesPath = "/saves";
+        // Default for when the caller passes no path; BackPackConfig holds the
+        // configured one (_savesPath).
+        public const string DefaultSavesPath = "/saves";
 
         // A batch can weigh megabytes; the default 10 s are not meant for it.
         private const int BatchTimeoutSeconds = 60;
@@ -36,10 +38,12 @@ namespace LongLeap.XsollaId.Web
 
         private readonly string _baseUrl;
         private readonly string _gameId;
+        private readonly string _savesPath;
         private readonly string _accountId;
         private readonly XsollaIdHttp _http;
 
-        public XsollaCloudSaveProvider(string baseUrl, string gameId, string accountId, XsollaIdHttp http = null)
+        public XsollaCloudSaveProvider(string baseUrl, string gameId, string accountId, XsollaIdHttp http = null,
+            string savesPath = null)
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
                 throw new ArgumentException($"{nameof(XsollaCloudSaveProvider)}: baseUrl is empty.", nameof(baseUrl));
@@ -52,6 +56,7 @@ namespace LongLeap.XsollaId.Web
 
             _baseUrl = baseUrl.Trim().TrimEnd('/');
             _gameId = gameId.Trim();
+            _savesPath = NormalizePath(savesPath);
             _accountId = accountId;
             _http = http ?? new XsollaIdHttp();
         }
@@ -133,7 +138,7 @@ namespace LongLeap.XsollaId.Web
 
         public async Task DeleteAllAsync()
         {
-            string url = _baseUrl + SavesPath + Query();
+            string url = _baseUrl + _savesPath + Query();
             HttpReply reply = await SendAsync("DELETE", url, null);
 
             EnsureSuccess(reply, "DeleteAllAsync", "DELETE", url);
@@ -187,7 +192,7 @@ namespace LongLeap.XsollaId.Web
                 ["entries"] = payload
             };
 
-            string url = _baseUrl + SavesPath;
+            string url = _baseUrl + _savesPath;
             HttpReply reply = await _http.RequestAsync(new HttpCall(
                 "PUT", url, body.ToString(Formatting.None), "application/json",
                 timeoutSeconds: BatchTimeoutSeconds));
@@ -201,7 +206,7 @@ namespace LongLeap.XsollaId.Web
         // compared without knowing what the account holds.
         public async Task<IReadOnlyDictionary<string, CloudSaveEntry>> TryLoadEntriesAsync()
         {
-            string url = _baseUrl + SavesPath + Query();
+            string url = _baseUrl + _savesPath + Query();
             HttpReply reply = await _http.GetAsync(url);
 
             if (!reply.IsSuccess)
@@ -241,7 +246,7 @@ namespace LongLeap.XsollaId.Web
             _http.RequestAsync(new HttpCall(method, url, jsonBody, jsonBody != null ? "application/json" : null));
 
         private string KeyUrl(CloudSaveKey key) =>
-            $"{_baseUrl}{SavesPath}/{Uri.EscapeDataString(key.Value)}";
+            $"{_baseUrl}{_savesPath}/{Uri.EscapeDataString(key.Value)}";
 
         private string Query() =>
             $"?xsollaId={Uri.EscapeDataString(_accountId)}&gameId={Uri.EscapeDataString(_gameId)}";
@@ -269,10 +274,23 @@ namespace LongLeap.XsollaId.Web
 
             string body = string.IsNullOrEmpty(reply.Body) ? "<empty body>" : Truncate(reply.Body);
             string hint = reply.StatusCode == 404 && string.IsNullOrEmpty(reply.Body)
-                ? " — the route is likely not deployed on the server (check baseUrl and that the /saves endpoints are live)"
+                ? " — the route is likely not deployed on the server (check baseUrl and that the saves endpoints are live)"
                 : string.Empty;
 
             return $"HTTP {reply.StatusCode} {body} ({request}){hint}";
+        }
+
+        // Same rule as BackPackEndpoint: empty means the default, a missing
+        // leading slash is added — either would otherwise send the request to
+        // the wrong route.
+        private static string NormalizePath(string value)
+        {
+            string path = value?.Trim().TrimEnd('/');
+
+            if (string.IsNullOrEmpty(path))
+                return DefaultSavesPath;
+
+            return path[0] == '/' ? path : "/" + path;
         }
 
         private static string Truncate(string body) =>

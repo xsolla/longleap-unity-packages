@@ -24,14 +24,17 @@ namespace LongLeap.XsollaId.Web
         private readonly string _gameId;
         private readonly IPlayerPrefs _prefs;
         private readonly XsollaIdHttp _http;
+        private readonly string _savesPath;
         private string _accountId;
 
-        public XsollaCloudSaveScope(string baseUrl, string gameId, IPlayerPrefs prefs, XsollaIdHttp http = null)
+        public XsollaCloudSaveScope(string baseUrl, string gameId, IPlayerPrefs prefs, XsollaIdHttp http = null,
+            string savesPath = null)
         {
             _baseUrl = baseUrl;
             _gameId = gameId;
             _prefs = prefs ?? throw new System.ArgumentNullException(nameof(prefs));
             _http = http;
+            _savesPath = savesPath;
 
             string saved = _prefs.GetString(ScopePrefsKey, null);
 
@@ -78,7 +81,7 @@ namespace LongLeap.XsollaId.Web
             if (string.IsNullOrEmpty(accountId) || string.IsNullOrWhiteSpace(_baseUrl) || string.IsNullOrWhiteSpace(_gameId))
                 return null;
 
-            var provider = new XsollaCloudSaveProvider(_baseUrl, _gameId, accountId, _http);
+            var provider = new XsollaCloudSaveProvider(_baseUrl, _gameId, accountId, _http, _savesPath);
 
             return await provider.TryLoadEntriesAsync();
         }

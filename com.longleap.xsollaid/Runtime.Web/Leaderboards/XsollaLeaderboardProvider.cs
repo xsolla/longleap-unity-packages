@@ -27,14 +27,18 @@ namespace LongLeap.XsollaId.Web
     // ignored: it is always this account (see XsollaAccountAuthProvider).
     public sealed class XsollaLeaderboardProvider : ILeaderboardProvider
     {
-        private const string LeaderboardsPath = "/leaderboards";
+        // Default for when the caller passes no path; BackPackConfig holds the
+        // configured one (_leaderboardsPath).
+        public const string DefaultLeaderboardsPath = "/leaderboards";
 
         private readonly string _baseUrl;
         private readonly string _gameId;
+        private readonly string _leaderboardsPath;
         private readonly string _accountId;
         private readonly XsollaIdHttp _http;
 
-        public XsollaLeaderboardProvider(string baseUrl, string gameId, string accountId, XsollaIdHttp http = null)
+        public XsollaLeaderboardProvider(string baseUrl, string gameId, string accountId, XsollaIdHttp http = null,
+            string leaderboardsPath = null)
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
                 throw new ArgumentException($"{nameof(XsollaLeaderboardProvider)}: baseUrl is empty.", nameof(baseUrl));
@@ -47,6 +51,7 @@ namespace LongLeap.XsollaId.Web
 
             _baseUrl = baseUrl.Trim().TrimEnd('/');
             _gameId = gameId.Trim();
+            _leaderboardsPath = NormalizePath(leaderboardsPath);
             _accountId = accountId;
             _http = http ?? new XsollaIdHttp();
         }
@@ -200,7 +205,7 @@ namespace LongLeap.XsollaId.Web
         }
 
         private string BoardUrl(BoardId boardId) =>
-            $"{_baseUrl}{LeaderboardsPath}/{Uri.EscapeDataString(boardId.Value)}";
+            $"{_baseUrl}{_leaderboardsPath}/{Uri.EscapeDataString(boardId.Value)}";
 
         // Method and URL go into the message, as in XsollaCloudSaveProvider:
         // a bare "HTTP 404" does not say which endpoint is missing. The query
@@ -219,6 +224,19 @@ namespace LongLeap.XsollaId.Web
                 : string.Empty;
 
             return $"HTTP {reply.StatusCode} {body} ({request}){hint}";
+        }
+
+        // Same rule as BackPackEndpoint: empty means the default, a missing
+        // leading slash is added — either would otherwise send the request to
+        // the wrong route.
+        private static string NormalizePath(string value)
+        {
+            string path = value?.Trim().TrimEnd('/');
+
+            if (string.IsNullOrEmpty(path))
+                return DefaultLeaderboardsPath;
+
+            return path[0] == '/' ? path : "/" + path;
         }
 
         private static string Truncate(string body) =>

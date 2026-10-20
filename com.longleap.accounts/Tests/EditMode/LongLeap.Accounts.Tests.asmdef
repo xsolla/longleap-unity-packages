@@ -1,0 +1,18 @@
+{
+  "name": "LongLeap.Accounts.Tests",
+  "rootNamespace": "",
+  "references": [
+    "LongLeap.Accounts",
+    "LongLeap.Core",
+    "LongLeap.XsollaId",
+    "UnityEngine.TestRunner",
+    "NUnit.Framework"
+  ],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}
