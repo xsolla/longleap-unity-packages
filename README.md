@@ -2,7 +2,7 @@
 
 <https://gitea.longleap.games/Long_Leap_Games/Packages>
 
-Shared Unity package library for LongLeap games. 18 UPM packages in a single Git
+Shared Unity package library for LongLeap games. 20 UPM packages in a single Git
 repo, consumed as a submodule at `Packages/LongLeap` and referenced from the host
 project with `file:` paths.
 
@@ -63,13 +63,13 @@ Three words carry the whole design. They are defined in
 | **Backend** | A concrete provider implementation — Firebase, Null, GamePix, WebGL. Game code never sees one directly. |
 
 Each service is constructed on its own (`new CloudSaveService(provider)`). The
-container that holds them is **game code, not part of this library** — in this
-project, `Assets/Scripts/Bootstrap/Services/`.
+container that holds them (`ServiceContainer`) and the loading pipeline come from
+`com.longleap.bootstrap`; which services to build, and in what order, is game code.
 
 > `core/CONTEXT.md` also defines a **`ServiceBuilder`** with a fluent `Build()`
-> returning a `ServiceContainer`. **No such type exists anywhere in the repo** —
-> that entry is stale, and `ServiceContainer` is a game-side class. Do not write
-> code against it.
+> returning a `ServiceContainer`. **No `ServiceBuilder` exists anywhere in the repo** —
+> that entry is stale; the container is `ServiceContainer` in `com.longleap.bootstrap`. Do not write
+> code against `ServiceBuilder`.
 
 Consequences worth knowing before you add anything:
 
@@ -132,6 +132,14 @@ from the Package Manager.
 | Package | What it is | Gate |
 |---|---|---|
 | `com.longleap.xsollaid` | Xsolla ID sign-in (OAuth2/OIDC auth code + PKCE) plus a drop-in account widget. Self-contained — nothing to copy into `Assets/`. | `XSOLLA_ID` for the `.Web` assembly |
+
+**Team kits** — what our games share on top of the services. Feature services are still
+built by the game; these only carry the plumbing and the screens.
+
+| Package | What it is | Depends on |
+|---|---|---|
+| `com.longleap.bootstrap` | Sequential loading pipeline of `ILoadingTask` steps, `ServiceContainer`, `GameServices` access point, optional Addressables loading, `LoadSceneTask`. | — (Addressables) |
+| `com.longleap.ui` | Window system (catalog of Addressable window prefabs with preload/unload rules) and windows for settings, achievements, daily rewards, daily quests, backpack, notifications. Each feature module compiles only when its feature package is installed. Logic only — prefabs stay in the game. | — (uGUI, Input System, Addressables); feature modules: the matching feature packages |
 
 **Tooling**
 

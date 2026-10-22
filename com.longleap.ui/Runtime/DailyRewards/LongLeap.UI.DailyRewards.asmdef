@@ -1,0 +1,33 @@
+{
+  "name": "LongLeap.UI.DailyRewards",
+  "rootNamespace": "LongLeap.UI",
+  "references": [
+    "LongLeap.UI",
+    "UnityEngine.UI",
+    "Unity.TextMeshPro",
+    "LongLeap.DailyRewards",
+    "LongLeap.Localization"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "LONGLEAP_DAILYREWARDS",
+    "LONGLEAP_LOCALIZATION"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.longleap.dailyrewards",
+      "expression": "0.0.0",
+      "define": "LONGLEAP_DAILYREWARDS"
+    },
+    {
+      "name": "com.longleap.localization",
+      "expression": "0.0.0",
+      "define": "LONGLEAP_LOCALIZATION"
+    }
+  ]
+}

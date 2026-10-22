@@ -1,0 +1,33 @@
+{
+  "name": "LongLeap.UI.DailyQuests",
+  "rootNamespace": "LongLeap.UI",
+  "references": [
+    "LongLeap.UI",
+    "UnityEngine.UI",
+    "Unity.TextMeshPro",
+    "LongLeap.DailyQuests",
+    "LongLeap.Localization"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "LONGLEAP_DAILYQUESTS",
+    "LONGLEAP_LOCALIZATION"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.longleap.dailyquests",
+      "expression": "0.0.0",
+      "define": "LONGLEAP_DAILYQUESTS"
+    },
+    {
+      "name": "com.longleap.localization",
+      "expression": "0.0.0",
+      "define": "LONGLEAP_LOCALIZATION"
+    }
+  ]
+}

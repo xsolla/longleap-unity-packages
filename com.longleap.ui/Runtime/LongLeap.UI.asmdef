@@ -1,0 +1,19 @@
+{
+  "name": "LongLeap.UI",
+  "rootNamespace": "LongLeap.UI",
+  "references": [
+    "UnityEngine.UI",
+    "Unity.TextMeshPro",
+    "Unity.InputSystem",
+    "Unity.Addressables",
+    "Unity.ResourceManager"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

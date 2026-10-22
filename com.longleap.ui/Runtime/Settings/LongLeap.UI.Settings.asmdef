@@ -1,0 +1,33 @@
+{
+  "name": "LongLeap.UI.Settings",
+  "rootNamespace": "LongLeap.UI",
+  "references": [
+    "LongLeap.UI",
+    "UnityEngine.UI",
+    "Unity.TextMeshPro",
+    "LongLeap.Settings",
+    "LongLeap.Localization"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "LONGLEAP_SETTINGS",
+    "LONGLEAP_LOCALIZATION"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.longleap.settings",
+      "expression": "0.0.0",
+      "define": "LONGLEAP_SETTINGS"
+    },
+    {
+      "name": "com.longleap.localization",
+      "expression": "0.0.0",
+      "define": "LONGLEAP_LOCALIZATION"
+    }
+  ]
+}

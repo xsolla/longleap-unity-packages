@@ -1,0 +1,33 @@
+{
+  "name": "LongLeap.UI.Achievements",
+  "rootNamespace": "LongLeap.UI",
+  "references": [
+    "LongLeap.UI",
+    "UnityEngine.UI",
+    "Unity.TextMeshPro",
+    "LongLeap.Achievements",
+    "LongLeap.Localization"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "LONGLEAP_ACHIEVEMENTS",
+    "LONGLEAP_LOCALIZATION"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.longleap.achievements",
+      "expression": "0.0.0",
+      "define": "LONGLEAP_ACHIEVEMENTS"
+    },
+    {
+      "name": "com.longleap.localization",
+      "expression": "0.0.0",
+      "define": "LONGLEAP_LOCALIZATION"
+    }
+  ]
+}
