@@ -17,6 +17,15 @@
       },
       "hash": "c14de1e6dc01ab42d2bb358730cff954bce0ce6b"
     },
+    "com.longleap.accounts": {
+      "version": "file:com.longleap.accounts",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.longleap.core": "0.1.0",
+        "com.longleap.xsollaid": "0.1.0"
+      }
+    },
     "com.longleap.achievements": {
       "version": "file:com.longleap.achievements",
       "depth": 0,
@@ -43,6 +52,14 @@
         "com.longleap.achievements": "0.1.0",
         "com.longleap.core": "0.1.0",
         "com.longleap.stats": "0.1.0"
+      }
+    },
+    "com.longleap.bootstrap": {
+      "version": "file:com.longleap.bootstrap",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.addressables": "2.9.1"
       }
     },
     "com.longleap.buildmanager": {
@@ -173,6 +190,16 @@
       "dependencies": {
         "com.longleap.core": "0.1.0",
         "com.unity.nuget.newtonsoft-json": "3.0.2"
+      }
+    },
+    "com.longleap.ui": {
+      "version": "file:com.longleap.ui",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.ugui": "2.0.0",
+        "com.unity.inputsystem": "1.19.0",
+        "com.unity.addressables": "2.9.1"
       }
     },
     "com.longleap.xsollaid": {
