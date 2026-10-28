@@ -1,0 +1,20 @@
+{
+  "name": "LongLeap.Skins.Spine.Editor",
+  "rootNamespace": "LongLeap.Skins.EditorTools",
+  "references": [
+    "LongLeap.Skins",
+    "LongLeap.Skins.Spine",
+    "spine-unity",
+    "spine-csharp"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

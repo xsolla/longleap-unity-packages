@@ -1,0 +1,16 @@
+{
+  "name": "LongLeap.Customization",
+  "rootNamespace": "LongLeap.Customization",
+  "references": [
+    "LongLeap.Core",
+    "LongLeap.Skins"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

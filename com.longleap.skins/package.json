@@ -1,0 +1,9 @@
+{
+  "name": "com.longleap.skins",
+  "version": "0.1.0",
+  "displayName": "LongLeap Skins",
+  "description": "Engine-agnostic skin catalog model: skin and category ids, availability rules and the in-memory ISkinCatalog. No Spine dependency; the Spine-backed layout lives in com.longleap.skins.spine.",
+  "unity": "6000.0",
+  "keywords": ["skins", "customization", "catalog", "longleap"],
+  "dependencies": {}
+}

@@ -23,6 +23,13 @@ namespace LongLeap.Settings
             Key = key;
             LabelKey = labelKey;
         }
+
+        /// <summary>
+        /// Вернуть значение по умолчанию через сервис (чтобы сработал OnChanged).
+        /// У нетипизированной настройки значения по умолчанию нет — его знает
+        /// только <see cref="Setting{T}"/>.
+        /// </summary>
+        internal virtual void ResetToDefault(ISettingsService service) { }
     }
 
     public class Setting<T> : Setting
@@ -39,6 +46,9 @@ namespace LongLeap.Settings
         }
 
         internal virtual T Coerce(T value) => value;
+
+        internal override void ResetToDefault(ISettingsService service)
+            => service.SetValue(this, DefaultValue);
     }
 
     public class NumericSetting<T> : Setting<T> where T : struct

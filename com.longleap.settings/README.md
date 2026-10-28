@@ -184,6 +184,33 @@ else if (s is Setting<bool> b)        // → SettingsToggle
 else if (s is IEnumSetting)           // → SettingsDropdown
 ```
 
+## Config-driven settings panel
+
+`SettingsPanel` (assembly `LongLeap.Settings.UI`, `Runtime/Panel`) builds the settings UI **in code** into a `RectTransform` you give it, from a `SettingsWindowConfig` ScriptableObject. It is not tied to a window system: the game's window creates the panel in its root and calls it when opened / closed.
+
+```csharp
+// in the game's settings window
+_panel = new SettingsPanel(root, configSet, onBack: () => Close());
+_panel.Bind(settingsService);   // rows appear when the service arrives
+_panel.Refresh();               // on open: values may have changed elsewhere
+_panel.StopListening();         // on close; saving to storage is the window's job
+```
+
+`SettingsWindowConfig` (Create ▸ LongLeap ▸ Settings Window Config) holds font, panel size, window captions and a list of **sections**; a section has a title, an optional hint, `HideOnTouch` and **rows**. A row is a `SettingKey` (picked from a dropdown in the inspector) and a fallback `Label`. The row view is chosen by the setting's type: `NumericSetting<float|int>` → slider, `Setting<bool>` → ON/OFF toggle, `Setting<Key>` → key-rebind button (a key already in use is swapped with the other binding, across all groups).
+
+- **Device profile.** The panel takes a `SettingsWindowConfigSet` (Desktop / Mobile / WebDesktop / WebMobile) and picks the config by the global `LongLeap.Tools.DeviceInfo.Profile` (package `com.longleap.tools`). An empty profile falls back to the nearest filled one (WebMobile → Mobile → …) with a warning, so one filled config is enough.
+- **Validation.** An unknown `SettingKey` or an unsupported setting type logs an error and skips that row; the rest of the panel is built. A section left without rows is hidden.
+- **Key dropdown.** The `[SettingKey]` drawer lists keys of every `ISettingsGroup` class that has a parameterless constructor. Groups that need constructor arguments are not listed (their keys show as "missing").
+
+## Service extensions
+
+`SettingsServiceExtensions` works on any `ISettingsService` (the interface is unchanged):
+
+| Method | Purpose |
+|---|---|
+| `FindSetting(key)` | Find a setting by `Setting.Key` across all groups; `null` if absent |
+| `ResetToDefaults()` | Reset every registered setting to its default through `SetValue`, so `OnChanged` fires. New groups are covered automatically |
+
 ## Abstract control bases
 
 Each concrete control inherits from a base that declares only the `Bind()` contract:

@@ -1,0 +1,17 @@
+{
+    "name": "LongLeap.Tools.Editor",
+    "rootNamespace": "LongLeap.Tools.Editor",
+    "references": [
+        "LongLeap.Tools"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": []
+}

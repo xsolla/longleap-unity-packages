@@ -1,0 +1,11 @@
+{
+  "name": "com.longleap.skins.spine",
+  "version": "0.1.0",
+  "displayName": "LongLeap Skins (Spine)",
+  "description": "Spine-backed skin layout: groups Spine skin folders into customization categories (JSON), the SkinLayoutSource and SpineAppearanceConfig assets, and the Skin Layout Editor window. Requires the host project to provide the spine-unity and spine-csharp assemblies.",
+  "unity": "6000.0",
+  "keywords": ["skins", "spine", "customization", "editor", "longleap"],
+  "dependencies": {
+    "com.longleap.skins": "0.1.0"
+  }
+}

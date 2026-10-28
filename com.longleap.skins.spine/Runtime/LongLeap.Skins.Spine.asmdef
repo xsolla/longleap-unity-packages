@@ -1,0 +1,17 @@
+{
+  "name": "LongLeap.Skins.Spine",
+  "rootNamespace": "LongLeap.Skins",
+  "references": [
+    "LongLeap.Skins",
+    "spine-unity",
+    "spine-csharp"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

@@ -1,0 +1,13 @@
+{
+  "name": "LongLeap.Skins",
+  "rootNamespace": "LongLeap.Skins",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}
