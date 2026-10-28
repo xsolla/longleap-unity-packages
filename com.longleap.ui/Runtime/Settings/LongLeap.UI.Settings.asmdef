@@ -6,6 +6,7 @@
     "UnityEngine.UI",
     "Unity.TextMeshPro",
     "LongLeap.Settings",
+    "LongLeap.Settings.UI",
     "LongLeap.Localization"
   ],
   "includePlatforms": [],

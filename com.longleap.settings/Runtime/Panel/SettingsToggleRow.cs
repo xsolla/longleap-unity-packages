@@ -1,5 +1,6 @@
 using LongLeap.Localization;
 using LongLeap.Settings;
+using LongLeap.Tools.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -25,25 +26,25 @@ namespace LongLeap.Settings.UI
 
         public static SettingsToggleRow Create(Transform parent, TMP_FontAsset font, string fallbackLabel)
         {
-            var rect = SettingsUi.CreateRect("ToggleRow", parent);
+            var rect = RuntimeUi.CreateRect("ToggleRow", parent);
             var row = rect.gameObject.AddComponent<SettingsToggleRow>();
 
             var background = rect.gameObject.AddComponent<Image>();
-            background.color = SettingsUi.RowBackground;
+            background.color = RuntimeUi.RowBackground;
             background.raycastTarget = false;
 
-            SettingsUi.AddRow(rect, spacing: 14f);
-            SettingsUi.SetSize(rect.gameObject, preferredHeight: SettingsUi.RowHeight);
+            RuntimeUi.AddRow(rect, spacing: 14f);
+            RuntimeUi.SetSize(rect.gameObject, preferredHeight: RuntimeUi.RowHeight);
 
             row._fallbackLabel = fallbackLabel;
 
-            row._label = SettingsUi.CreateText(
-                "Label", rect, font, fallbackLabel, SettingsUi.LabelFontSize, SettingsUi.Text);
-            SettingsUi.SetSize(row._label.gameObject, flexibleWidth: 1f);
+            row._label = RuntimeUi.CreateText(
+                "Label", rect, font, fallbackLabel, RuntimeUi.LabelFontSize, RuntimeUi.Text);
+            RuntimeUi.SetSize(row._label.gameObject, flexibleWidth: 1f);
 
-            row._button = SettingsUi.CreateButton(
+            row._button = RuntimeUi.CreateButton(
                 "Toggle", rect, font, "", new Color(1f, 1f, 1f, 0.10f), out row._value);
-            SettingsUi.SetSize(row._button.gameObject, preferredWidth: 130f, preferredHeight: 34f);
+            RuntimeUi.SetSize(row._button.gameObject, preferredWidth: 130f, preferredHeight: 34f);
 
             row._button.onClick.AddListener(row.OnClicked);
 

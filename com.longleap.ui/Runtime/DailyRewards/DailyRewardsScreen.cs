@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using LongLeap.DailyRewards;
+using LongLeap.Tools.UI;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -117,7 +118,7 @@ namespace LongLeap.UI
             if (backdrop != null)
             {
                 backdrop.sprite = null;
-                backdrop.color = SettingsUi.Backdrop;
+                backdrop.color = RuntimeUi.Backdrop;
             }
 
             // Рут загрузки может лежать и вне Root — гасим его отдельно, иначе

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using LongLeap.Tools;
+using LongLeap.Tools.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -208,10 +209,10 @@ namespace LongLeap.Settings.UI
         /// </summary>
         private void BuildChrome()
         {
-            var backdrop = SettingsUi.CreateImage("Backdrop", _root, SettingsUi.Backdrop, raycastTarget: true);
+            var backdrop = RuntimeUi.CreateImage("Backdrop", _root, RuntimeUi.Backdrop, raycastTarget: true);
             backdrop.rectTransform.Stretch();
 
-            var panel = SettingsUi.CreateImage("Panel", _root, SettingsUi.PanelBackground, raycastTarget: true);
+            var panel = RuntimeUi.CreateImage("Panel", _root, RuntimeUi.PanelBackground, raycastTarget: true);
             var panelRect = panel.rectTransform;
             panelRect.anchorMin = new Vector2(0.5f, 0.5f);
             panelRect.anchorMax = new Vector2(0.5f, 0.5f);
@@ -219,16 +220,16 @@ namespace LongLeap.Settings.UI
             panelRect.anchoredPosition = Vector2.zero;
             panelRect.sizeDelta = _config.PanelSize;
 
-            SettingsUi.AddColumn(panelRect, spacing: 12f, padding: new RectOffset(28, 28, 24, 24));
+            RuntimeUi.AddColumn(panelRect, spacing: 12f, padding: new RectOffset(28, 28, 24, 24));
 
-            var title = SettingsUi.CreateText(
-                "Title", panelRect, _font, _config.Title, 46, SettingsUi.Accent, TextAlignmentOptions.Center);
-            SettingsUi.SetSize(title.gameObject, preferredHeight: 56f);
+            var title = RuntimeUi.CreateText(
+                "Title", panelRect, _font, _config.Title, 46, RuntimeUi.Accent, TextAlignmentOptions.Center);
+            RuntimeUi.SetSize(title.gameObject, preferredHeight: 56f);
 
-            _unavailable = SettingsUi.CreateText(
-                "Unavailable", panelRect, _font, _config.UnavailableText, SettingsUi.LabelFontSize,
-                SettingsUi.TextDim, TextAlignmentOptions.Center);
-            SettingsUi.SetSize(_unavailable.gameObject, preferredHeight: 40f);
+            _unavailable = RuntimeUi.CreateText(
+                "Unavailable", panelRect, _font, _config.UnavailableText, RuntimeUi.LabelFontSize,
+                RuntimeUi.TextDim, TextAlignmentOptions.Center);
+            RuntimeUi.SetSize(_unavailable.gameObject, preferredHeight: 40f);
 
             // На таче клавиш нет: секции, помеченные HideOnTouch, не создаём.
             foreach (var section in _config.Sections)
@@ -253,9 +254,9 @@ namespace LongLeap.Settings.UI
 
             if (!string.IsNullOrEmpty(section.Hint))
             {
-                var hint = SettingsUi.CreateText(
-                    "Hint", panel, _font, section.Hint, 18, SettingsUi.TextDim, TextAlignmentOptions.Center);
-                SettingsUi.SetSize(hint.gameObject, preferredHeight: 28f);
+                var hint = RuntimeUi.CreateText(
+                    "Hint", panel, _font, section.Hint, 18, RuntimeUi.TextDim, TextAlignmentOptions.Center);
+                RuntimeUi.SetSize(hint.gameObject, preferredHeight: 28f);
                 view.Hint = hint.gameObject;
             }
 
@@ -264,35 +265,35 @@ namespace LongLeap.Settings.UI
 
         private void BuildFooter(RectTransform panel)
         {
-            var footer = SettingsUi.CreateRect("Footer", panel);
-            var layout = SettingsUi.AddRow(footer, spacing: 16f);
+            var footer = RuntimeUi.CreateRect("Footer", panel);
+            var layout = RuntimeUi.AddRow(footer, spacing: 16f);
             layout.childAlignment = TextAnchor.MiddleCenter;
-            SettingsUi.SetSize(footer.gameObject, preferredHeight: 54f);
+            RuntimeUi.SetSize(footer.gameObject, preferredHeight: 54f);
 
-            var reset = SettingsUi.CreateButton(
+            var reset = RuntimeUi.CreateButton(
                 "Reset", footer, _font, _config.ResetText, new Color(1f, 1f, 1f, 0.10f), out _);
-            SettingsUi.SetSize(reset.gameObject, preferredWidth: 220f, preferredHeight: 48f);
+            RuntimeUi.SetSize(reset.gameObject, preferredWidth: 220f, preferredHeight: 48f);
             reset.onClick.AddListener(OnReset);
 
-            var back = SettingsUi.CreateButton(
-                "Back", footer, _font, _config.BackText, SettingsUi.Accent, out _);
-            SettingsUi.SetSize(back.gameObject, preferredWidth: 220f, preferredHeight: 48f);
+            var back = RuntimeUi.CreateButton(
+                "Back", footer, _font, _config.BackText, RuntimeUi.Accent, out _);
+            RuntimeUi.SetSize(back.gameObject, preferredWidth: 220f, preferredHeight: 48f);
             back.onClick.AddListener(() => _onBack?.Invoke());
         }
 
         private GameObject CreateSectionHeader(RectTransform panel, string caption)
         {
-            var header = SettingsUi.CreateText("Section", panel, _font, caption, 26, SettingsUi.Accent);
-            SettingsUi.SetSize(header.gameObject, preferredHeight: 32f);
+            var header = RuntimeUi.CreateText("Section", panel, _font, caption, 26, RuntimeUi.Accent);
+            RuntimeUi.SetSize(header.gameObject, preferredHeight: 32f);
 
             return header.gameObject;
         }
 
         private static RectTransform CreateColumn(RectTransform panel, string name)
         {
-            var column = SettingsUi.CreateRect(name, panel);
-            SettingsUi.AddColumn(column, SettingsUi.RowSpacing);
-            SettingsUi.SetSize(column.gameObject, preferredHeight: 0f);
+            var column = RuntimeUi.CreateRect(name, panel);
+            RuntimeUi.AddColumn(column, RuntimeUi.RowSpacing);
+            RuntimeUi.SetSize(column.gameObject, preferredHeight: 0f);
 
             return column;
         }
@@ -401,10 +402,10 @@ namespace LongLeap.Settings.UI
             if (column == null) return;
 
             float height = rows > 0
-                ? rows * SettingsUi.RowHeight + (rows - 1) * SettingsUi.RowSpacing
+                ? rows * RuntimeUi.RowHeight + (rows - 1) * RuntimeUi.RowSpacing
                 : 0f;
 
-            SettingsUi.SetSize(column.gameObject, preferredHeight: height);
+            RuntimeUi.SetSize(column.gameObject, preferredHeight: height);
         }
 
         private void ShowUnavailable(bool show)

@@ -11,8 +11,8 @@ depends only on uGUI, Input System and Addressables.
 
 | Assembly | Needs | What it is |
 |---|---|---|
-| `LongLeap.UI` | — | Window system (`IWindowService`, `WindowService`, `WindowBase`, `WindowEntry`, `MenuPageWindow`), widgets (`MenuButtonPressFeedback`, `MenuButtonHoverAudio`, `MenuClickAudioBinder`, `UiFitScale`, `TextColorSwitcher`, `RemoteSpriteCache`, `MusicTrackToast`), code-built UI bricks (`SettingsUi`), seams `IUiSounds` / `IMusicInfo`. |
-| `LongLeap.UI.Settings` | settings, localization | `SettingsWindow` (volume rows, defaults, save on close), `SettingsVolumeRow`. |
+| `LongLeap.UI` | — | Window system (`IWindowService`, `WindowService`, `WindowBase`, `WindowEntry`, `MenuPageWindow`), widgets (`MenuButtonPressFeedback`, `MenuButtonHoverAudio`, `MenuClickAudioBinder`, `UiFitScale`, `TextColorSwitcher`, `RemoteSpriteCache`, `MusicTrackToast`), seams `IUiSounds` / `IMusicInfo`. |
+| `LongLeap.UI.Settings` | settings, localization | `SettingsWindow` — window shell over `SettingsPanel` from the settings package: rows come from `SettingsWindowConfig` picked by device profile; save on close. |
 | `LongLeap.UI.Achievements` | achievements, localization | `AchievementsWindow`, `AchievementItemView`. |
 | `LongLeap.UI.DailyRewards` | dailyrewards, localization | `DailyRewardsScreen`, `DailyRewardDayView`. |
 | `LongLeap.UI.DailyQuests` | dailyquests, localization | `DailyQuestPanel`, `DailyQuestItemView`, `DailyQuestRewardFlyout`, `PlayerStatRowView`, seam `IPlayerStatsSource`. |
@@ -57,7 +57,7 @@ them during loading:
 | `IUiSounds` (`UiSound` → clip) | click binder, rewards, quest flyout | over the game's audio service |
 | `IMusicInfo` | `MusicTrackToast` | over the game's audio service |
 | `IWindowService.SetHome<T>()` | `MenuPageWindow` "back" | the game's main menu |
-| `SettingsWindow.Bind(service, volumes, reset, save)` | settings | the game's settings object |
+| `SettingsWindow.Bind(service, save)` | settings | the game's `ISettingsService` and its save |
 | `DailyRewardsScreen.Bind(service, sounds, rewardIcon)` | reward cards | icons from the game config |
 | `IPlayerStatsSource` | `DailyQuestPanel` | game stats + wallet |
 | `IBackPackProductCatalog` + `BindRewards(catalog, isRunActive)` | backpack | what each reward key gives the player |

@@ -23,18 +23,19 @@ Orchestrator: registers groups, loads stored values on boot, saves on window clo
 _Avoid_: Settings manager, preferences system
 
 **Settings Panel**:
-MonoBehaviour that auto-builds settings UI. Iterates `ISettingsService.Groups`, instantiates control prefabs (slider/toggle/dropdown), wires `Bind()` calls. Uses abstract control bases for prefab references.
+Plain class (not a MonoBehaviour) that builds the settings UI in code inside a given `RectTransform`. What it shows comes from a **Settings Window Config**; it is not tied to a window system — the game's window owns it and calls `Bind` / `Refresh` / `StopListening`.
 _Avoid_: Settings screen, preferences window
 
-**Settings Control**:
-A UI widget bound to a single setting. Three concrete types: `SettingsSlider` (extends `SettingsSliderBase`), `SettingsToggle` (extends `SettingsToggleBase`), `SettingsDropdown` (extends `SettingsDropdownBase`).
-_Avoid_: Settings widget, pref row
+**Settings Window Config**:
+ScriptableObject listing sections and rows (by setting key) plus captions, font and panel size. A `SettingsWindowConfigSet` holds one per device profile (Desktop / Mobile / WebDesktop / WebMobile); an empty profile falls back to the nearest filled one.
+_Avoid_: Settings layout, settings schema
 
-**Control Base**:
-Abstract MonoBehaviour class declaring the `Bind()` contract. Prefab slots on `SettingsPanel` are typed to bases, not concretes — visual implementations can be swapped by replacing prefabs.
-_Avoid_: Base widget, abstract control
+**Settings Row**:
+A code-built UI row bound to a single setting; the row type follows the setting type: `SettingsVolumeRow` (numeric, extends `SettingsSliderBase`), `SettingsToggleRow` (bool), `SettingsKeyRow` (key rebind). Enum settings have no row yet.
+_Avoid_: Settings widget, settings control
 
 ## Relationships
 
 - **Settings → Cloud Saves**: `SettingsService` uses `ICloudSaveService` for per-group JSON persistence.
-- **Settings → Localization**: `EnumSetting<T>` uses `Loc.Resolve` for dropdown option labels; `SettingsPanel` uses `Loc` for group section headers and control labels.
+- **Settings → Localization**: `EnumSetting<T>` uses `Loc.Resolve` for dropdown option labels; rows use `Loc` for their labels.
+- **Settings → Tools**: the panel picks its config by `DeviceInfo.Profile` and builds UI with `RuntimeUi` (assembly `LongLeap.Tools.UI`).

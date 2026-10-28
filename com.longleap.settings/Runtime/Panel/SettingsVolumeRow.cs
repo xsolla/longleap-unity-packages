@@ -1,6 +1,7 @@
 using LongLeap.Localization;
 using LongLeap.Settings;
 using LongLeap.Settings.Controls;
+using LongLeap.Tools.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -40,29 +41,29 @@ namespace LongLeap.Settings.UI
         /// </summary>
         public static SettingsVolumeRow Create(Transform parent, TMP_FontAsset font, string fallbackLabel)
         {
-            var rect = SettingsUi.CreateRect("VolumeRow", parent);
+            var rect = RuntimeUi.CreateRect("VolumeRow", parent);
             var row = rect.gameObject.AddComponent<SettingsVolumeRow>();
 
             var background = rect.gameObject.AddComponent<Image>();
-            background.color = SettingsUi.RowBackground;
+            background.color = RuntimeUi.RowBackground;
             background.raycastTarget = false;
 
-            SettingsUi.AddRow(rect, spacing: 14f);
-            SettingsUi.SetSize(rect.gameObject, preferredHeight: SettingsUi.RowHeight);
+            RuntimeUi.AddRow(rect, spacing: 14f);
+            RuntimeUi.SetSize(rect.gameObject, preferredHeight: RuntimeUi.RowHeight);
 
             row._fallbackLabel = fallbackLabel;
 
-            row._label = SettingsUi.CreateText(
-                "Label", rect, font, fallbackLabel, SettingsUi.LabelFontSize, SettingsUi.Text);
-            SettingsUi.SetSize(row._label.gameObject, flexibleWidth: 1f);
+            row._label = RuntimeUi.CreateText(
+                "Label", rect, font, fallbackLabel, RuntimeUi.LabelFontSize, RuntimeUi.Text);
+            RuntimeUi.SetSize(row._label.gameObject, flexibleWidth: 1f);
 
-            row._slider = SettingsUi.CreateSlider("Slider", rect, SettingsUi.Accent);
-            SettingsUi.SetSize(row._slider.gameObject, preferredWidth: 340f, preferredHeight: 26f);
+            row._slider = RuntimeUi.CreateSlider("Slider", rect, RuntimeUi.Accent);
+            RuntimeUi.SetSize(row._slider.gameObject, preferredWidth: 340f, preferredHeight: 26f);
 
-            row._value = SettingsUi.CreateText(
-                "Value", rect, font, "100%", SettingsUi.ValueFontSize, SettingsUi.TextDim,
+            row._value = RuntimeUi.CreateText(
+                "Value", rect, font, "100%", RuntimeUi.ValueFontSize, RuntimeUi.TextDim,
                 TextAlignmentOptions.Right);
-            SettingsUi.SetSize(row._value.gameObject, preferredWidth: 78f);
+            RuntimeUi.SetSize(row._value.gameObject, preferredWidth: 78f);
 
             return row;
         }

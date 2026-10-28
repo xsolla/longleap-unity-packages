@@ -5,6 +5,7 @@
         "LongLeap.Settings",
         "LongLeap.Localization",
         "LongLeap.Tools",
+        "LongLeap.Tools.UI",
         "UnityEngine.UI",
         "Unity.TextMeshPro",
         "Unity.InputSystem"

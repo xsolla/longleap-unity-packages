@@ -1,6 +1,6 @@
 # LongLeap Settings
 
-Typed settings system. Define settings in code as group classes; UI is generated automatically from registered groups; values persist to cloud via `ICloudSaveService`.
+Typed settings system. Define settings in code as group classes; the settings UI is built in code by `SettingsPanel` from a `SettingsWindowConfig` asset (see [Config-driven settings panel](#config-driven-settings-panel)); values persist to cloud via `ICloudSaveService`.
 
 ## Data Sources
 
@@ -29,12 +29,9 @@ Groups define their own field names via `Serialize()` / `Deserialize()`. Not tie
 | `ISettingsGroup` | Interface | `StorageKey`, `DisplayNameKey`, `All`, `Serialize()`, `Deserialize()` |
 | `ISettingsService` | Interface | `Groups`, `Register(group)`, `SetValue<T>(setting, value)`, `LoadAllAsync()`, `SaveAllAsync()`, `event Action<Setting> OnChanged` |
 | `SettingsService` | Class (sealed) | Implementation. Equality check + `Coerce` before setting. Skips I/O if `ICloudSaveService` is null |
-| `SettingsSliderBase` | Abstract class (MonoBehaviour) | `Bind(service, NumericSetting<float>)`, `Bind(service, NumericSetting<int>)` |
-| `SettingsSlider` | Class | Concrete slider: `[SerializeField] TMP_Text _label`, `[SerializeField] Slider _slider`. Labels via `Loc` |
-| `SettingsToggleBase` | Abstract class (MonoBehaviour) | `Bind(service, Setting<bool>)` |
-| `SettingsToggle` | Class | Concrete toggle: `[SerializeField] TMP_Text _label`, `[SerializeField] Toggle _toggle` |
-| `SettingsDropdownBase` | Abstract class (MonoBehaviour) | `Bind(service, Setting)` |
-| `SettingsDropdown` | Class | Concrete dropdown: `[SerializeField] TMP_Text _label`, `[SerializeField] TMP_Dropdown _dropdown`. Uses `IEnumSetting` for labels and value dispatch |
+| `SettingsSliderBase` | Abstract class (MonoBehaviour) | `Bind(service, NumericSetting<float>)`, `Bind(service, NumericSetting<int>)`. Base of `SettingsVolumeRow` |
+| `SettingsPanel` | Class (`LongLeap.Settings.UI`) | Builds the settings UI in code from a `SettingsWindowConfigSet` — see below |
+| `SettingsWindowConfig` / `SettingsWindowConfigSet` | ScriptableObject / serializable set | What the panel shows, per device profile |
 
 ## Initialization
 
@@ -58,7 +55,7 @@ var task = _settingsService.LoadAllAsync();
 Settings = _settingsService;
 ```
 
-The service is exposed as `ISettingsService Settings` on the bootstrapper — consumed by `MainMenuScreen.OnSettingsClicked()`, which passes it to `SettingsPanel.Show(settings, onClose)`.
+The service is exposed as `ISettingsService Settings` on the bootstrapper — the game hands it to its settings window, which passes it to `SettingsPanel.Bind(settings)`.
 
 ### DI registration
 
@@ -158,31 +155,9 @@ lang_en  → English
 lang_ru  → Русский
 ```
 
-Dropdown labels, selection detection, and value dispatch are automatic via `EnumSetting<T>`.
+Option labels, selection detection and value dispatch are exposed through `IEnumSetting`.
 
-### Wiring UI — SettingsPanel
-
-```csharp
-// SettingsPanel.cs — field types are abstract bases for prefab swapping
-[SerializeField] private SettingsSliderBase   _sliderPrefab;
-[SerializeField] private SettingsToggleBase   _togglePrefab;
-[SerializeField] private SettingsDropdownBase _dropdownPrefab;
-[SerializeField] private TMP_Text             _headerPrefab;
-
-// Show opens the panel, builds UI from service.Groups, returns false if gated
-public virtual bool Show(ISettingsService settings, Action onClose);
-
-// Hide saves and closes — called by a Back button wired in Awake
-public virtual async void Hide();
-```
-
-Control dispatch (inside `AddControl`):
-```csharp
-if (s is NumericSetting<float> nf)    // → SettingsSlider
-else if (s is NumericSetting<int> ni) // → SettingsSlider (wholeNumbers)
-else if (s is Setting<bool> b)        // → SettingsToggle
-else if (s is IEnumSetting)           // → SettingsDropdown
-```
+> `SettingsPanel` has no row for enum settings yet: a config row pointing to an `EnumSetting<T>` logs an error and is skipped. Add a dropdown row next to `SettingsToggleRow` when a game needs one.
 
 ## Config-driven settings panel
 
@@ -211,20 +186,9 @@ _panel.StopListening();         // on close; saving to storage is the window's j
 | `FindSetting(key)` | Find a setting by `Setting.Key` across all groups; `null` if absent |
 | `ResetToDefaults()` | Reset every registered setting to its default through `SetValue`, so `OnChanged` fires. New groups are covered automatically |
 
-## Abstract control bases
+## UI building blocks
 
-Each concrete control inherits from a base that declares only the `Bind()` contract:
-
-```
-SettingsSliderBase   → SettingsSlider
-SettingsToggleBase   → SettingsToggle
-SettingsDropdownBase → SettingsDropdown
-```
-
-Prefabs reference the base type. To swap visual implementations:
-1. Create a new prefab with your custom component inheriting from the base
-2. Drag it into `SettingsPanel`'s prefab slot
-3. No code changes in the panel or service
+Rows and the panel are assembled from `LongLeap.Tools.UI.RuntimeUi` (package `com.longleap.tools`, assembly `LongLeap.Tools.UI`): text, image, slider, button, layout helpers, plus the shared palette and sizes. The same class is used by the windows of `com.longleap.ui`, so changing a colour there changes every code-built window.
 
 ## Internals
 

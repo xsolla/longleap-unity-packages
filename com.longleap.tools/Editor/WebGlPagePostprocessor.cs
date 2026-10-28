@@ -8,9 +8,14 @@ using UnityEngine;
 
 // Класс не зависит от игры: живёт в пакете com.longleap.tools и работает в любом проекте.
 // Режим страницы выбирается в меню Tools/WebGL Page Mode и применяется к следующему WebGL билду:
-//   Fixed Aspect — пропорции берутся из размеров canvas в готовом index.html (у нас 1920x1080),
+//   Fixed Aspect — пропорции берутся из размеров canvas в готовом index.html (WebGL Resolution в Player Settings),
 //                  по бокам/сверху-снизу остаются поля;
 //   Free Aspect  — canvas занимает всё окно браузера, любые пропорции.
+// Ориентация игры выбирается там же, в Tools/WebGL Page Mode/Orientation:
+//   Auto      — из WebGL Resolution в Player Settings: ширина < высоты — портретная, иначе альбомная;
+//   Landscape / Portrait — явно.
+// На сенсорных устройствах в неправильной ориентации игра закрывается заглушкой «поверните устройство».
+// На ПК заглушки нет: окно браузера крутить нельзя, игра просто показывается с полями.
 namespace LongLeap.Tools.Editor
 {
     public static class WebGlPagePostprocessor
@@ -21,24 +26,51 @@ namespace LongLeap.Tools.Editor
             FreeAspect = 1,
         }
 
+        public enum PageOrientation
+        {
+            Auto = 0,
+            Landscape = 1,
+            Portrait = 2,
+        }
+
         private const string AspectPageMarker = "data-webgl-aspect-fit";
         private const string FreePageMarker = "data-webgl-free-aspect";
-        private const string LandscapeMarker = "data-webgl-landscape-only";
+        private const string OrientationMarker = "data-webgl-orientation-lock";
         private const string MobileDpiMarker = "// config.devicePixelRatio = 1;";
 
         private const string MenuRoot = "Tools/WebGL Page Mode/";
         private const string FixedMenuPath = MenuRoot + "Fixed Aspect (Player Settings size)";
         private const string FreeMenuPath = MenuRoot + "Free Aspect (fill browser window)";
+        private const string OrientationMenuRoot = MenuRoot + "Orientation/";
+        private const string AutoOrientationMenuPath = OrientationMenuRoot + "Auto (Player Settings resolution)";
+        private const string LandscapeMenuPath = OrientationMenuRoot + "Landscape";
+        private const string PortraitMenuPath = OrientationMenuRoot + "Portrait";
         private const string ModePrefKey = "WebGlPagePostprocessor.Mode";
+        private const string OrientationPrefKey = "WebGlPagePostprocessor.Orientation";
 
-        // Настройка хранится в EditorPrefs (локально у каждого разработчика, в репозиторий не попадает).
+        // Настройки хранятся в EditorPrefs (локально у каждого разработчика, в репозиторий не попадают).
         private static string PrefKey => ModePrefKey + "." + PlayerSettings.productGUID;
+        private static string OrientationKey => OrientationPrefKey + "." + PlayerSettings.productGUID;
 
         public static PageMode Mode
         {
             get => (PageMode)EditorPrefs.GetInt(PrefKey, (int)PageMode.FixedAspect);
             set => EditorPrefs.SetInt(PrefKey, (int)value);
         }
+
+        public static PageOrientation Orientation
+        {
+            get => (PageOrientation)EditorPrefs.GetInt(OrientationKey, (int)PageOrientation.Auto);
+            set => EditorPrefs.SetInt(OrientationKey, (int)value);
+        }
+
+        /// <summary>Портретная ли игра с учётом Auto: тогда решает WebGL Resolution в Player Settings.</summary>
+        public static bool IsPortrait => Orientation switch
+        {
+            PageOrientation.Portrait => true,
+            PageOrientation.Landscape => false,
+            _ => PlayerSettings.defaultWebScreenWidth < PlayerSettings.defaultWebScreenHeight,
+        };
 
         [MenuItem(FixedMenuPath, false, 2200)]
         private static void SelectFixed() => Mode = PageMode.FixedAspect;
@@ -57,6 +89,36 @@ namespace LongLeap.Tools.Editor
         private static bool SelectFreeValidate()
         {
             Menu.SetChecked(FreeMenuPath, Mode == PageMode.FreeAspect);
+            return true;
+        }
+
+        [MenuItem(AutoOrientationMenuPath, false, 2300)]
+        private static void SelectAutoOrientation() => Orientation = PageOrientation.Auto;
+
+        [MenuItem(AutoOrientationMenuPath, true)]
+        private static bool SelectAutoOrientationValidate()
+        {
+            Menu.SetChecked(AutoOrientationMenuPath, Orientation == PageOrientation.Auto);
+            return true;
+        }
+
+        [MenuItem(LandscapeMenuPath, false, 2301)]
+        private static void SelectLandscape() => Orientation = PageOrientation.Landscape;
+
+        [MenuItem(LandscapeMenuPath, true)]
+        private static bool SelectLandscapeValidate()
+        {
+            Menu.SetChecked(LandscapeMenuPath, Orientation == PageOrientation.Landscape);
+            return true;
+        }
+
+        [MenuItem(PortraitMenuPath, false, 2302)]
+        private static void SelectPortrait() => Orientation = PageOrientation.Portrait;
+
+        [MenuItem(PortraitMenuPath, true)]
+        private static bool SelectPortraitValidate()
+        {
+            Menu.SetChecked(PortraitMenuPath, Orientation == PageOrientation.Portrait);
             return true;
         }
 
@@ -146,50 +208,58 @@ namespace LongLeap.Tools.Editor
                 }
             }
 
-            // Альбомная ориентация обязательна в обоих режимах.
-            if (html.IndexOf(LandscapeMarker, StringComparison.Ordinal) < 0)
+            // Ориентация обязательна в обоих режимах страницы.
+            if (html.IndexOf(OrientationMarker, StringComparison.Ordinal) < 0)
             {
                 var headCloseIndex = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
                 var bodyCloseIndex = html.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
 
                 if (headCloseIndex >= 0 && bodyCloseIndex >= 0)
                 {
+                    var portrait = IsPortrait;
                     var background = "#" + ColorUtility.ToHtmlStringRGB(PlayerSettings.SplashScreen.backgroundColor);
+                    var wrongOrientation = portrait ? "landscape" : "portrait";
+                    var lockOrientation = portrait ? "portrait" : "landscape";
+                    // Иконка телефона изначально вертикальная: анимация показывает поворот в нужную ориентацию.
+                    var hintFrom = portrait ? "-90deg" : "0deg";
+                    var hintTo = portrait ? "0deg" : "-90deg";
 
                     // Браузеры не дают надёжно заблокировать ориентацию (screen.orientation.lock работает
-                    // только в fullscreen и не везде), поэтому в портрете закрываем игру заглушкой.
-                    var landscapeStyle =
-                        $"    <style {LandscapeMarker}>\n" +
+                    // только в fullscreen и не везде), поэтому в неправильной ориентации закрываем игру заглушкой.
+                    // Заглушка только для сенсорных устройств (hover: none, pointer: coarse): окно браузера
+                    // на ПК не повернуть, там игра просто показывается с полями.
+                    var orientationStyle =
+                        $"    <style {OrientationMarker}>\n" +
                         $"      #unity-rotate-overlay {{ display: none; position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 2147483647;\n" +
                         $"        background: {background}; color: #fff; font: 600 5vmin/1.3 sans-serif; text-align: center;\n" +
                         "        align-items: center; justify-content: center; flex-direction: column; }\n" +
                         "      #unity-rotate-overlay .icon { font-size: 18vmin; display: inline-block; animation: unity-rotate-hint 1.8s ease-in-out infinite; }\n" +
-                        "      @keyframes unity-rotate-hint { 0%, 20% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }\n" +
-                        "      @media (orientation: portrait) {\n" +
+                        $"      @keyframes unity-rotate-hint {{ 0%, 20% {{ transform: rotate({hintFrom}); }} 60%, 100% {{ transform: rotate({hintTo}); }} }}\n" +
+                        $"      @media (orientation: {wrongOrientation}) and (hover: none) and (pointer: coarse) {{\n" +
                         "        #unity-rotate-overlay { display: flex; }\n" +
                         "        #unity-container, #unity-canvas { visibility: hidden !important; }\n" +
                         "      }\n" +
                         "    </style>\n";
 
-                    const string overlay =
-                        "    <div id=\"unity-rotate-overlay\"><div class=\"icon\">&#128241;</div><div>Rotate your device to landscape</div></div>\n" +
+                    var overlay =
+                        $"    <div id=\"unity-rotate-overlay\"><div class=\"icon\">&#128241;</div><div>Rotate your device to {lockOrientation}</div></div>\n" +
                         "    <script>\n" +
                         "      // Best effort: на Android в fullscreen ориентацию можно заблокировать.\n" +
                         "      document.addEventListener('fullscreenchange', function () {\n" +
                         "        if (document.fullscreenElement && screen.orientation && screen.orientation.lock)\n" +
-                        "          screen.orientation.lock('landscape').catch(function () {});\n" +
+                        $"          screen.orientation.lock('{lockOrientation}').catch(function () {{}});\n" +
                         "      });\n" +
                         "    </script>\n";
 
                     // Сначала body (он дальше по тексту), чтобы не сдвинуть индекс head.
                     html = html.Insert(bodyCloseIndex, overlay);
-                    html = html.Insert(headCloseIndex, landscapeStyle);
+                    html = html.Insert(headCloseIndex, orientationStyle);
                     changed = true;
-                    Debug.Log("WebGlPagePostprocessor: landscape-only overlay added.");
+                    Debug.Log($"WebGlPagePostprocessor: {lockOrientation}-only overlay added (orientation: {Orientation}).");
                 }
                 else
                 {
-                    Debug.LogWarning("WebGlPagePostprocessor: </head> or </body> not found, landscape overlay skipped.");
+                    Debug.LogWarning("WebGlPagePostprocessor: </head> or </body> not found, orientation overlay skipped.");
                 }
             }
 

@@ -24,7 +24,7 @@ namespace LongLeap.XsollaId.UI
     //
     // Зависимости приходят через Bind и никак иначе. Виджет НИЧЕГО не ищет сам:
     // пакет не знает и не должен знать про локатор сервисов конкретной игры.
-    // Тот же приём, что у LongLeap.Settings.Controls.SettingsToggle.Bind.
+    // Тот же приём, что у LongLeap.Settings.UI.SettingsToggleRow.Bind.
     //
     // Bind можно звать в любой момент, в том числе до первого OnEnable и
     // повторно: до него виджет показывает «проверяем», а не гостя.

@@ -3,6 +3,7 @@
   "rootNamespace": "LongLeap.UI",
   "references": [
     "LongLeap.UI",
+    "LongLeap.Tools.UI",
     "UnityEngine.UI",
     "Unity.TextMeshPro",
     "LongLeap.DailyRewards",

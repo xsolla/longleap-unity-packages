@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Text;
 using LongLeap.DailyRewards;
+using LongLeap.Tools.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -131,7 +132,7 @@ namespace LongLeap.UI
                 _statusLabel.color = new Color(0.08f, 0.95f, 1f);
             }
             if (_rewardIcon != null) _rewardIcon.preserveAspect = true;
-            var mark = SettingsUi.CreateText("Claimed", open.transform,
+            var mark = RuntimeUi.CreateText("Claimed", open.transform,
                 _dayLabel != null ? _dayLabel.font : null, "CLAIMED", 20,
                 new Color(0.08f, 0.95f, 1f), TextAlignmentOptions.Center);
             mark.rectTransform.sizeDelta = new Vector2(180f, 30f);
@@ -149,7 +150,7 @@ namespace LongLeap.UI
 
         private RawImage CreateArt(string name, Texture texture, Vector2 size)
         {
-            var rect = SettingsUi.CreateRect(name, transform);
+            var rect = RuntimeUi.CreateRect(name, transform);
             rect.sizeDelta = size;
             var image = rect.gameObject.AddComponent<RawImage>();
             image.texture = texture;

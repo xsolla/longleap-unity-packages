@@ -1,6 +1,7 @@
 using System;
 using LongLeap.Localization;
 using LongLeap.Settings;
+using LongLeap.Tools.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -53,28 +54,28 @@ namespace LongLeap.Settings.UI
         public static SettingsKeyRow Create(
             Transform parent, TMP_FontAsset font, string fallbackLabel, string listeningText)
         {
-            var rect = SettingsUi.CreateRect("KeyRow", parent);
+            var rect = RuntimeUi.CreateRect("KeyRow", parent);
             var row = rect.gameObject.AddComponent<SettingsKeyRow>();
 
             var background = rect.gameObject.AddComponent<Image>();
-            background.color = SettingsUi.RowBackground;
+            background.color = RuntimeUi.RowBackground;
             background.raycastTarget = false;
 
-            SettingsUi.AddRow(rect, spacing: 14f);
-            SettingsUi.SetSize(rect.gameObject, preferredHeight: SettingsUi.RowHeight);
+            RuntimeUi.AddRow(rect, spacing: 14f);
+            RuntimeUi.SetSize(rect.gameObject, preferredHeight: RuntimeUi.RowHeight);
 
             row._fallbackLabel = fallbackLabel;
             row._listeningText = listeningText;
 
-            row._label = SettingsUi.CreateText(
-                "Label", rect, font, fallbackLabel, SettingsUi.LabelFontSize, SettingsUi.Text);
-            SettingsUi.SetSize(row._label.gameObject, flexibleWidth: 1f);
+            row._label = RuntimeUi.CreateText(
+                "Label", rect, font, fallbackLabel, RuntimeUi.LabelFontSize, RuntimeUi.Text);
+            RuntimeUi.SetSize(row._label.gameObject, flexibleWidth: 1f);
 
             row._idleColor = new Color(1f, 1f, 1f, 0.10f);
-            row._button = SettingsUi.CreateButton(
+            row._button = RuntimeUi.CreateButton(
                 "Key", rect, font, "-", row._idleColor, out row._keyLabel);
             row._buttonBackground = row._button.GetComponent<Image>();
-            SettingsUi.SetSize(row._button.gameObject, preferredWidth: 240f, preferredHeight: 34f);
+            RuntimeUi.SetSize(row._button.gameObject, preferredWidth: 240f, preferredHeight: 34f);
 
             row._button.onClick.AddListener(row.OnClicked);
 
@@ -127,7 +128,7 @@ namespace LongLeap.Settings.UI
             _listenFrame = Time.frameCount;
 
             if (_buttonBackground != null)
-                _buttonBackground.color = SettingsUi.Listening;
+                _buttonBackground.color = RuntimeUi.Listening;
 
             if (_keyLabel != null)
                 _keyLabel.text = _listeningText;

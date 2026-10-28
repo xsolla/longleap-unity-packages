@@ -58,7 +58,7 @@ widget.Bind(auth, avatars, showBackPackLink: false);
 
 Виджет НИЧЕГО не ищет сам. Ни `FindObjectOfType`, ни синглтонов, ни локатора:
 иначе пакет знал бы про конкретную игру. Тот же приём, что у
-`LongLeap.Settings.Controls.SettingsToggle.Bind`.
+`LongLeap.Settings.UI.SettingsToggleRow.Bind`.
 
 **Вход недоступен — виджет прячется целиком.** Именно прячется, а не гаснет: на
 GamePix это требование T&C 3.3. Достаточно передать в `Bind` заглушки
