@@ -43,6 +43,7 @@ namespace LongLeap.UI
         [SerializeField] private Button _continueButton;
 
         private IDailyRewardsService _service;
+        private IDailyRewardsPresentation _presentation;
         private IUiSounds _sounds;
         private Func<string, Sprite> _rewardIcon;
         private bool _revealing;
@@ -74,6 +75,7 @@ namespace LongLeap.UI
             _service = service;
             _sounds = sounds;
             _rewardIcon = rewardIcon;
+            _presentation?.Bind(service, sounds, rewardIcon);
 
             if (IsOpen)
                 Rebuild();
@@ -97,6 +99,7 @@ namespace LongLeap.UI
 
         public override async Task CloseAsync()
         {
+            _presentation?.OnClosed();
             // Ожидание дней закрытое окно не переживает: иначе оно домолчало бы до
             // таймаута уже из меню и оставило рут включённым к следующему показу.
             StopWaitingForDays();
@@ -113,6 +116,7 @@ namespace LongLeap.UI
         protected override void Awake()
         {
             base.Awake();
+            _presentation = GetComponentInChildren<IDailyRewardsPresentation>(true);
 
             var backdrop = Root.GetComponent<Image>();
             if (backdrop != null)
@@ -153,6 +157,11 @@ namespace LongLeap.UI
 
         private void Rebuild()
         {
+            if (_presentation != null)
+            {
+                _presentation.Refresh();
+                return;
+            }
             ClearDays();
             StopWaitingForDays();
 
