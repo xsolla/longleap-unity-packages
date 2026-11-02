@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using LongLeap.Achievements;
 using LongLeap.Stats;
 using LongLeap.Stats.Tests;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace LongLeap.Achievements.Tests
 {
@@ -280,21 +283,42 @@ namespace LongLeap.Achievements.Tests
         [Test]
         public async Task GetAchieved_ReturnsUnlockedAchievements()
         {
+            _provider.Definitions = new[]
+            {
+                Def("done", "test", StatObj("o", "kill", 10)),
+                Def("pending", "test", StatObj("o", "kill", 10))
+            };
             _store.Snapshot = new AchievementStatesSnapshot
             {
                 Version = 1,
-                Entries = new[] { new AchievementStateEntry { AchievementId = "legacy", IsUnlocked = true } }
+                Entries = new[] { new AchievementStateEntry { AchievementId = "done", IsUnlocked = true } }
             };
 
             await _system.Initialize(_provider, _store, _bridge, _stats);
 
             var achieved = _system.GetAchieved();
             Assert.AreEqual(1, achieved.Length);
-            Assert.AreEqual("legacy", achieved[0].Definition.Id.Value);
+            Assert.AreEqual("done", achieved[0].Definition.Id.Value);
         }
 
         [Test]
-        public async Task GetAll_IncludesLegacyAndHidden()
+        public async Task RemovedFromConfig_ExcludedFromQueries()
+        {
+            _store.Snapshot = new AchievementStatesSnapshot
+            {
+                Version = 1,
+                Entries = new[] { new AchievementStateEntry { AchievementId = "removed", IsUnlocked = true } }
+            };
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+
+            Assert.IsEmpty(_system.GetAll());
+            Assert.IsEmpty(_system.GetAchieved());
+            Assert.IsNull(_system.GetStatus(new AchievementId("removed")));
+        }
+
+        [Test]
+        public async Task GetAll_IncludesHidden_ExcludesRemoved()
         {
             _provider.Definitions = new[]
             {
@@ -312,7 +336,7 @@ namespace LongLeap.Achievements.Tests
 
             var all = _system.GetAll();
             var ids = all.Select(s => s.Definition.Id.Value).OrderBy(x => x).ToArray();
-            Assert.AreEqual(new[] { "hidden", "legacy", "visible" }, ids);
+            Assert.AreEqual(new[] { "hidden", "visible" }, ids);
         }
 
         [Test]
@@ -425,7 +449,7 @@ namespace LongLeap.Achievements.Tests
         }
 
         [Test]
-        public async Task Shutdown_WithNoChanges_DoesNotSave()
+        public async Task NoUnlocks_NothingSaved()
         {
             await _system.Initialize(_provider, _store, _bridge, _stats);
             _store.ResetCallCounts();
@@ -436,7 +460,7 @@ namespace LongLeap.Achievements.Tests
         }
 
         [Test]
-        public async Task Shutdown_SavesChanges()
+        public async Task UnlockBeforeShutdown_IsSaved()
         {
             _provider.Definitions = new[]
             {
@@ -503,16 +527,138 @@ namespace LongLeap.Achievements.Tests
         [Test]
         public async Task PreviouslyUnlocked_RestoresFromSnapshot()
         {
+            _provider.Definitions = new[] { Def("old_ach", "test", StatObj("o", "kill", 10)) };
             _store.Snapshot = new AchievementStatesSnapshot
             {
                 Version = 1,
-                Entries = new[] { new AchievementStateEntry { AchievementId = "old_ach", IsUnlocked = true } }
+                Entries = new[] { new AchievementStateEntry { AchievementId = "old_ach", IsUnlocked = true, UnlockedTimestamp = 1700000000 } }
             };
 
             await _system.Initialize(_provider, _store, _bridge, _stats);
 
             var achieved = _system.GetAchieved();
             Assert.AreEqual(1, achieved.Length);
+            Assert.AreEqual(DateTimeOffset.FromUnixTimeSeconds(1700000000), achieved[0].UnlockedAt);
+            Assert.IsEmpty(_bridge.UnlockedCalls);
+        }
+
+        [Test]
+        public async Task Unlock_SetsUnlockedAt()
+        {
+            var achId = new AchievementId("ach");
+            _provider.Definitions = new[] { Def("ach", "test", StatObj("o", "kill", 10)) };
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+            Assert.IsNull(_system.GetStatus(achId).UnlockedAt);
+
+            var before = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            _stats.SetValue("kill:monk:grunt", 10);
+
+            var unlockedAt = _system.GetStatus(achId).UnlockedAt;
+            Assert.NotNull(unlockedAt);
+            Assert.GreaterOrEqual(unlockedAt.Value.ToUnixTimeSeconds(), before);
+            Assert.AreEqual(unlockedAt.Value.ToUnixTimeSeconds(), _store.MarkUnlockedCalls.Single().Item2);
+        }
+
+        [Test]
+        public async Task SnapshotWithoutTimestamp_UnlockedAtIsNull()
+        {
+            _provider.Definitions = new[] { Def("ach", "test", StatObj("o", "kill", 10)) };
+            _store.Snapshot = new AchievementStatesSnapshot
+            {
+                Version = 1,
+                Entries = new[] { new AchievementStateEntry { AchievementId = "ach", IsUnlocked = true } }
+            };
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+
+            var status = _system.GetStatus(new AchievementId("ach"));
+            Assert.IsTrue(status.IsUnlocked);
+            Assert.IsNull(status.UnlockedAt);
+        }
+
+        [Test]
+        public async Task NullArrays_DoNotThrow()
+        {
+            _provider.Definitions = new[]
+            {
+                new AchievementDefinition { Id = new AchievementId("bare"), Group = "test" },
+                new AchievementDefinition
+                {
+                    Id = new AchievementId("stat"), Group = "test",
+                    Objectives = new[] { new Objective { Id = new ObjectiveId("o"), StatPath = "kill", StatTarget = 10 } }
+                }
+            };
+            LogAssert.Expect(LogType.Warning, new Regex("'bare' has 0 objectives"));
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+
+            Assert.AreEqual(2, _system.GetAll().Length);
+            Assert.IsTrue(_system.GetStatus(new AchievementId("bare")).IsUnlocked);
+            Assert.AreEqual(0, _system.GetStatus(new AchievementId("stat")).ObjectiveProgresses[0].Progress.Current);
+        }
+
+        [Test]
+        public async Task NullEntries_SkippedAndReported()
+        {
+            _provider.Definitions = new[]
+            {
+                null,
+                new AchievementDefinition
+                {
+                    Id = new AchievementId("ach"), Group = "test",
+                    Objectives = new Objective[] { null, StatObj("o", "kill", 10) }
+                }
+            };
+            LogAssert.Expect(LogType.Error, new Regex("index 0 is null"));
+            LogAssert.Expect(LogType.Error, new Regex("'ach' has a null objective"));
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+
+            var status = _system.GetStatus(new AchievementId("ach"));
+            Assert.AreEqual(1, _system.GetAll().Length);
+            Assert.AreEqual(1, status.ObjectiveProgresses.Length);
+        }
+
+        [Test]
+        public async Task DuplicateIds_FirstDefinitionWins()
+        {
+            _provider.Definitions = new[]
+            {
+                Def("dup", "first", StatObj("o", "kill", 10)),
+                Def("dup", "second", StatObj("o", "kill", 99))
+            };
+            LogAssert.Expect(LogType.Error, new Regex("Duplicate achievement ID 'dup'"));
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+
+            Assert.AreEqual(1, _system.GetAll().Length);
+            Assert.AreEqual("first", _system.GetStatus(new AchievementId("dup")).Definition.Group.Value);
+
+            _stats.SetValue("kill:monk:grunt", 10);
+
+            Assert.IsTrue(_system.GetStatus(new AchievementId("dup")).IsUnlocked);
+        }
+
+        [Test]
+        public async Task InvalidConfig_LoggedAndSystemStillStarts()
+        {
+            var achA = new AchievementId("a");
+            var achB = new AchievementId("b");
+            _provider.Definitions = new[]
+            {
+                Def("a", "test", new[] { achB }, StatObj("o", "kill", 1)),
+                Def("b", "test", ReqObj("o", achA)),
+                Def("ok", "test", StatObj("o", "kill", 1))
+            };
+            LogAssert.Expect(LogType.Error, new Regex("Circular dependency"));
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+            _stats.SetValue("kill:monk:grunt", 1);
+
+            Assert.IsTrue(_system.GetStatus(new AchievementId("ok")).IsUnlocked);
+            Assert.IsFalse(_system.GetStatus(achA).IsUnlocked);
+            Assert.IsFalse(_system.GetStatus(achB).IsUnlocked);
         }
 
         [Test]
@@ -548,6 +694,146 @@ namespace LongLeap.Achievements.Tests
             Assert.IsTrue(_bridge.UnlockedCalls.Any(d => d.Id == new AchievementId("ach_kill")));
             var status = _system.GetStatus(new AchievementId("ach_kill"));
             Assert.IsTrue(status.IsUnlocked);
+        }
+
+        [Test]
+        public async Task Shutdown_KeepsOtherStatSubscribers()
+        {
+            _provider.Definitions = new[] { Def("ach", "test", StatObj("o", "kill", 10)) };
+            long foreign = 0;
+            _stats.Subscribe("kill", (path, value) => foreign = value);
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+            _system.Shutdown();
+            _stats.SetValue("kill:monk:grunt", 3);
+
+            Assert.AreEqual(3, foreign);
+        }
+
+        [Test]
+        public async Task ResetAll_KeepsOtherStatSubscribers()
+        {
+            _provider.Definitions = new[] { Def("ach", "test", StatObj("o", "kill", 10)) };
+            long foreign = 0;
+            _stats.Subscribe("kill", (path, value) => foreign = value);
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+            _system.ResetAll();
+            _stats.SetValue("kill:monk:grunt", 3);
+
+            Assert.AreEqual(3, foreign);
+        }
+
+        [Test]
+        public async Task ResetAll_StatObjectivesStillTracked()
+        {
+            var achId = new AchievementId("ach");
+            _provider.Definitions = new[] { Def("ach", "test", StatObj("o", "kill", 10)) };
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+            _system.ForceUnlock(achId);
+            _system.ResetAll();
+            _stats.SetValue("kill:monk:grunt", 10);
+
+            Assert.IsTrue(_system.GetStatus(achId).IsUnlocked);
+        }
+
+        [Test]
+        public async Task ResetAll_RequiredObjectivesStillTracked()
+        {
+            var heroA = new AchievementId("hero_a");
+            var all = new AchievementId("all_heroes");
+            _provider.Definitions = new[]
+            {
+                Def("hero_a", "heroes", StatObj("o", "game_started:hero_a", 1)),
+                Def("all_heroes", "heroes", ReqObj("o", heroA))
+            };
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+            _system.ResetAll();
+            _stats.SetValue("game_started:hero_a", 1);
+
+            Assert.IsTrue(_system.GetStatus(all).IsUnlocked);
+        }
+
+        [Test]
+        public async Task MixedObjectives_StatsAlone_DoNotUnlock()
+        {
+            var heroB = new AchievementId("hero_b");
+            var mixed = new AchievementId("mixed");
+            _provider.Definitions = new[]
+            {
+                Def("hero_b", "heroes", StatObj("o", "game_started:hero_b", 1)),
+                Def("mixed", "heroes", StatObj("k", "kill", 10), ReqObj("r", heroB))
+            };
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+            _stats.SetValue("kill:monk:grunt", 10);
+
+            Assert.IsFalse(_system.GetStatus(mixed).IsUnlocked);
+
+            _system.ForceUnlock(heroB);
+
+            Assert.IsTrue(_system.GetStatus(mixed).IsUnlocked);
+        }
+
+        [Test]
+        public async Task MixedObjectives_RequiredAlone_DoNotUnlock()
+        {
+            var heroB = new AchievementId("hero_b");
+            var mixed = new AchievementId("mixed");
+            _provider.Definitions = new[]
+            {
+                Def("hero_b", "heroes", StatObj("o", "game_started:hero_b", 1)),
+                Def("mixed", "heroes", StatObj("k", "kill", 10), ReqObj("r", heroB))
+            };
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+            _system.ForceUnlock(heroB);
+
+            Assert.IsFalse(_system.GetStatus(mixed).IsUnlocked);
+
+            _stats.SetValue("kill:monk:grunt", 10);
+
+            Assert.IsTrue(_system.GetStatus(mixed).IsUnlocked);
+        }
+
+        [Test]
+        public async Task PrerequisiteChain_UnlocksRegardlessOfDefinitionOrder()
+        {
+            var achA = new AchievementId("ach_a");
+            var achB = new AchievementId("ach_b");
+            var achC = new AchievementId("ach_c");
+            _provider.Definitions = new[]
+            {
+                Def("ach_c", "test", new[] { achB }),
+                Def("ach_b", "test", new[] { achA }),
+                Def("ach_a", "test", StatObj("o", "kill", 1))
+            };
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+            _stats.SetValue("kill:monk:grunt", 1);
+
+            Assert.IsTrue(_system.GetStatus(achC).IsUnlocked);
+        }
+
+        [Test]
+        public async Task RequiredChain_UnlocksAllLevels()
+        {
+            var heroA = new AchievementId("hero_a");
+            var all = new AchievementId("all_heroes");
+            var legend = new AchievementId("legend");
+            _provider.Definitions = new[]
+            {
+                Def("hero_a", "heroes", StatObj("o", "game_started:hero_a", 1)),
+                Def("all_heroes", "heroes", ReqObj("o", heroA)),
+                Def("legend", "heroes", ReqObj("o", all))
+            };
+
+            await _system.Initialize(_provider, _store, _bridge, _stats);
+            _stats.SetValue("game_started:hero_a", 1);
+
+            Assert.IsTrue(_system.GetStatus(legend).IsUnlocked);
         }
     }
 }

@@ -18,13 +18,25 @@ namespace LongLeap.Achievements
         }
 
         private readonly StateManager _state = new();
-        private readonly UnlockPropagator _propagator = new();
+
+        // The queue holds two kinds of ids: still locked ones are unlock
+        // candidates, already unlocked ones need their dependents re-checked
+        // (see DrainUnlockQueue).
+        private readonly Queue<AchievementId> _pending = new();
 
         private IAchievementProvider _provider;
         private IAchievementStateStore _stateStore;
         private IAchievementGameBridge _bridge;
         private IStatSystem _stats;
         private readonly Dictionary<AchievementId, List<StatObjectiveBinding>> _statBindings = new();
+        // Our own subscriptions, so we remove only those: IStatSystem is shared,
+        // other systems (DailyQuestService) subscribe to it too, and
+        // UnsubscribeAll would wipe their subscriptions as well.
+        private readonly List<(StatPath Path, Action<StatPath, long> Callback)> _subscriptions = new();
+
+        // Save deletion started by ResetAll. Unlock writes wait for it, otherwise
+        // a late deletion would erase achievements unlocked right after the reset.
+        private Task _pendingDelete = Task.CompletedTask;
 
         private bool _initialized;
 
@@ -33,6 +45,8 @@ namespace LongLeap.Achievements
             if (provider == null) throw new ArgumentNullException(nameof(provider));
             if (stateStore == null) throw new ArgumentNullException(nameof(stateStore));
 
+            UnsubscribeFromStats();
+
             _provider = provider;
             _stateStore = stateStore;
             _bridge = gameBridge;
@@ -40,8 +54,14 @@ namespace LongLeap.Achievements
 
             _state.Clear();
             _statBindings.Clear();
+            _pending.Clear();
 
-            var definitions = await provider.LoadAsync();
+            // Validate the raw data, so the log names what the provider actually
+            // returned (null entries, duplicates) before Normalize drops it.
+            var loaded = await provider.LoadAsync();
+            LogValidation(AchievementValidator.Validate(loaded));
+            var definitions = Normalize(loaded);
+
             _state.LoadDefinitions(definitions);
 
             BuildObjectiveLookups(definitions);
@@ -49,12 +69,67 @@ namespace LongLeap.Achievements
             var snapshot = await stateStore.LoadAsync(definitions);
             _state.ReconcileSnapshot(snapshot);
 
-            foreach (var entry in snapshot?.Entries ?? Array.Empty<AchievementStateEntry>())
+            foreach (var id in definitions.Select(d => d.Id).Where(_state.IsUnlocked))
+                _pending.Enqueue(id);
+
+            Evaluate();
+            _initialized = true;
+        }
+
+        // A bad config does not stop the system: the game should still start.
+        // Achievements hit by an error may never unlock, so errors go to the log
+        // loudly.
+        private static void LogValidation(ValidationResult result)
+        {
+            foreach (var warning in result.Warnings)
+                Debug.LogWarning($"AchievementSystem: {warning}");
+            foreach (var error in result.Errors)
+                Debug.LogError($"AchievementSystem: {error}");
+        }
+
+        // Brings provider data to one shape, so the rest of the system never
+        // checks for null: no null arrays or entries, no achievements without an
+        // id, no None ids in Prerequisites/Required. On duplicate ids the first
+        // definition wins, the same one the validator points at as the original.
+        // Definitions are copied: the provider's objects are left untouched.
+        private static AchievementDefinition[] Normalize(AchievementDefinition[] definitions)
+        {
+            var result = new List<AchievementDefinition>();
+            var seen = new HashSet<AchievementId>();
+
+            foreach (var def in definitions ?? Array.Empty<AchievementDefinition>())
             {
-                if (entry.IsUnlocked)
-                    _propagator.Enqueue(new AchievementId(entry.AchievementId));
+                if (def == null || def.Id.IsNone || !seen.Add(def.Id)) continue;
+
+                result.Add(new AchievementDefinition
+                {
+                    Id = def.Id,
+                    Group = def.Group,
+                    IsHidden = def.IsHidden,
+                    Prerequisites = NormalizeIds(def.Prerequisites),
+                    Objectives = (def.Objectives ?? Array.Empty<Objective>())
+                        .Where(o => o != null)
+                        .Select(o => new Objective
+                        {
+                            Id = o.Id,
+                            StatPath = o.StatPath,
+                            StatTarget = o.StatTarget,
+                            Required = NormalizeIds(o.Required)
+                        })
+                        .ToArray()
+                });
             }
 
+            return result.ToArray();
+        }
+
+        private static AchievementId[] NormalizeIds(AchievementId[] ids) =>
+            ids?.Where(id => !id.IsNone).ToArray() ?? Array.Empty<AchievementId>();
+
+        // Subscribes to stats and re-evaluates the whole state: what is available
+        // and what should unlock. Shared by Initialize and ResetAll.
+        private void Evaluate()
+        {
             if (_stats != null)
                 SubscribeToStats();
 
@@ -70,14 +145,12 @@ namespace LongLeap.Achievements
                 InternalUnlock(id);
 
             DrainUnlockQueue();
-            _initialized = true;
         }
 
         private void BuildObjectiveLookups(AchievementDefinition[] definitions)
         {
             foreach (var def in definitions)
             {
-                if (def.Objectives == null) continue;
                 foreach (var obj in def.Objectives)
                 {
                     if (string.IsNullOrEmpty(obj.StatPath)) continue;
@@ -113,17 +186,17 @@ namespace LongLeap.Achievements
                     _state.SetProgressOverride(achId, b.ObjectiveId, (int)initialValue);
 
                     if (initialValue >= b.Target && AreAllStatObjectivesComplete(achId) && !_state.IsUnlocked(achId))
-                        _propagator.Enqueue(achId);
+                        _pending.Enqueue(achId);
 
-                    _stats.Subscribe(b.Path, (changedPath, value) =>
+                    Action<StatPath, long> callback = (changedPath, value) =>
                     {
-                        // value — это значение ОДНОГО изменившегося листа, а цель у
-                        // пути с '*' («kill:*:enemy1a») собирается со всех сразу.
-                        // Взяв value как есть, мы теряли килы остальных героев:
-                        // 30 монахом + 25 ниндзя давали не 55, а 25 (последний
-                        // лист), и цель в 50 закрывалась только внутри одного
-                        // героя. Для конкретного пути value и есть агрегат —
-                        // лишний проход по дереву там не нужен.
+                        // value is the value of the ONE leaf that changed, while a
+                        // goal on a '*' path ("kill:*:enemy1a") sums all of them.
+                        // Taking value as is lost the other heroes' kills:
+                        // 30 as monk + 25 as ninja gave 25 (the last leaf), not 55,
+                        // so a goal of 50 could only be reached within a single
+                        // hero. For a concrete path value already is the
+                        // aggregate, so the extra tree walk is not needed there.
                         long current = b.Path.IsPattern ? _stats.GetAggregate(b.Path) : value;
 
                         b.CachedValue = current;
@@ -131,13 +204,26 @@ namespace LongLeap.Achievements
 
                         if (AreAllStatObjectivesComplete(achId) && !_state.IsUnlocked(achId))
                         {
-                            _propagator.Enqueue(achId);
+                            _pending.Enqueue(achId);
                             _state.MarkDirty();
                             DrainUnlockQueue();
                         }
-                    });
+                    };
+
+                    _stats.Subscribe(b.Path, callback);
+                    _subscriptions.Add((b.Path, callback));
                 }
             }
+        }
+
+        private void UnsubscribeFromStats()
+        {
+            if (_stats != null)
+            {
+                foreach (var (path, callback) in _subscriptions)
+                    _stats.Unsubscribe(path, callback);
+            }
+            _subscriptions.Clear();
         }
 
         private bool AreAllStatObjectivesComplete(AchievementId id)
@@ -155,7 +241,7 @@ namespace LongLeap.Achievements
         {
             if (!_initialized) return;
 
-            _stats?.UnsubscribeAll();
+            UnsubscribeFromStats();
 
             _initialized = false;
             _provider = null;
@@ -173,19 +259,31 @@ namespace LongLeap.Achievements
             DrainUnlockQueue();
         }
 
+        // Resets unlocks, but not definitions or stat bindings: afterwards the
+        // system is in the same state as after Initialize with an empty save.
+        // ResetAll does not touch stats, so achievements whose goals are already
+        // met unlock again right away.
         public void ResetAll()
         {
-            _stats?.UnsubscribeAll();
-
+            UnsubscribeFromStats();
+            _pending.Clear();
             _state.Clear();
-            _statBindings.Clear();
 
-            if (_initialized)
+            if (!_initialized) return;
+
+            _pendingDelete = DeleteAllStateAsync(_stateStore);
+            Evaluate();
+        }
+
+        private static async Task DeleteAllStateAsync(IAchievementStateStore store)
+        {
+            try
             {
-                _ = _stateStore.DeleteAllAsync();
-                _state.ComputeAvailability();
-                if (_stats != null)
-                    SubscribeToStats();
+                await store.DeleteAllAsync();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"AchievementSystem: failed to delete saved achievement state: {e.Message}");
             }
         }
 
@@ -199,9 +297,9 @@ namespace LongLeap.Achievements
 
         private void InternalUnlock(AchievementId achievementId)
         {
-            if (!_state.TryMarkUnlocked(achievementId)) return;
-
             var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            if (!_state.TryMarkUnlocked(achievementId, timestamp)) return;
+
             PersistUnlockAsync(achievementId, timestamp);
 
             var definition = _state.Definitions.TryGetValue(achievementId, out var def)
@@ -210,67 +308,35 @@ namespace LongLeap.Achievements
             try { _bridge?.OnUnlocked(definition); }
             catch (Exception e) { Debug.LogError($"AchievementSystem: bridge OnUnlocked error: {e.Message}"); }
 
-            _propagator.Enqueue(achievementId);
+            _pending.Enqueue(achievementId);
         }
 
+        // InternalUnlock puts the unlocked achievement back in the queue, so the
+        // chain A -> B -> C drains fully regardless of definition order. Each
+        // achievement unlocks at most once, so the loop terminates.
         private void DrainUnlockQueue()
         {
-            var processed = new HashSet<AchievementId>();
-
-            while (_propagator.HasPending)
+            while (_pending.Count > 0)
             {
-                var allPending = _propagator.GetAllPending();
-                _propagator.Clear();
+                var id = _pending.Dequeue();
 
-                foreach (var id in allPending)
+                if (!_state.IsUnlocked(id))
                 {
-                    if (!processed.Add(id)) continue;
-
                     CheckAndUnlock(id);
-
-                    var deps = _state.CheckPrerequisiteUnlockDeps(id);
-                    foreach (var depId in deps)
-                    {
-                        if (!_state.IsUnlocked(depId))
-                            InternalUnlock(depId);
-                    }
+                    continue;
                 }
 
-                foreach (var kvp in _state.Definitions)
-                {
-                    var otherId = kvp.Key;
-                    if (!processed.Add(otherId)) continue;
-                    if (_state.IsUnlocked(otherId)) continue;
-
-                    var otherDef = kvp.Value;
-                    if (otherDef.Prerequisites != null && otherDef.Prerequisites.Length > 0 &&
-                        otherDef.Prerequisites.All(p => _state.IsUnlocked(p)))
-                    {
-                        CheckAndUnlock(otherId);
-                    }
-                }
+                foreach (var dependentId in _state.GetDependents(id))
+                    CheckAndUnlock(dependentId);
             }
         }
 
         private void CheckAndUnlock(AchievementId id)
         {
             if (_state.IsUnlocked(id)) return;
+            if (!_state.Definitions.TryGetValue(id, out var def)) return;
 
-            if (!_state.Definitions.TryGetValue(id, out var def))
-            {
-                if (!_state.IsAvailable(id))
-                    _state.SetAvailable(id);
-                return;
-            }
-
-            bool hasStatObjective = _statBindings.ContainsKey(id);
-            bool hasRequiredObjective = def.Objectives != null &&
-                def.Objectives.Any(o => o.Required != null && o.Required.Length > 0);
-
-            bool prereqsMet = def.Prerequisites == null || def.Prerequisites.Length == 0 ||
-                def.Prerequisites.All(p => _state.IsUnlocked(p));
-
-            if (!prereqsMet) return;
+            if (!def.Prerequisites.All(_state.IsUnlocked)) return;
 
             if (!_state.IsAvailable(id))
             {
@@ -279,29 +345,28 @@ namespace LongLeap.Achievements
                 catch (Exception e) { Debug.LogError($"AchievementSystem: bridge OnAvailable error for '{id.Value}': {e.Message}"); }
             }
 
-            bool shouldUnlock = false;
-            if (!hasStatObjective && !hasRequiredObjective)
-                shouldUnlock = true;
-            else if (hasStatObjective && AreAllStatObjectivesComplete(id))
-                shouldUnlock = true;
-            else if (hasRequiredObjective && def.Objectives
-                         .Where(o => o.Required != null && o.Required.Length > 0)
-                         .All(o => o.Required.All(r => _state.IsUnlocked(r))))
-                shouldUnlock = true;
+            // Unlock only when ALL objectives are complete, both stat-driven and
+            // dependency-based. The checks used to be else-if, so an achievement
+            // with both kinds unlocked on stats alone and the list was never checked.
+            bool statsComplete = !_statBindings.ContainsKey(id) || AreAllStatObjectivesComplete(id);
+            bool requiredComplete = def.Objectives.All(o => o.Required.All(_state.IsUnlocked));
 
-            if (shouldUnlock)
+            if (statsComplete && requiredComplete)
                 InternalUnlock(id);
         }
 
         private async void PersistUnlockAsync(AchievementId achievementId, long timestamp)
         {
+            // Capture the store now: Shutdown may null the field while we wait for the deletion.
+            var store = _stateStore;
             try
             {
-                await _stateStore.MarkUnlockedAsync(achievementId, timestamp);
+                await _pendingDelete;
+                await store.MarkUnlockedAsync(achievementId, timestamp);
             }
             catch (Exception e)
             {
-                Debug.LogError($"AchievementSystem: ошибка сохранения достижения '{achievementId.Value}': {e.Message}");
+                Debug.LogError($"AchievementSystem: failed to save achievement '{achievementId.Value}': {e.Message}");
             }
         }
     }

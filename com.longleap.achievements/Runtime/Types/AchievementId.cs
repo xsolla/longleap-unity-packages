@@ -9,7 +9,7 @@ namespace LongLeap.Achievements
         public AchievementId(string value)
         {
             if (value != null && value.Length == 0)
-                throw new ArgumentException("AchievementId: значение не может быть пустым.", nameof(value));
+                throw new ArgumentException("AchievementId: value cannot be empty.", nameof(value));
             _value = value;
         }
 

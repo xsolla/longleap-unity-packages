@@ -176,5 +176,105 @@ namespace LongLeap.Achievements.Tests
             Assert.IsTrue(result.IsValid);
             Assert.IsEmpty(result.Errors);
         }
+
+        private static AchievementDefinition RequiresDef(string id, params string[] required) =>
+            new AchievementDefinition
+            {
+                Id = new AchievementId(id), Group = "g",
+                Objectives = new[] { new Objective { Id = new ObjectiveId("o"), Required = required.Select(r => new AchievementId(r)).ToArray() } }
+            };
+
+        [Test]
+        public void Validate_DanglingRequired_ReturnsWarning()
+        {
+            var result = AchievementValidator.Validate(new[] { RequiresDef("a", "nonexistent") });
+
+            Assert.IsTrue(result.IsValid);
+            Assert.IsTrue(result.Warnings.Any(w => w.Contains("required achievement 'nonexistent'")));
+        }
+
+        [Test]
+        public void Validate_RequiredSelfReference_ReturnsError()
+        {
+            var result = AchievementValidator.Validate(new[] { RequiresDef("a", "a") });
+
+            Assert.IsFalse(result.IsValid);
+            Assert.IsTrue(result.Errors.Any(e => e.Contains("'a' has itself")));
+            Assert.IsFalse(result.Errors.Any(e => e.Contains("Circular")), "self-reference is reported once, not as a cycle too");
+        }
+
+        [Test]
+        public void Validate_PrerequisiteSelfReference_ReturnsError()
+        {
+            var definitions = new[]
+            {
+                new AchievementDefinition { Id = new AchievementId("a"), Group = "g", Prerequisites = new[] { new AchievementId("a") }, Objectives = Array.Empty<Objective>() }
+            };
+
+            var result = AchievementValidator.Validate(definitions);
+
+            Assert.IsFalse(result.IsValid);
+            Assert.IsTrue(result.Errors.Any(e => e.Contains("'a' has itself as prerequisite")));
+        }
+
+        [Test]
+        public void Validate_CyclicRequired_ReturnsError()
+        {
+            var result = AchievementValidator.Validate(new[] { RequiresDef("a", "b"), RequiresDef("b", "a") });
+
+            Assert.IsFalse(result.IsValid);
+            Assert.IsTrue(result.Errors.Any(e => e.Contains("Circular")));
+        }
+
+        [Test]
+        public void Validate_CycleMixingPrerequisitesAndRequired_ReturnsError()
+        {
+            var definitions = new[]
+            {
+                new AchievementDefinition { Id = new AchievementId("a"), Group = "g", Prerequisites = new[] { new AchievementId("b") }, Objectives = Array.Empty<Objective>() },
+                RequiresDef("b", "a")
+            };
+
+            var result = AchievementValidator.Validate(definitions);
+
+            Assert.IsFalse(result.IsValid);
+            Assert.IsTrue(result.Errors.Any(e => e.Contains("Circular")));
+        }
+
+        [Test]
+        public void Validate_NullObjectives_DoesNotThrow()
+        {
+            var definitions = new[]
+            {
+                new AchievementDefinition { Id = new AchievementId("a"), Group = "g", Prerequisites = new[] { new AchievementId("b") } },
+                new AchievementDefinition { Id = new AchievementId("b"), Group = "g" }
+            };
+
+            ValidationResult result = null;
+            Assert.DoesNotThrow(() => result = AchievementValidator.Validate(definitions));
+            Assert.IsTrue(result.IsValid);
+        }
+
+        [Test]
+        public void Validate_NullEntriesAndMissingId_ReturnErrors()
+        {
+            var definitions = new[]
+            {
+                null,
+                new AchievementDefinition { Group = "g", Objectives = Array.Empty<Objective>() },
+                new AchievementDefinition
+                {
+                    Id = new AchievementId("a"), Group = "g",
+                    Objectives = new Objective[] { null },
+                    Prerequisites = null
+                }
+            };
+
+            ValidationResult result = null;
+            Assert.DoesNotThrow(() => result = AchievementValidator.Validate(definitions));
+            Assert.IsTrue(result.Errors.Any(e => e.Contains("index 0 is null")));
+            Assert.IsTrue(result.Errors.Any(e => e.Contains("index 1 has no ID")));
+            Assert.IsTrue(result.Errors.Any(e => e.Contains("'a' has a null objective")));
+        }
     }
 }

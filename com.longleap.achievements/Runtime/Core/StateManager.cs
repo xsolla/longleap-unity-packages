@@ -4,19 +4,28 @@ using System.Linq;
 
 namespace LongLeap.Achievements
 {
-    public sealed class StateManager
+    // Expects normalized definitions (see AchievementSystem.Normalize): no null
+    // arrays, no null entries, unique ids.
+    internal sealed class StateManager
     {
-        private readonly HashSet<AchievementId> _unlocked = new();
+        // Unlocked achievement -> unlock time in Unix seconds, 0 if unknown.
+        // Only achievements present in the definitions: saved unlocks of
+        // achievements removed from the config are dropped on load, otherwise
+        // they would show up in lists as entries with nothing but an id.
+        private readonly Dictionary<AchievementId, long> _unlocked = new();
         private readonly HashSet<AchievementId> _available = new();
-        private readonly HashSet<AchievementId> _legacy = new();
         private readonly Dictionary<AchievementId, AchievementDefinition> _definitions = new();
-        private readonly Dictionary<AchievementId, HashSet<AchievementId>> _objectiveProgressUnlockDeps = new();
-        // Прогресс по целям со статами. Ключ — ПАРА (ачивка, цель), а не один id
-        // цели: id уникален только внутри своей ачивки (ровно это и проверяет
-        // AchievementValidator.CheckDuplicateObjectiveIds), а в конфиге они
-        // короткие и повторяются — "k" у всех kill_*, "h" сразу у big_hit_500 и
-        // heal_10. С ключом из одного id последняя записавшая ачивка затирала
-        // прогресс остальных, и в окне у kill_50_grunts стояло общее число килов.
+        // Who depends on an achievement: it is in their Prerequisites or in the
+        // Required of one of their objectives. Built from definitions, so Clear()
+        // leaves it alone.
+        private readonly Dictionary<AchievementId, HashSet<AchievementId>> _dependents = new();
+        // Progress of stat-driven objectives. The key is a PAIR (achievement,
+        // objective), not the objective id alone: an id is unique only within its
+        // achievement (exactly what AchievementValidator.CheckDuplicateObjectiveIds
+        // checks), and in the config ids are short and repeat — "k" in every
+        // kill_*, "h" in both big_hit_500 and heal_10. Keyed by the id alone, the
+        // last achievement to write overwrote the others' progress, and the window
+        // showed the total kill count for kill_50_grunts.
         private readonly Dictionary<(AchievementId, ObjectiveId), int> _progressOverrides = new();
 
         public bool IsDirty { get; private set; }
@@ -27,27 +36,34 @@ namespace LongLeap.Achievements
         public void LoadDefinitions(AchievementDefinition[] definitions)
         {
             _definitions.Clear();
-            _objectiveProgressUnlockDeps.Clear();
+            _dependents.Clear();
             foreach (var def in definitions)
             {
                 _definitions[def.Id] = def;
-                foreach (var obj in def.Objectives ?? Array.Empty<Objective>())
+
+                foreach (var prereq in def.Prerequisites)
+                    AddDependent(prereq, def.Id);
+
+                foreach (var obj in def.Objectives)
                 {
-                    if (obj.Required != null && obj.Required.Length > 0)
-                    {
-                        foreach (var required in obj.Required)
-                        {
-                            if (!_objectiveProgressUnlockDeps.TryGetValue(required, out var dependents))
-                            {
-                                dependents = new HashSet<AchievementId>();
-                                _objectiveProgressUnlockDeps[required] = dependents;
-                            }
-                            dependents.Add(def.Id);
-                        }
-                    }
+                    foreach (var required in obj.Required)
+                        AddDependent(required, def.Id);
                 }
             }
         }
+
+        private void AddDependent(AchievementId dependency, AchievementId dependent)
+        {
+            if (!_dependents.TryGetValue(dependency, out var set))
+            {
+                set = new HashSet<AchievementId>();
+                _dependents[dependency] = set;
+            }
+            set.Add(dependent);
+        }
+
+        public IEnumerable<AchievementId> GetDependents(AchievementId achievementId) =>
+            _dependents.TryGetValue(achievementId, out var set) ? set : Enumerable.Empty<AchievementId>();
 
         public void SetProgressOverride(AchievementId achievementId, ObjectiveId objectiveId, int value)
         {
@@ -58,20 +74,16 @@ namespace LongLeap.Achievements
         {
             _unlocked.Clear();
             _available.Clear();
-            _legacy.Clear();
-            _objectiveProgressUnlockDeps.Clear();
             _progressOverrides.Clear();
             IsDirty = false;
         }
 
-        public bool IsUnlocked(AchievementId achId) => _unlocked.Contains(achId);
+        public bool IsUnlocked(AchievementId achId) => _unlocked.ContainsKey(achId);
         public bool IsAvailable(AchievementId achId) => _available.Contains(achId);
-        public bool IsLegacy(AchievementId achId) => _legacy.Contains(achId);
 
-        public bool TryMarkUnlocked(AchievementId achId)
+        public bool TryMarkUnlocked(AchievementId achId, long timestamp)
         {
-            if (_unlocked.Contains(achId)) return false;
-            _unlocked.Add(achId);
+            if (!_unlocked.TryAdd(achId, timestamp)) return false;
             _available.Remove(achId);
             IsDirty = true;
             return true;
@@ -82,7 +94,7 @@ namespace LongLeap.Achievements
         public bool IsFullyAvailable(AchievementId achId)
         {
             if (!_available.Contains(achId)) return false;
-            if (_unlocked.Contains(achId)) return false;
+            if (_unlocked.ContainsKey(achId)) return false;
             return true;
         }
 
@@ -91,24 +103,9 @@ namespace LongLeap.Achievements
             _available.Clear();
             foreach (var kvp in _definitions)
             {
-                var id = kvp.Key;
-                var def = kvp.Value;
-                if (_unlocked.Contains(id)) continue;
-
-                bool prereqsMet = true;
-                if (def.Prerequisites != null)
-                {
-                    foreach (var prereq in def.Prerequisites)
-                    {
-                        if (!_unlocked.Contains(prereq))
-                        {
-                            prereqsMet = false;
-                            break;
-                        }
-                    }
-                }
-                if (prereqsMet)
-                    _available.Add(id);
+                if (_unlocked.ContainsKey(kvp.Key)) continue;
+                if (kvp.Value.Prerequisites.All(_unlocked.ContainsKey))
+                    _available.Add(kvp.Key);
             }
         }
 
@@ -120,7 +117,7 @@ namespace LongLeap.Achievements
             foreach (var id in _available.ToList())
             {
                 if (!_definitions.TryGetValue(id, out var def)) continue;
-                if (def.Objectives == null || def.Objectives.Length == 0)
+                if (def.Objectives.Length == 0)
                     autoUnlocks.Add(id);
                 else
                     notifications.Add(id);
@@ -129,48 +126,8 @@ namespace LongLeap.Achievements
             return (autoUnlocks, notifications);
         }
 
-        public List<AchievementId> CheckPrerequisiteUnlockDeps(AchievementId unlockedAchievement)
-        {
-            var unlocked = new List<AchievementId>();
-            if (!_objectiveProgressUnlockDeps.TryGetValue(unlockedAchievement, out var dependents))
-                return unlocked;
-
-            foreach (var depAchId in dependents)
-            {
-                if (_unlocked.Contains(depAchId)) continue;
-                if (!_definitions.TryGetValue(depAchId, out var def)) continue;
-
-                bool allRequiredUnlocked = true;
-                foreach (var obj in def.Objectives ?? Array.Empty<Objective>())
-                {
-                    if (obj.Required == null || obj.Required.Length == 0) continue;
-                    allRequiredUnlocked = obj.Required.All(r => _unlocked.Contains(r));
-                    if (!allRequiredUnlocked) break;
-                }
-
-                if (allRequiredUnlocked)
-                    unlocked.Add(depAchId);
-            }
-
-            return unlocked;
-        }
-
         public AchievementStatus BuildStatus(AchievementId id)
         {
-            if (_legacy.Contains(id))
-            {
-                return new AchievementStatus
-                {
-                    Definition = new AchievementDefinition
-                    {
-                        Id = id, Group = GroupId.None, IsHidden = false,
-                        Prerequisites = Array.Empty<AchievementId>(), Objectives = Array.Empty<Objective>()
-                    },
-                    IsAvailable = false, IsUnlocked = true,
-                    ObjectiveProgresses = Array.Empty<ObjectiveProgress>()
-                };
-            }
-
             if (!_definitions.TryGetValue(id, out var def))
                 return null;
 
@@ -180,15 +137,16 @@ namespace LongLeap.Achievements
                 int current = 0;
                 int target = 1;
 
-                if (obj.Required != null && obj.Required.Length > 0)
+                if (obj.Required.Length > 0)
                 {
-                    // Цель-«список» (all_heroes, bestiary_complete) — счётчик по
-                    // самим требуемым ачивкам. Раньше здесь оставались current = 0
-                    // и target = 1, то есть прогресс терялся: показать «2 из 4»
-                    // потребителю было нечем, а цель с target <= 1 он и обязан
-                    // считать флагом «сделал/не сделал», а не счётчиком.
+                    // A "list" objective (all_heroes, bestiary_complete) counts the
+                    // required achievements themselves. It used to stay at
+                    // current = 0 and target = 1, so progress was lost: the
+                    // consumer had nothing to show "2 of 4" with, and it must treat
+                    // an objective with target <= 1 as a done/not-done flag, not a
+                    // counter.
                     target = obj.Required.Length;
-                    current = obj.Required.Count(r => _unlocked.Contains(r));
+                    current = obj.Required.Count(_unlocked.ContainsKey);
                     isComplete = current >= target;
                 }
                 else if (!string.IsNullOrEmpty(obj.StatPath))
@@ -205,23 +163,25 @@ namespace LongLeap.Achievements
                 };
             }).ToArray();
 
+            bool isUnlocked = _unlocked.TryGetValue(id, out var timestamp);
+
             return new AchievementStatus
             {
                 Definition = def,
                 IsAvailable = _available.Contains(id),
-                IsUnlocked = _unlocked.Contains(id),
+                IsUnlocked = isUnlocked,
+                UnlockedAt = isUnlocked && timestamp > 0
+                    ? DateTimeOffset.FromUnixTimeSeconds(timestamp)
+                    : null,
                 ObjectiveProgresses = objProgresses
             };
         }
 
         public AchievementStatus[] GetAll()
         {
-            var results = new List<AchievementStatus>();
-            foreach (var kvp in _definitions)
-                results.Add(BuildStatus(kvp.Key));
-            foreach (var legacyId in _legacy)
-                results.Add(BuildStatus(legacyId));
-            return results.ToArray();
+            return _definitions.Keys
+                .Select(BuildStatus)
+                .ToArray();
         }
 
         public AchievementStatus[] GetByGroup(GroupId groupId)
@@ -235,26 +195,23 @@ namespace LongLeap.Achievements
         public AchievementStatus[] GetAvailable()
         {
             return _definitions.Values
-                .Where(d => !d.IsHidden && !_unlocked.Contains(d.Id) && _available.Contains(d.Id))
+                .Where(d => !d.IsHidden && !_unlocked.ContainsKey(d.Id) && _available.Contains(d.Id))
                 .Select(d => BuildStatus(d.Id))
                 .ToArray();
         }
 
         public AchievementStatus[] GetAchieved()
         {
-            var results = new List<AchievementStatus>();
-            foreach (var kvp in _definitions)
-                if (_unlocked.Contains(kvp.Key))
-                    results.Add(BuildStatus(kvp.Key));
-            foreach (var legacyId in _legacy)
-                results.Add(BuildStatus(legacyId));
-            return results.ToArray();
+            return _definitions.Keys
+                .Where(_unlocked.ContainsKey)
+                .Select(BuildStatus)
+                .ToArray();
         }
 
         public AchievementStatus[] GetPartiallyAchieved()
         {
             return _definitions.Values
-                .Where(d => !d.IsHidden && _available.Contains(d.Id) && !_unlocked.Contains(d.Id))
+                .Where(d => !d.IsHidden && _available.Contains(d.Id) && !_unlocked.ContainsKey(d.Id))
                 .Select(d => BuildStatus(d.Id))
                 .Where(s => s.ObjectiveProgresses.Any(op => op.Progress.Current > 0))
                 .ToArray();
@@ -277,16 +234,11 @@ namespace LongLeap.Achievements
 
             foreach (var entry in snapshot.Entries)
             {
+                if (entry == null || !entry.IsUnlocked || string.IsNullOrEmpty(entry.AchievementId)) continue;
+
                 var achId = new AchievementId(entry.AchievementId);
-                if (_definitions.TryGetValue(achId, out _))
-                {
-                    if (entry.IsUnlocked)
-                        _unlocked.Add(achId);
-                }
-                else if (entry.IsUnlocked)
-                {
-                    _legacy.Add(achId);
-                }
+                if (_definitions.ContainsKey(achId))
+                    _unlocked[achId] = entry.UnlockedTimestamp;
             }
         }
     }

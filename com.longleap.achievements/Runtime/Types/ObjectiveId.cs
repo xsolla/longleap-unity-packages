@@ -9,7 +9,7 @@ namespace LongLeap.Achievements
         public ObjectiveId(string value)
         {
             if (value != null && value.Length == 0)
-                throw new ArgumentException("ObjectiveId: значение не может быть пустым.", nameof(value));
+                throw new ArgumentException("ObjectiveId: value cannot be empty.", nameof(value));
             _value = value;
         }
 
