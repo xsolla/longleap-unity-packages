@@ -246,8 +246,12 @@ namespace LongLeap.Tools.Editor
                         "    <script>\n" +
                         "      // Best effort: на Android в fullscreen ориентацию можно заблокировать.\n" +
                         "      document.addEventListener('fullscreenchange', function () {\n" +
-                        "        if (document.fullscreenElement && screen.orientation && screen.orientation.lock)\n" +
-                        $"          screen.orientation.lock('{lockOrientation}').catch(function () {{}});\n" +
+                        "        if (!document.fullscreenElement || !screen.orientation || !screen.orientation.lock) return;\n" +
+                        "        // Some browsers return nothing or throw instead of a rejected promise.\n" +
+                        "        try {\n" +
+                        $"          var locked = screen.orientation.lock('{lockOrientation}');\n" +
+                        "          if (locked && locked.catch) locked.catch(function () {});\n" +
+                        "        } catch (e) {}\n" +
                         "      });\n" +
                         "    </script>\n";
 
