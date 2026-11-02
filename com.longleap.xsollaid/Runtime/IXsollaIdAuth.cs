@@ -3,88 +3,89 @@ using System.Threading.Tasks;
 
 namespace LongLeap.XsollaId
 {
-    // Интерактивный вход игрока через Xsolla ID.
+    // Interactive player sign-in through Xsolla ID.
     //
-    // ЭТО НЕ LongLeap.Core.Auth.IAuthProvider и не его замена. Разница по
-    // частоте и по интерактивности:
+    // This is NOT LongLeap.Core.Auth.IAuthProvider and not a replacement for
+    // it. They differ in frequency and interactivity:
     //
-    //   IAuthProvider.LoginAsync() — «дай действующий токен Firebase»,
-    //     дёргается на КАЖДЫЙ запрос к RTDB (FirebaseHttpClient зовёт его во
-    //     всех четырёх глаголах), обязан быть молчаливым и дешёвым.
-    //   IXsollaIdAuth.SignInAsync() — «пусть человек войдёт», открывает
-    //     всплывающее окно, случается один раз по нажатию кнопки.
+    //   IAuthProvider.LoginAsync() — "give me a valid Firebase token", called
+    //     on EVERY RTDB request (FirebaseHttpClient calls it for all four
+    //     verbs), so it must be silent and cheap.
+    //   IXsollaIdAuth.SignInAsync() — "let the person sign in", opens a popup
+    //     window and happens once, on a button press.
     //
-    // Реализация IAuthProvider, способная открыть окно браузера, повесила бы
-    // загрузку на первом же обращении к облачным сохранениям. Поэтому — два
-    // разных интерфейса, и оба живут в итоговой архитектуре.
+    // An IAuthProvider able to open a browser window would stall loading on the
+    // very first cloud save access. Hence two separate interfaces, and both
+    // stay in the final architecture.
     //
-    // Вход МЕНЯЕТ владельца сохранений: до входа сейв идёт под анонимным
-    // Firebase uid (гостевая ветвь), после — под идентификатором аккаунта. Сам
-    // этот интерфейс переключением не занимается и о сейвах не знает — см.
-    // IAccountCloudSaveScope и BloodRedSnow.Saves.SaveSwitch, который слушает
-    // SignedIn и SignedOut.
+    // Signing in CHANGES the save owner: before sign-in the save belongs to the
+    // anonymous Firebase uid (guest branch), after it to the account id. This
+    // interface does not do the switch and knows nothing about saves — see
+    // IAccountCloudSaveScope and the game's save switcher listening to SignedIn
+    // and SignedOut.
     public interface IXsollaIdAuth
     {
-        // Возможен ли вход в принципе: платформа, дефайн и конфиг сошлись.
-        // Единственная проверка, по которой UI прячет кнопку, — чтобы в
-        // экранах не появлялось ни одного #if.
+        // Whether sign-in is possible at all: platform, define and config all
+        // line up. The single check the UI uses to hide the button, so screens
+        // contain no #if.
         bool IsAvailable { get; }
 
-        // Попытка восстановить сессию завершена (успешно или нет). До этого
-        // момента состояние «ещё не знаем», и UI не должен показывать гостя
-        // как окончательный ответ.
+        // The session restore attempt has finished (successfully or not). Until
+        // then the state is "unknown yet", and the UI must not present the
+        // guest state as the final answer.
         bool IsReady { get; }
 
         bool IsSignedIn { get; }
 
-        // Откуда взялся текущий вход. Читать имеет смысл только из обработчика
-        // SignedIn — там значение относится к событию, которое как раз
-        // происходит.
+        // Where the current sign-in came from. Only meaningful when read from a
+        // SignedIn handler — there the value refers to the event being raised.
         //
-        // Свойство, а не поле в полезной нагрузке SignedIn: менять подпись
-        // события пришлось бы всем подписчикам, а спрашивать про способ входа
-        // нужно ровно одному — переключателю сейвов. Ему нельзя спрашивать
-        // игрока, какой сейв оставить, когда игрок ничего не нажимал.
+        // A property rather than a field in the SignedIn payload: changing the
+        // event signature would affect every subscriber, while only one of them
+        // (the save switcher) needs to know how the player signed in. It must
+        // not ask the player which save to keep when the player pressed
+        // nothing.
         XsollaIdSignInOrigin LastSignInOrigin { get; }
 
-        // Текущая сессия либо null, если игрок не вошёл.
+        // The current session, or null if the player is not signed in.
         XsollaIdSession Current { get; }
 
-        // Можно ли выйти из аккаунта из игры. false там, где входом владеет
-        // площадка (GamePix SDK): выхода у неё нет, и следующий же запрос
-        // вернул бы игрока обратно. UI по этому признаку прячет кнопку выхода.
+        // Whether the player can sign out from within the game. false where the
+        // platform owns sign-in (GamePix SDK): it has no sign-out, and the very
+        // next request would sign the player back in. The UI uses this to hide
+        // the sign-out button.
         //
-        // Реализация по умолчанию — чтобы не трогать все остальные входы и
-        // тестовые подделки ради одного исключения.
+        // Default implementation so that other implementations and test fakes
+        // do not have to change for this one exception.
         bool CanSignOut => true;
 
-        // Слушателей обязательно отписывать в паре (OnEnable/OnDisable).
+        // Subscribers must always unsubscribe in pairs (OnEnable/OnDisable).
         event Action<XsollaIdSession> SignedIn;
         event Action SignedOut;
 
-        // Сессия заменилась, а игрок не менялся: обновился токен либо
-        // догрузился профиль.
+        // The session was replaced but the player did not change: the token was
+        // refreshed or the profile finished loading.
         //
-        // Отдельно от SignedIn намеренно — то означает переход «не вошёл →
-        // вошёл», и подписчики полагаются именно на это. Без этого события
-        // Current подменялся бы новым объектом молча, и UI, запомнивший имя или
-        // картинку, тихо показывал бы устаревшее.
+        // Deliberately separate from SignedIn, which means the "signed out →
+        // signed in" transition, and subscribers rely on exactly that. Without
+        // this event Current would be swapped for a new object silently, and a
+        // UI that cached the name or picture would quietly show stale data.
         event Action<XsollaIdSession> SessionUpdated;
 
-        // Интерактивный вход: открывает окно Xsolla ID.
-        // Повторный вызов, пока предыдущий не завершился, возвращает ТУ ЖЕ
-        // задачу и второго окна не открывает.
+        // Interactive sign-in: opens the Xsolla ID window.
+        // Calling again while the previous call is still running returns THE
+        // SAME task and does not open a second window.
         Task<XsollaIdResult> SignInAsync();
 
-        // Тихое восстановление из сохранённого refresh token'а. Зовётся на
-        // старте; окна не открывает никогда.
+        // Silent restore from the saved refresh token. Called at startup; never
+        // opens a window.
         Task<XsollaIdResult> RestoreAsync();
 
-        // Принудительно обновить access token.
+        // Force an access token refresh.
         Task<XsollaIdResult> RefreshAsync();
 
-        // Отозвать токен на сервере и забыть сессию локально. Локальную часть
-        // делаем всегда, даже если запрос отзыва не прошёл.
+        // Revoke the token on the server and forget the session locally. The
+        // local part always happens, even if the revoke request fails.
         Task SignOutAsync();
     }
 }

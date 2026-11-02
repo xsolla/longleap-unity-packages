@@ -4,16 +4,18 @@ using System.Threading.Tasks;
 
 namespace LongLeap.XsollaId.UI
 {
-    // Поддельный сервис входа — ТОЛЬКО для редактора.
+    // Fake sign-in service — EDITOR ONLY.
     //
-    // Настоящий вход в редакторе недоступен всегда: XsollaIdWebBrowser.IsSupported
-    // живёт под #if UNITY_WEBGL && !UNITY_EDITOR, поэтому фабрика отдаёт
-    // UnavailableXsollaIdAuth, и виджет честно прячется. Верстку «вошёл» без
-    // подделки не увидеть, не собрав WebGL и не подняв serve.py.
+    // Real sign-in is never available in the editor: XsollaIdWebBrowser.IsSupported
+    // lives under #if UNITY_WEBGL && !UNITY_EDITOR, so the factory returns
+    // UnavailableXsollaIdAuth and the widget hides itself. Without a fake the
+    // "signed in" layout cannot be seen without building WebGL and running the
+    // local dev server.
     //
-    // Файл целиком под #if UNITY_EDITOR и ни на одно сериализованное поле не
-    // ссылается — в сборку не попадает ни байтом. Сериализованных ссылок на него
-    // нет намеренно: иначе в билде получили бы Missing Script.
+    // The whole file is under #if UNITY_EDITOR and is not referenced by any
+    // serialized field, so not a byte of it reaches a build. There are
+    // deliberately no serialized references to it: a build would get a
+    // Missing Script otherwise.
     public sealed class FakeXsollaIdAuth : IXsollaIdAuth
     {
         private FakeXsollaIdAuth(bool available, bool ready, XsollaIdSession session)
@@ -27,27 +29,27 @@ namespace LongLeap.XsollaId.UI
         public bool IsReady { get; }
         public bool IsSignedIn => Current != null;
 
-        // Подделка нужна превью и тестам вёрстки, а не переключению сейвов,
-        // поэтому признак неизменяемый и заведомо не интерактивный.
+        // The fake serves previews and layout tests, not save switching, so the
+        // origin is fixed and never interactive.
         public XsollaIdSignInOrigin LastSignInOrigin => XsollaIdSignInOrigin.Restored;
         public XsollaIdSession Current { get; private set; }
 
-        // Никогда не срабатывают: состояние задаётся при создании.
+        // Never raised: the state is set at construction.
         public event Action<XsollaIdSession> SignedIn { add { } remove { } }
         public event Action SignedOut { add { } remove { } }
         public event Action<XsollaIdSession> SessionUpdated { add { } remove { } }
 
-        // Имена фабрик НЕ повторяют имена событий: SignedIn и SignedOut уже
-        // заняты членами интерфейса.
+        // Factory names do NOT repeat the event names: SignedIn and SignedOut
+        // are already taken by interface members.
         public static IXsollaIdAuth Guest() => new FakeXsollaIdAuth(true, true, null);
 
         public static IXsollaIdAuth Restoring() => new FakeXsollaIdAuth(true, false, null);
 
         public static IXsollaIdAuth Unavailable() => new FakeXsollaIdAuth(false, true, null);
 
-        // userName и fullName со значениями по умолчанию: раскрытая карточка
-        // показывает их по отдельности, и превью без них проверяло бы только
-        // запасной путь (когда клеймов нет), а не обычный.
+        // userName and fullName are optional: the expanded card shows them
+        // separately, and a preview without them would only exercise the
+        // fallback path (no claims), not the normal one.
         public static IXsollaIdAuth SignedInAs(
             string displayName, string userName = null, string fullName = null) => new FakeXsollaIdAuth(
             true, true,
@@ -60,7 +62,7 @@ namespace LongLeap.XsollaId.UI
                 userName: userName,
                 fullName: fullName));
 
-        // Окон не открывает и в сеть не ходит.
+        // Opens no windows and makes no network calls.
         public Task<XsollaIdResult> SignInAsync() =>
             Task.FromResult(IsSignedIn
                 ? new XsollaIdResult.Success(Current)

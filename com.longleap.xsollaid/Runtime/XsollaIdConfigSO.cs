@@ -2,13 +2,13 @@ using UnityEngine;
 
 namespace LongLeap.XsollaId
 {
-    // Конфиг входа через Xsolla ID. Кладётся в Assets/Resources/Backend/
-    // рядом с FirebaseConfig и грузится через Resources.Load.
+    // Xsolla ID sign-in config. Placed in Assets/Resources/Backend/ and loaded
+    // with Resources.Load.
     //
-    // Всё здесь — ПУБЛИЧНЫЕ идентификаторы, их не стыдно коммитить: clientId
-    // задуман открытым, потому что клиент публичный (WebGL-бандл читается
-    // кем угодно). Секрета клиента здесь нет и быть не может — вместо него
-    // подлинность запроса доказывает PKCE.
+    // Everything here is a PUBLIC identifier and safe to commit: the clientId
+    // is meant to be public because the client is public (anyone can read a
+    // WebGL bundle). There is no client secret here and there cannot be — PKCE
+    // proves the request's authenticity instead.
     [CreateAssetMenu(menuName = "LongLeap Services/Xsolla ID Config")]
     public sealed class XsollaIdConfigSO : ScriptableObject
     {
@@ -23,7 +23,7 @@ namespace LongLeap.XsollaId
 
         [Tooltip("Must match the registered one CHARACTER FOR CHARACTER: " +
                  "scheme, host, port, path. Locally this is the address " +
-                 "serve.py prints.")]
+                 "the local dev server prints.")]
         [SerializeField] private string _stageRedirectUri = "http://127.0.0.1:8081/xid-callback.html";
 
         [Header("Production")]

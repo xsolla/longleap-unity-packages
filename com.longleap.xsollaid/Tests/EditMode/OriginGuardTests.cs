@@ -14,8 +14,8 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public void LocalhostIsNotTheSameOriginAsLoopbackIp()
         {
-            // Ровно та ошибка, из-за которой вход падает локально: serve.py
-            // слушает 127.0.0.1, а разработчик по привычке набирает localhost.
+            // The exact mistake that breaks sign-in locally: the dev server listens
+            // on 127.0.0.1, while the developer types localhost out of habit.
             bool ok = OriginGuard.IsAllowed(
                 "http://localhost:8081/index.html", Allowed, out string problem);
 
@@ -49,8 +49,8 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public void GameAndCallbackNeedNotShareAnOrigin()
         {
-            // Портальная сборка: игру отдаёт GamePix, страница обратного
-            // вызова лежит на нашем домене. Требовать совпадения нельзя.
+            // Portal build: the portal serves the game, while the callback page
+            // lives on our own domain. Requiring the origins to match is wrong.
             string[] withPortal = { "https://play.gamepix.com", "https://blood-red-snow.pages.dev" };
 
             Assert.IsTrue(OriginGuard.IsAllowed(
@@ -60,7 +60,7 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public void EmptyPageUrl_PassesBecauseThereIsNoOrigin()
         {
-            // Редактор и standalone: origin'а нет, запрещать нечего.
+            // Editor and standalone: there is no origin, so nothing to block.
             Assert.IsTrue(OriginGuard.IsAllowed("", Allowed, out _));
             Assert.IsTrue(OriginGuard.IsAllowed(null, Allowed, out _));
         }
@@ -68,7 +68,7 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public void EmptyAllowlist_DoesNotBlock()
         {
-            // Незаполненный конфиг не должен молча ломать вход — решает сервер.
+            // An empty config must not silently break sign-in; let the server decide.
             Assert.IsTrue(OriginGuard.IsAllowed("http://example.com/", new string[0], out _));
             Assert.IsTrue(OriginGuard.IsAllowed("http://example.com/", null, out _));
         }

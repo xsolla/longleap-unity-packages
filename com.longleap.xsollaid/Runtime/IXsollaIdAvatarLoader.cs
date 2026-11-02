@@ -3,42 +3,41 @@ using UnityEngine;
 
 namespace LongLeap.XsollaId
 {
-    // Картинка профиля Xsolla ID как Sprite.
+    // Xsolla ID profile picture as a Sprite.
     //
-    // Существует ровно затем же, зачем UnavailableXsollaIdAuth: чтобы в UI не
-    // было ни одного #if. С выключенным XSOLLA_ID или на площадке игровой код
-    // получает заглушку, которая честно отвечает Unavailable, а виджет
-    // показывает свою картинку-заглушку.
+    // Exists for the same reason as UnavailableXsollaIdAuth: to keep the UI
+    // free of #if. With XSOLLA_ID off, or on a portal, game code gets a stub
+    // that honestly answers Unavailable, and the widget shows its placeholder.
     //
-    // ВРЕМЯ ЖИЗНИ. Спрайт ОБЩИЙ и живёт столько же, сколько страница: один
-    // адрес — один экземпляр, переживающий перезагрузку сцены. Поэтому UI:
+    // LIFETIME. The sprite is SHARED and lives as long as the page: one url,
+    // one instance, surviving scene reloads. Therefore the UI:
     //
-    //   НЕ зовёт Destroy на спрайте и на его текстуре;
-    //   НЕ меняет их;
-    //   НЕ держит ссылку дольше, чем живёт сама сессия.
+    //   does NOT call Destroy on the sprite or its texture;
+    //   does NOT modify them;
+    //   does NOT hold a reference longer than the session itself lives.
     //
-    // Уничтожать нечего и не нужно: одна текстура на аккаунт за время жизни
-    // страницы — это граница, которую мы принимаем сознательно. Уничтожение по
-    // выходу из аккаунта рассматривалось и отвергнуто: подписчик SignedOut мог
-    // бы сработать РАНЬШЕ, чем виджет уберёт спрайт из Image, а уничтоженный
-    // спрайт рисуется как ничто и в лог об этом не пишет.
+    // Nothing needs to be destroyed: one texture per account for the lifetime
+    // of the page is a deliberately accepted bound. Destroying on sign-out was
+    // considered and rejected: a SignedOut subscriber could run BEFORE the
+    // widget removes the sprite from its Image, and a destroyed sprite renders
+    // as nothing without a word in the log.
     public interface IXsollaIdAvatarLoader
     {
-        // Возможна ли загрузка в принципе.
+        // Whether loading is possible at all.
         bool IsAvailable { get; }
 
-        // Не бросает никогда: любой сбой приезжает как AvatarResult.Failure.
+        // Never throws: any failure arrives as AvatarResult.Failure.
         //
-        // Повторный вызов с тем же адресом не качает второй раз и возвращает
-        // тот же результат — в том числе тот же отказ. Мёртвый адрес не должен
-        // переспрашиваться на каждой перезагрузке сцены.
+        // A repeated call with the same url does not download again and returns
+        // the same result — including the same failure. A dead url must not be
+        // re-requested on every scene reload.
         Task<AvatarResult> LoadAsync(AvatarUrl url);
 
-        // Уже загруженный спрайт, без ожидания.
+        // An already loaded sprite, without waiting.
         //
-        // Нужен именно из-за перезагрузки сцены: виджет пересоздаётся на каждой
-        // смерти игрока, и ждать Task ради картинки, которая уже в памяти,
-        // означало бы лишний кадр с заглушкой.
+        // Needed because of scene reloads: the widget is recreated each time,
+        // and awaiting a Task for a picture that is already in memory would
+        // mean an extra frame showing the placeholder.
         bool TryGetCached(AvatarUrl url, out Sprite sprite);
     }
 }

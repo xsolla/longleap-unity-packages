@@ -1,241 +1,242 @@
-# Блок аккаунта Xsolla ID
+# Xsolla ID account block
 
-Готовый к переиспользованию виджет: в правом верхнем углу показывает либо кнопку
-входа в фирменном стиле Xsolla, либо логотип с аватаром — и по нажатию
-раскрывает карточку с именем, username и «выйти».
+A reusable widget: in the top-right corner it shows either a sign-in button in
+the Xsolla brand style or the logo with the avatar — and on click expands a card
+with the name, username and "sign out".
 
-## Состояние «вошёл»: две половины
+## The "signed in" state: two halves
 
 ```
-SignedIn            вертикальная колонка, ширину обеим половинам задаёт она
-├── Pill            свёрнутое: логотип + аватар, вся строка — кнопка раскрытия
-└── Expanded        раскрытое: имя, username, «выйти». Выключено по умолчанию
+SignedIn            vertical column; it sets the width of both halves
+├── Pill            collapsed: logo + avatar, the whole row is the expand button
+└── Expanded        expanded: name, username, "sign out". Off by default
 ```
 
-Раскрытость живёт в поле `_expanded` самого виджета и НЕ сохраняется: это ответ
-на нажатие, а не настройка. Складывается она в четырёх местах — повторным
-нажатием, при выходе, при выключении объекта и в превью; условие видимости
-вынесено в `XsollaIdAccountWidgetLogic.ShowsExpandedPanel`, потому что забытое
-складывание вылезает только на следующем входе, чужим именем на экране.
+Expansion lives in the widget's own `_expanded` field and is NOT persisted: it is
+a response to a click, not a setting. It is collapsed in four places — on a
+second click, on sign-out, when the object is disabled, and in the preview. The
+visibility condition is extracted into `XsollaIdAccountWidgetLogic.ShowsExpandedPanel`,
+because a forgotten collapse only shows up on the next sign-in, with the previous
+player's name on screen.
 
-**Клик мимо карточки её не закрывает, и это решение, а не недоделка.** Ловушка на
-весь экран сворачивала бы карточку «как принято», но виджет висит поверх главного
-меню и съедал бы нажатия по нему — а модальность этот блок не трогает
-принципиально (см. комментарий у класса `XsollaIdAccountWidget`).
+**Clicking outside the card does not close it — this is a decision, not an
+omission.** A full-screen catcher would collapse the card "the usual way", but
+the widget sits on top of the main menu and would swallow clicks on it — and this
+block deliberately never touches modality (see the comment on the
+`XsollaIdAccountWidget` class).
 
-**Ширину половин задаёт колонка** (`m_ChildForceExpandWidth` у `SignedIn`), и
-своего `ContentSizeFitter` по горизонтали у `Pill` и `Expanded` нет намеренно: он
-срабатывает после раскладки родителя и возвращает половине её собственную ширину.
-С ним раскрытая карточка, будучи уже пилюли, вставала по центру вместо того,
-чтобы совпасть с ней.
+**The column sets the width of the halves** (`m_ChildForceExpandWidth` on
+`SignedIn`), and `Pill` and `Expanded` deliberately have no horizontal
+`ContentSizeFitter` of their own: it runs after the parent's layout and gives the
+half back its own width. With it, the expanded card, being narrower than the
+pill, ended up centered instead of matching it.
 
-Имя в карточке — это клейм `name`, username — клейм `username`, и подменять один
-другим нельзя: у аккаунта без своего username Xsolla ID выдаёт сгенерированный
-`id<цифры>`. Оба приезжают в `XsollaIdSession.FullName` и `.UserName`. Если
-клейма `name` нет, имя откатывается на `DisplayName`; если нет `username` —
-строка прячется целиком, а не остаётся пустой.
+The name on the card is the `name` claim, the username is the `username` claim,
+and one must not be substituted for the other: for an account without its own
+username Xsolla ID issues a generated `id<digits>`. Both arrive in
+`XsollaIdSession.FullName` and `.UserName`. If there is no `name` claim, the name
+falls back to `DisplayName`; if there is no `username`, the line is hidden
+entirely rather than left empty.
 
-Собирается в сборку `LongLeap.XsollaId.UI` вместе с префабом и спрайтами, поэтому
-переносится в другой проект целиком, вместе с пакетом.
+It is compiled into the `LongLeap.XsollaId.UI` assembly together with the prefab
+and sprites, so it moves to another project as a whole, along with the package.
 
-## Как подключить
+## Setup
 
-1. Положить `XsollaIdAccountWidget.prefab` на канвас (или вложить в свой экран).
-   Якоря у корня точечные, правый верхний угол, отступ 24 — работает на любом
-   соотношении сторон.
-2. Отдать ему сервисы:
+1. Put `XsollaIdAccountWidget.prefab` on a canvas (or nest it in your own screen).
+   The root anchors are a point in the top-right corner with a 24 offset — works
+   at any aspect ratio.
+2. Give it the services:
 
 ```csharp
 widget.Bind(auth, avatars);   // IXsollaIdAuth, IXsollaIdAvatarLoader
 
-// Третий параметр — показывать ли кнопку рюкзака (по умолчанию да).
+// The third parameter controls the Backpack button (shown by default).
 widget.Bind(auth, avatars, showBackPackLink: false);
 ```
 
-`Bind` можно звать когда угодно — и до первого включения объекта, и повторно.
-До вызова виджет показывает «проверяем», а не гостя: объявлять гостем игрока,
-про которого мы ещё ничего не знаем, нельзя.
+`Bind` can be called at any time — before the object is first enabled, and
+repeatedly. Until it is called the widget shows "checking", not the guest state:
+a player we know nothing about yet must not be declared a guest.
 
-Виджет НИЧЕГО не ищет сам. Ни `FindObjectOfType`, ни синглтонов, ни локатора:
-иначе пакет знал бы про конкретную игру. Тот же приём, что у
-`LongLeap.Settings.UI.SettingsToggleRow.Bind`.
+The widget looks NOTHING up by itself. No `FindObjectOfType`, no singletons, no
+service locator: otherwise the package would know about a specific game. Same
+approach as `LongLeap.Settings.UI.SettingsToggleRow.Bind`.
 
-**Вход недоступен — виджет прячется целиком.** Именно прячется, а не гаснет: на
-GamePix это требование T&C 3.3. Достаточно передать в `Bind` заглушки
-(`UnavailableXsollaIdAuth`, `UnavailableXsollaIdAvatarLoader`) — ни одного `#if`
-в игровом коде не нужно.
+**Sign-in unavailable — the widget hides entirely.** Hidden, not greyed out: on
+GamePix this is required by T&C 3.3. It is enough to pass stubs to `Bind`
+(`UnavailableXsollaIdAuth`, `UnavailableXsollaIdAvatarLoader`) — no `#if` is
+needed in game code.
 
-**Кнопка рюкзака — исключение, и о нём надо знать.** `BackPackBtn` лежит в
-префабе ребёнком КОРНЯ, рядом с тремя состояниями, а не внутри `SignedIn`:
-переключение состояний её не касается, а корень не выключается никогда. Поэтому
-видимость ей задаёт только флаг `showBackPackLink` — не передадите `false`, и она
-будет видна даже при недоступном входе.
+**The Backpack button is an exception, and you need to know about it.**
+`BackPackBtn` is a child of the prefab ROOT, next to the three states, not inside
+`SignedIn`: state switching does not affect it, and the root is never disabled.
+So its visibility is controlled only by the `showBackPackLink` flag — if you don't
+pass `false`, it stays visible even when sign-in is unavailable.
 
-## Ключи локализации
+## Localization keys
 
-Виджет резолвит их через `Loc.Resolve`, а имена держит константами в
-`XsollaIdAccountWidgetLogic`. Проект-потребитель обязан завести у себя все
-десять:
+The widget resolves them via `Loc.Resolve` and keeps the names as constants in
+`XsollaIdAccountWidgetLogic`. The consuming project must define all ten:
 
 `btn_xsolla_sign_in`, `btn_xsolla_signing_in`, `btn_log_out`,
 `xsolla_checking`, `xsolla_name_unknown`,
 `xsolla_err_popup_blocked`, `xsolla_err_network`, `xsolla_err_timeout`,
 `xsolla_err_failed`, `xsolla_err_unavailable`.
 
-Подпись кнопки входа ограничена гайдлайнами Xsolla: разрешены только
-«Sign in with Xsolla», «Continue with Xsolla» и «Sign in». Переводить можно,
-менять смысл нельзя — игрок должен понимать, что входит ЧЕРЕЗ Xsolla, а не
-заводит отдельный аккаунт.
+The sign-in button label is restricted by the Xsolla guidelines: only
+"Sign in with Xsolla", "Continue with Xsolla" and "Sign in" are allowed. They may
+be translated, but the meaning must not change — the player must understand they
+are signing in THROUGH Xsolla, not creating a separate account.
 
-## Палитра
+## Palette
 
-Цвета сняты пипеткой с фирменного приложения Xsolla (тёмная тема, циановый
-акцент) — не подобраны на глаз, поэтому менять их «потому что похоже» не надо.
+The colors were picked from the official Xsolla app (dark theme, cyan accent) —
+not eyeballed, so don't change them "because it looks similar".
 
-| Роль | Цвет | Где |
+| Role | Color | Where |
 |---|---|---|
-| Фон-основа | `#141D1F` | не рисуется виджетом, это фон экрана под ним |
-| Карточка | `#1B2628` | плашка «проверяем», пилюля и раскрытая карточка |
-| Вложенная поверхность | `#243335` | кнопка «выйти», наведение на пилюлю |
-| Заливка главной кнопки | `#135D6C` | кнопка входа, `normal` |
-| Акцентный контур | `#31CAE8` | обводка кнопки входа в 1 pt |
-| Фирменный циан | `#80EAFF` | подпись кнопки входа, логотип |
-| Приглушённый текст | `#BABFC0` | «проверяем», «выйти» |
+| Base background | `#141D1F` | not drawn by the widget; the screen background under it |
+| Card | `#1B2628` | the "checking" plate, the pill and the expanded card |
+| Nested surface | `#243335` | the "sign out" button, pill hover |
+| Primary button fill | `#135D6C` | sign-in button, `normal` |
+| Accent outline | `#31CAE8` | 1 pt outline of the sign-in button |
+| Brand cyan | `#80EAFF` | sign-in button label, logo |
+| Muted text | `#BABFC0` | "checking", "sign out" |
 
-Радиус скругления в референсе ~3 pt при высоте кнопки ~37 pt, так что
-`round_rect_4` (4 pt при высоте 40) подходит как есть — `pixelsPerUnitMultiplier`
-трогать не нужно.
+The corner radius in the reference is ~3 pt at a button height of ~37 pt, so
+`round_rect_4` (4 pt at a height of 40) fits as is — no need to touch
+`pixelsPerUnitMultiplier`.
 
-Две вещи в верстке неочевидны и держатся именно так не случайно:
+Two layout details are non-obvious and are done this way on purpose:
 
-- **Цвет кнопок живёт в `Button.m_Colors`, а `Image.color` у них белый.**
-  ColorTint домножается на цвет графики, поэтому покрашенная картинка ПЛЮС
-  покрашенный `normalColor` дают квадрат яркости и почти чёрную кнопку. Один
-  источник правды — `ColorBlock`; наведение и нажатие тогда тоже попадают в тон.
-- **Обводка кнопки входа — это её собственный `Image`, а заливка — ребёнок
-  `Fill`.** У `Image` нет обводки, поэтому цианом красится внешний прямоугольник,
-  а поверх него лежит `Fill` с тем же спрайтом, растянутый с отступом 1 pt со
-  всех сторон. `Fill` и есть `targetGraphic` кнопки — тинт состояний ходит по
-  заливке, а контур остаётся ровным. На `Fill` стоит `LayoutElement.ignoreLayout`,
-  иначе `HorizontalLayoutGroup` посчитал бы его за содержимое кнопки.
+- **Button colors live in `Button.m_Colors`, while their `Image.color` is white.**
+  ColorTint is multiplied by the graphic's color, so a tinted image PLUS a tinted
+  `normalColor` square the brightness and give an almost black button. The single
+  source of truth is the `ColorBlock`; hover and pressed then stay on-palette too.
+- **The sign-in button's outline is its own `Image`, and the fill is the `Fill`
+  child.** `Image` has no outline, so the outer rectangle is painted cyan, and on
+  top of it sits `Fill` with the same sprite, stretched with a 1 pt inset on all
+  sides. `Fill` is the button's `targetGraphic` — state tinting goes to the fill,
+  and the outline stays steady. `Fill` has `LayoutElement.ignoreLayout`, otherwise
+  `HorizontalLayoutGroup` would count it as the button's content.
 
-## Проверка верстки в редакторе
+## Checking the layout in the editor
 
-Настоящий вход в редакторе недоступен всегда (`XsollaIdWebBrowser.IsSupported`
-живёт под `#if UNITY_WEBGL && !UNITY_EDITOR`). Поэтому у компонента есть
-контекстное меню: шестерёнка → `Preview: signed in`,
-`signed in (expanded)`, `signed in (expanded, no claims)`, `signed out`,
-`checking`, `error (popup blocked)`, `hidden`. Подделка входа лежит в
-`FakeXsollaIdAuth`, файл целиком под `#if UNITY_EDITOR` и в сборку не попадает.
+Real sign-in is never available in the editor (`XsollaIdWebBrowser.IsSupported`
+lives under `#if UNITY_WEBGL && !UNITY_EDITOR`). So the component has a context
+menu: gear → `Preview: signed in`, `signed in (expanded)`,
+`signed in (expanded, no claims)`, `signed out`, `checking`,
+`error (popup blocked)`, `hidden`. The fake sign-in lives in `FakeXsollaIdAuth`;
+the whole file is under `#if UNITY_EDITOR` and does not get into the build.
 
-## Отладочная панель
+## Debug panel
 
-`XsollaIdDebugPanel` (сборка `LongLeap.XsollaId.UI`, весь файл под
-`XSOLLA_ID_DEBUG`) — экранная панель с состоянием сервиса, четырьмя клеймами имени
-и кнопкой на каждую точку входа. Лежит в пакете и про игру не знает ничего:
-сервис приходит провайдером.
+`XsollaIdDebugPanel` (assembly `LongLeap.XsollaId.UI`, the whole file under
+`XSOLLA_ID_DEBUG`) is an on-screen panel with the service state, the four name
+claims and a button per entry point. It lives in the package and knows nothing
+about the game: the service arrives through a provider.
 
 ```csharp
 XsollaIdDebugPanel.Spawn(() => MyServices.Instance?.Account);
 ```
 
-Провайдер, а не сам сервис: панель поднимается на `AfterSceneLoad`, а бутстрап
-строит сервис позже в своей цепочке, поэтому значение, взятое один раз, осталось
-бы null навсегда. Повторный `Spawn` не плодит второй экземпляр, а переставляет
-провайдер у живого.
+A provider rather than the service itself: the panel is created on
+`AfterSceneLoad`, while the bootstrap builds the service later in its chain, so a
+value captured once would stay null forever. A repeated `Spawn` does not create a
+second instance; it replaces the provider on the live one.
 
-В игре остаётся только установщик — те несколько строк, которые знают, где ИМЕННО
-этот проект держит сервис (`Assets/Scripts/Account/XsollaIdDebugPanelInstaller.cs`).
+The game keeps only an installer — the few lines that know where exactly that
+project keeps the service.
 
-Клеймы панель берёт из `XsollaIdDebugClaims` — снимка последнего разобранного
-userinfo. `?` значит, что userinfo в этом запуске не случался (восстановленная
-сессия с `ProfileFetched` за ним не ходит), `-` — что клейма в ответе нет.
+The panel takes claims from `XsollaIdDebugClaims` — a snapshot of the last parsed
+userinfo. `?` means userinfo did not happen in this run (a restored session with
+`ProfileFetched` does not request it), `-` means the claim is absent from the
+response.
 
-Раскрытая карточка отдельными пунктами потому, что раскрытость живёт в поле
-виджета, а не в сервисе: в режиме правки нажатие по кнопке не идёт, и иначе эту
-половину верстки не увидеть вовсе. Вариант `no claims` — аккаунт без клеймов
-`name` и `username`: имя обязано уехать на запасной путь, а строка username —
-исчезнуть. Ровно там верстка и ломается, если пустые значения не прятать.
+The expanded card has separate items because expansion lives in a widget field,
+not in the service: in edit mode button clicks do not work, and otherwise that
+half of the layout could not be seen at all. The `no claims` variant is an
+account without the `name` and `username` claims: the name must take the
+fallback path, and the username line must disappear. That is exactly where the
+layout breaks if empty values are not hidden.
 
 ---
 
-# Спрайты
+# Sprites
 
-## Sprites/round_rect_4.png — есть
+## Sprites/round_rect_4.png — present
 
-Белый квадрат 32×32, радиус 8px вырезан в **альфе**. Белый плюс альфа означает,
-что `Image.color` домножением даёт точный цвет из гайдлайна, поэтому один спрайт
-обслуживает все четыре состояния кнопки.
+A white 32×32 square with an 8px radius cut into the **alpha**. White plus alpha
+means `Image.color` multiplication gives the exact guideline color, so one sprite
+serves all four button states.
 
-Импорт: Sprite (Single), `spritePixelsPerUnit = 200`, `spriteBorder = 8,8,8,8`,
-`alphaIsTransparency`, без мипмапов, RGBA32 без сжатия (блочные артефакты
-DXT/ASTC на скруглённом крае 32px видны глазом).
+Import: Sprite (Single), `spritePixelsPerUnit = 200`, `spriteBorder = 8,8,8,8`,
+`alphaIsTransparency`, no mipmaps, RGBA32 uncompressed (DXT/ASTC block artifacts
+on a rounded 32px edge are visible to the eye).
 
-`8 × (100 / 200) = ` **ровно 4 юнита канваса = 4 pt**, как в гайдлайне, при том
-что текстура нарисована в 2× и остаётся резкой, если масштаб виджета поднимут.
-На `Image` ставится `type = Sliced`.
+`8 × (100 / 200) = ` **exactly 4 canvas units = 4 pt**, as in the guideline, while
+the texture is drawn at 2× and stays sharp if the widget is scaled up.
+The `Image` uses `type = Sliced`.
 
-## Sprites/avatar_placeholder.png — есть
+## Sprites/avatar_placeholder.png — present
 
-Заглушка 128×128 на всё время, пока картинки профиля нет: клейма `picture` у
-аккаунта не оказалось, CDN не отдал её или запрос срезал CORS.
+A 128×128 placeholder shown whenever there is no profile picture: the account
+has no `picture` claim, the CDN did not serve it, or CORS blocked the request.
 
-## Sprites/xsolla_logo.png — ЕСТЬ, но это НЕ официальный экспорт
+## Sprites/xsolla_logo.png — PRESENT, but NOT an official export
 
-175x39, ровный `#80EAFF` с честной альфой, соотношение **4.4872**. Узел `Logo`
-включён и на кнопке входа, и в свёрнутой пилюле — экземпляра два, потому что один
-`Image` не может лежать в двух местах.
+175x39, solid `#80EAFF` with clean alpha, aspect ratio **4.4872**. The `Logo` node
+is enabled both on the sign-in button and in the collapsed pill — there are two
+instances, because one `Image` cannot be in two places.
 
-**Знак снят со скриншота фирменного приложения Xsolla, а не выгружен из Figma.**
-Это официальный знак и официальный цвет, но растр, восстановленный из уже
-уменьшенного рендера: альфа вычислена обратным матированием (`observed = fg*a +
-bg*(1-a)` при известных `fg = #80EAFF` и `bg = #141D1F`), поэтому фона в углах
-нет и бахромы по краям тоже. При высоте 20 pt исходника хватает с запасом
-(39 px ~ 2x), но **на ревью площадки лучше подложить настоящий SVG**: апскейл
-такого растра выше 20 pt заметен.
+**The mark was taken from a screenshot of the official Xsolla app, not exported
+from Figma.** It is the official mark and the official color, but a raster
+reconstructed from an already downscaled render: the alpha was computed by
+reverse matting (`observed = fg*a + bg*(1-a)` with known `fg = #80EAFF` and
+`bg = #141D1F`), so there is no background in the corners and no fringe on the
+edges. At a height of 20 pt the source is more than enough (39 px ~ 2x), but
+**for the portal review it is better to substitute the real SVG**: upscaling this
+raster above 20 pt is noticeable.
 
-### Чем заменить, когда появится доступ
+### What to replace it with
 
-Источник — Figma `Xsolla-ID-playground`, файл `M9kM5gdXjwFaqL2oBJHUuA`, узел
-**`826:9812`** (`Xsolla logos`, инстанс 122x32, внутри один вектор
-118.946x25.684, уже в цвете `#80EAFF`).
+Source — Figma `Xsolla-ID-playground`, file `M9kM5gdXjwFaqL2oBJHUuA`, node
+**`826:9812`** (`Xsolla logos`, a 122x32 instance containing a single
+118.946x25.684 vector, already in `#80EAFF`).
 
-Скачать не удалось: Figma MCP отдал
-`You've reached the Figma MCP tool call limit for your View seat`.
-Повторная попытка 2026-09-01 упёрлась в тот же лимит — дело в сиденье, а не в
-узле, так что дёргать MCP заново бессмысленно, пока его не расширят.
+After replacing it, check three things:
 
-После замены проверьте три вещи:
+1. **Alpha.** The instance is rendered on the dark brand background, and the
+   export may come with an opaque `#141D1F` fill. Make sure the corners are
+   transparent — otherwise it is a rectangle, not a logo.
+2. **Cropping.** The instance is 122x32, and the mark itself is
+   118.946x25.684 — ~3px of padding around it. If the export kept that padding,
+   then at a *sprite* height of 20 pt the *mark* itself will be
+   20 x 25.684/32 = **16.05 pt**, while the guideline requires 20 pt.
+3. **Width.** Read `sprite.rect` and set `preferredWidth =
+   preferredHeight x rect.width / rect.height` on BOTH `Logo` nodes. It is
+   currently 20 x 89.74 from the actual 4.4872 ratio of the current raster; the
+   vector's ratio is 4.6310, so the number will need adjusting.
 
-1. **Альфа.** Инстанс отрисован на тёмном фирменном фоне, и экспорт может
-   приехать с непрозрачной заливкой `#141D1F`. Убедитесь, что углы прозрачные —
-   иначе это прямоугольник, а не логотип.
-2. **Обрезка.** Инстанс 122x32, а сам знак 118.946x25.684 — по краям ~3px
-   воздуха. Если экспорт сохранил этот воздух, то при высоте *спрайта* 20 pt сам
-   *знак* получится 20 x 25.684/32 = **16.05 pt**, а гайдлайн требует 20 pt.
-3. **Ширина.** Прочитайте `sprite.rect` и выставьте `preferredWidth =
-   preferredHeight x rect.width / rect.height` на ОБОИХ узлах `Logo`. Сейчас там
-   стоит 20 x 89.74 по фактическому соотношению 4.4872 текущего растра; у
-   вектора соотношение 4.6310, то есть цифру придётся поправить.
+### Import
 
-### Импорт
+Sprite (2D and UI), Single, `spritePixelsPerUnit = 100`, **no border** (the logo
+is never Sliced), `alphaIsTransparency`, no mipmaps, Bilinear, Clamp,
+`maxTextureSize = 512`, for WebGL — RGBA32 uncompressed (the thin diagonals of
+the mark are exactly where DXT ringing shows).
 
-Sprite (2D and UI), Single, `spritePixelsPerUnit = 100`, **без border** (логотип
-никогда не Sliced), `alphaIsTransparency`, без мипмапов, Bilinear, Clamp,
-`maxTextureSize = 512`, для WebGL — RGBA32 без сжатия (тонкие диагонали знака как
-раз то место, где виден DXT-звон).
+### Rules that must not be broken
 
-### Правила, которые нельзя нарушать
+- `Image.preserveAspect = true` on the `Logo` node. This is the most important
+  flag in the prefab: it satisfies the "aspect ratio must be preserved"
+  requirement even if the numbers in `LayoutElement` turn out wrong.
+- `Image.color = #FFFFFF` (neutral multiplication) in all states: the asset's own
+  `#80EAFF` is drawn. The guidelines forbid recoloring the logo.
+- Do not crop, replace or stretch the logo.
 
-- `Image.preserveAspect = true` на узле `Logo`. Это самый важный флаг в префабе:
-  он выполняет требование «соотношение сторон должно сохраняться», даже если
-  цифры в `LayoutElement` окажутся неверными.
-- `Image.color = #FFFFFF` (нейтральное домножение) во всех состояниях: рисуется
-  собственный `#80EAFF` ассета. Перекрашивать логотип гайдлайны запрещают.
-- Логотип не кропать, не заменять, не растягивать.
-
-Отдельно: состояние **disabled** из гайдлайна (иконка `#999`) в этой верстке не
-используется намеренно — брендированная кнопка никогда не гасится, см.
-комментарии в `XsollaIdAccountWidget`. Получить `#999` домножением из `#80EAFF`
-невозможно (красному каналу потребовался бы множитель 1.195), для этого нужен
-второй, монохромный мастер знака.
+Separately: the **disabled** state from the guideline (icon `#999`) is
+deliberately not used in this layout — the branded button is never disabled, see
+the comments in `XsollaIdAccountWidget`. Getting `#999` from `#80EAFF` by
+multiplication is impossible (the red channel would need a 1.195 multiplier); that
+would require a second, monochrome master of the mark.

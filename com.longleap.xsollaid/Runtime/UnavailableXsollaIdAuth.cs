@@ -3,29 +3,28 @@ using System.Threading.Tasks;
 
 namespace LongLeap.XsollaId
 {
-    // Заглушка на случай, когда входа нет: портальная сборка, выключенный
-    // дефайн XSOLLA_ID или незаполненный конфиг.
+    // Stub for when sign-in is not available: a portal build, the XSOLLA_ID
+    // define turned off, or an unfilled config.
     //
-    // Существует, чтобы в игровом коде не было ни одного #if: UI спрашивает
-    // IsAvailable и прячет блок аккаунта (именно прячет, а не гасит — как
-    // HideQuitButtonOnPortal и как кнопка воскрешения в GameOverScreen, когда
-    // рекламы на площадке нет вовсе).
+    // Exists so game code has no #if: the UI checks IsAvailable and hides the
+    // account block (hides, not disables — the same way other UI elements are
+    // hidden when a feature does not exist on the current platform).
     public sealed class UnavailableXsollaIdAuth : IXsollaIdAuth
     {
         public bool IsAvailable => false;
 
-        // Ждать нечего: ответ окончательный с первого кадра.
+        // Nothing to wait for: the answer is final from the first frame.
         public bool IsReady => true;
 
         public bool IsSignedIn => false;
 
-        // Входа тут не бывает вовсе, поэтому и жеста игрока быть не может.
+        // There is never a sign-in here, so there can be no player gesture.
         public XsollaIdSignInOrigin LastSignInOrigin => XsollaIdSignInOrigin.Restored;
 
         public XsollaIdSession Current => null;
 
-        // Никогда не срабатывают. Объявлены, чтобы подписка в UI не требовала
-        // проверок; add/remove пустые, поэтому и утечь тут нечему.
+        // Never raised. Declared so UI subscriptions need no checks; add/remove
+        // are empty, so nothing can leak.
         public event Action<XsollaIdSession> SignedIn { add { } remove { } }
         public event Action SignedOut { add { } remove { } }
         public event Action<XsollaIdSession> SessionUpdated { add { } remove { } }

@@ -24,15 +24,15 @@ namespace LongLeap.XsollaId.Editor
                         EnabledId,
                         Define,
                         "Sign-in Enabled (XSOLLA_ID)",
-                        "Вход через Xsolla ID. Сборка LongLeap.XsollaId.Web ограничена этим " +
-                        "дефайном, то есть без него её в проекте нет вовсе и вход не " +
-                        "соберётся. Выключение убирает и отладочную панель: отлаживать " +
-                        "нечего, если самого входа нет.",
+                        "Sign-in with Xsolla ID. The LongLeap.XsollaId.Web assembly is gated " +
+                        "by this define: without it the assembly does not exist in the project " +
+                        "and sign-in is not built. Turning it off also removes the debug panel, " +
+                        "since there is nothing to debug without sign-in.",
                         required: true,
                         order: 100,
 
-                        // Убирается ВМЕСТЕ со входом, а не просто гаснет —
-                        // ровно как было в XsollaIdMenu.SetDefine.
+                        // Removed TOGETHER with sign-in rather than just
+                        // becoming unavailable.
                         cascadeOffSymbols: new[] { DebugDefine },
                         enabledNote:
                         "Xsolla ID: sign-in enabled (XSOLLA_ID added). Do not forget to fill in clientId in "
@@ -44,9 +44,9 @@ namespace LongLeap.XsollaId.Editor
                         DebugId,
                         DebugDefine,
                         "Debug Panel (on-screen)",
-                        "Отладочный вход с клавиатуры: F9 — войти, F10 — выйти, F11 — " +
-                        "состояние. Работает только в WebGL-сборке. В сборку на площадку " +
-                        "попадать не должен.",
+                        "Debug sign-in from the keyboard: F9 signs in, F10 signs out, F11 shows " +
+                        "the state. Works only in a WebGL build. Must not ship in a portal " +
+                        "build.",
                         required: false,
                         order: 101,
                         availability: state => ProjectOptionAvailability.RequireDefine(
@@ -60,7 +60,7 @@ namespace LongLeap.XsollaId.Editor
                 {
                     new ProjectOptionAction(
                         "Select Config Asset",
-                        $"Выделить {XsollaIdConfigAccess.ConfigAssetPath} в проекте.",
+                        $"Select {XsollaIdConfigAccess.ConfigAssetPath} in the project.",
                         102,
                         XsollaIdConfigAccess.SelectConfigAsset),
                 });

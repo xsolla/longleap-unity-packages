@@ -13,7 +13,7 @@ namespace LongLeap.XsollaId.Tests
 
             var token = new AccessToken(secret);
 
-            // Токен в логе — это готовый вход в чужой аккаунт.
+            // A token in the log is a ready-made way into someone else's account.
             StringAssert.DoesNotContain(secret, token.ToString());
             Assert.AreEqual("AccessToken(valid)", token.ToString());
             Assert.AreEqual("AccessToken(none)", AccessToken.None.ToString());
@@ -36,8 +36,8 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public void Newtypes_RejectNullAndEmpty()
         {
-            // Отличие от LongLeap.Core.Auth.IdToken, который на null молча
-            // отдаёт None: там на этом легко не заметить отсутствие личности.
+            // Unlike LongLeap.Core.Auth.IdToken, which silently returns None on null:
+            // there it is easy to miss that the identity is missing.
             Assert.Throws<ArgumentException>(() => new AccessToken(null));
             Assert.Throws<ArgumentException>(() => new AccessToken(""));
             Assert.Throws<ArgumentException>(() => new RefreshToken(null));
@@ -69,7 +69,7 @@ namespace LongLeap.XsollaId.Tests
                 new AccessToken("a"), new RefreshToken("r"),
                 expiresAtUnixMs: 1_000_000);
 
-            // Запас 5 минут: за 6 минут до конца ещё живой, за 4 — уже нет.
+            // 5-minute margin: 6 minutes before expiry it is still valid, 4 minutes before it is not.
             Assert.IsFalse(session.IsExpired(1_000_000 - 360_000, 300_000));
             Assert.IsTrue(session.IsExpired(1_000_000 - 240_000, 300_000));
         }

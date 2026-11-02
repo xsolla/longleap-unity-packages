@@ -1,23 +1,24 @@
-# Вход через Xsolla ID
+# Sign-in with Xsolla ID
 
-OAuth2/OIDC authorization code + PKCE. Пакет **самодостаточен**: ничего
-копировать в `Assets/` проекта не нужно — ни скриптов, ни плагинов, ни
-страницы обратного вызова.
+OAuth2/OIDC authorization code + PKCE. The package is **self-contained**: nothing
+needs to be copied into the project's `Assets/` — no scripts, no plugins, no
+callback page.
 
-## Что лежит внутри
+## What's inside
 
-| Где | Что |
+| Where | What |
 |---|---|
-| `Runtime/` | контракты и оркестрация, без единого обращения к сети |
-| `Runtime.Web/` | HTTP, окно браузера и `XsollaId.jslib`. Собирается только под дефайном `XSOLLA_ID` |
-| `Runtime.UI/` | виджет блока аккаунта |
-| `UI/` | префаб виджета и спрайты (см. `UI/README.md`) |
-| `Editor/` | меню `Xsolla ID` и `xid-callback.html` |
+| `Runtime/` | contracts and orchestration, without a single network call |
+| `Runtime.Web/` | HTTP, the browser window and `XsollaId.jslib`. Compiled only under the `XSOLLA_ID` define |
+| `Runtime.UI/` | the account block widget |
+| `UI/` | the widget prefab and sprites (see `UI/README.md`) |
+| `Editor/` | the `Xsolla ID` menu and `xid-callback.html` |
 
-**`XsollaId.jslib` лежит РЯДОМ с `Runtime.Web/*.cs`, и это не случайность.**
-Половина этой связки — `[DllImport("__Internal")]` в `XsollaIdWebBrowser` и
-`XsollaIdWebGLImageDecoder`, вторая — семь функций в jslib. Когда файл жил в
-`Assets/Plugins/WebGL/` игры, пакет компилировался, а сборка падала на линковке:
+**`XsollaId.jslib` sits NEXT TO `Runtime.Web/*.cs` on purpose.**
+One half of the bridge is `[DllImport("__Internal")]` in `XsollaIdWebBrowser` and
+`XsollaIdWebGLImageDecoder`, the other is seven functions in the jslib. When the
+file lived in the game's `Assets/Plugins/WebGL/`, the package compiled but the
+build failed at link time:
 
 ```
 wasm-ld: error: undefined symbol: OpenXsollaIdPopup
@@ -25,35 +26,36 @@ wasm-ld: error: undefined symbol: XsollaIdBeginImageDecode
 ...
 ```
 
-Ошибка приезжает в самом конце WebGL-сборки и ничем не намекает, что забыли
-скопировать файл. Держать обе половины в одном месте — единственный способ,
-при котором подключение пакета не требует помнить об этом.
+The error shows up at the very end of a WebGL build and gives no hint that a
+file was not copied. Keeping both halves in one place is the only way to make
+adding the package not depend on remembering this.
 
-Имя объекта-приёмника (`XsollaIdCallbacks`) продублировано в jslib и в
-`XsollaIdCallbackReceiver.ReceiverName`. Менять только вместе.
+The receiver object name (`XsollaIdCallbacks`) is duplicated in the jslib and in
+`XsollaIdCallbackReceiver.ReceiverName`. Change them only together.
 
-## Подключение
+## Setup
 
-1. **Пакет.** Положить в `Packages/` (embedded) либо прописать в `manifest.json`.
-   Зависимости: `com.longleap.core`, `com.longleap.localization`,
+1. **Package.** Put it in `Packages/` (embedded) or reference it in `manifest.json`.
+   Dependencies: `com.longleap.core`, `com.longleap.localization`,
    `com.unity.nuget.newtonsoft-json`, `com.unity.textmeshpro`.
 
-2. **Дефайн.** Меню `Xsolla ID / Required / Sign-in Enabled (XSOLLA_ID)`.
-   Без него сборки `LongLeap.XsollaId.Web` нет вовсе и ни одного запроса на
-   `id.xsolla.com` не уходит. Дефайн ставится для WebGL.
+2. **Define.** Menu `Xsolla ID / Required / Sign-in Enabled (XSOLLA_ID)`.
+   Without it the `LongLeap.XsollaId.Web` assembly does not exist at all, and not
+   a single request goes to `id.xsolla.com`. The define is set for WebGL.
 
-3. **Конфиг.** `Assets / Create / LongLeap Services / Xsolla ID Config`,
-   положить в `Assets/Resources/Backend/XsollaIdConfig.asset`, заполнить
-   `clientId` и `redirectUri` активной среды. Среда переключается тем же меню.
+3. **Config.** `Assets / Create / LongLeap Services / Xsolla ID Config`,
+   place it at `Assets/Resources/Backend/XsollaIdConfig.asset`, fill in
+   `clientId` and `redirectUri` for the active environment. The environment is
+   switched from the same menu.
 
-   Пустой `clientId` — это НЕ ошибка сборки: вход отвечает `Unavailable`, а
-   виджет прячется целиком. Если блок аккаунта «не появился», смотреть сюда
-   первым делом; фабрика пишет в консоль, чего именно не хватает.
+   An empty `clientId` is NOT a build error: sign-in reports `Unavailable` and
+   the widget hides entirely. If the account block "did not appear", look here
+   first; the factory logs exactly what is missing.
 
-4. **Виджет.** `UI/XsollaIdAccountWidget.prefab` на канвас. Подробности
-   верстки, палитры и превью в редакторе — в `UI/README.md`.
+4. **Widget.** Put `UI/XsollaIdAccountWidget.prefab` on a canvas. Layout,
+   palette and editor preview details are in `UI/README.md`.
 
-5. **Сервисы виджету.** Он сам ничего не ищет:
+5. **Services for the widget.** It does not look anything up by itself:
 
    ```csharp
    var auth = LongLeap.XsollaId.Web.XsollaIdFactory.Create(config, prefs);
@@ -61,25 +63,27 @@ wasm-ld: error: undefined symbol: XsollaIdBeginImageDecode
    widget.Bind(auth, avatars);
    ```
 
-   Искать виджет нужно с `FindObjectsInactive.Include`, если он лежит в
-   выключенном экране.
+   Find the widget with `FindObjectsInactive.Include` if it lives on a disabled
+   screen.
 
-6. **Ключи локализации.** Десять штук, список в `UI/README.md`. Без сервиса
-   локализации `Loc.Resolve` возвращает сам ключ, и на кнопке будет написано
-   `btn_xsolla_sign_in`.
+6. **Localization keys.** Ten of them, listed in `UI/README.md`. Without a
+   localization service `Loc.Resolve` returns the key itself, and the button will
+   read `btn_xsolla_sign_in`.
 
-## Чего делать НЕ нужно
+## What NOT to do
 
-- Копировать `XsollaId.jslib` в `Assets/Plugins/WebGL/` — он уже в пакете, и
-  вторая копия даст два определения одних и тех же символов.
-- Класть `xid-callback.html` рядом со сборкой руками:
-  `XsollaIdCallbackPagePostprocessor` кладёт её в корень WebGL-сборки сам,
-  когда дефайн включён, и убирает, когда выключен.
-- Создавать объект `XsollaIdCallbacks` на сцене: его поднимает
+- Copy `XsollaId.jslib` into `Assets/Plugins/WebGL/` — it is already in the
+  package, and a second copy gives two definitions of the same symbols.
+- Place `xid-callback.html` next to the build by hand:
+  `XsollaIdCallbackPagePostprocessor` puts it into the root of the WebGL build
+  itself when the define is on, and removes it when it is off.
+- Create a `XsollaIdCallbacks` object in the scene: it is created by
   `XsollaIdCallbackReceiver.Instance`.
 
-## Известное ограничение
+## Font
 
-Префаб виджета ссылается на конкретный шрифт TMP. В чужом проекте этой ссылки
-нет, и подписи молча остаются без шрифта — переопределяйте `m_fontAsset` на
-экземпляре префаба своим шрифтом.
+The widget prefab ships without a font, so its labels use the project's TMP
+default font (`TMP Settings` → Default Font Asset). To use another font, set
+**Font Override** on the widget instance: it is applied to every label in the
+widget, including those in states that are currently hidden. Per-label overrides
+on the prefab instance keep working as well.

@@ -6,27 +6,30 @@ using Newtonsoft.Json.Linq;
 
 namespace LongLeap.XsollaId
 {
-    // Снимок клеймов последнего разобранного userinfo — исключительно для
-    // отладочной панели.
+    // Snapshot of the claims from the last parsed userinfo — for the debug
+    // panel only.
     //
-    // Файл целиком под XSOLLA_ID_DEBUG и в сборку на площадку не попадает: здесь
-    // лежат e-mail и имя живого игрока, и держать их в памяти релиза незачем.
-    // Ровно так же устроены XsollaIdDebugPanel и FakeXsollaIdAuth.
+    // The whole file is behind XSOLLA_ID_DEBUG and never reaches a release
+    // build: it holds a live player's email and name, and there is no reason to
+    // keep them in release memory. XsollaIdDebugPanel and FakeXsollaIdAuth are
+    // gated the same way.
     //
-    // Почему снимок, а не поле в XsollaIdSession: сессия сериализуется в
-    // PlayerPrefs (PlayerPrefsXsollaIdSessionStore), так что клеймы поехали бы на
-    // диск и поменяли формат блоба. Отладке это не нужно, а игроку тем более.
+    // Why a snapshot rather than a field in XsollaIdSession: the session is
+    // serialized to PlayerPrefs (PlayerPrefsXsollaIdSessionStore), so the
+    // claims would end up on disk and change the blob format. Debugging does
+    // not need that, and the player even less so.
     //
-    // Статика переживает перезагрузку сцены (а она случается при смерти игрока),
-    // и здесь это как раз то, что нужно: userinfo дёргается один раз на личность,
-    // а панель пересоздаётся. Взамен панель ОБЯЗАНА показывать снимок только у
-    // вошедшего игрока — иначе после выхода на экране останутся чужие клеймы.
+    // The static state survives scene reloads, which is exactly what is wanted
+    // here: userinfo is called once per identity, while the panel is recreated.
+    // In exchange, the panel MUST show the snapshot only for a signed-in
+    // player — otherwise someone else's claims would stay on screen after
+    // sign-out.
     public static class XsollaIdDebugClaims
     {
-        // Те самые четыре, из которых XsollaIdTokenClient.PickDisplayName выбирает
-        // имя, и в том же порядке: первый непустой и становится DisplayName.
-        // Порядок здесь — не украшение, по нему на панели видно, какой клейм
-        // победил и какие остались непрочитанными.
+        // The same four claims XsollaIdTokenClient.PickDisplayName chooses the
+        // name from, in the same order: the first non-empty one becomes
+        // DisplayName. The order matters — it shows on the panel which claim
+        // won and which were left unused.
         public static readonly string[] Watched =
         {
             "username", "preferred_username", "name", "email"
@@ -37,14 +40,14 @@ namespace LongLeap.XsollaId
 
         private static string[] _allKeys = Array.Empty<string>();
 
-        // false — userinfo в этом запуске не случался. Это само по себе показание:
-        // у восстановленной сессии с ProfileFetched = true запроса нет вовсе, и
-        // имя приезжает из PlayerPrefs, а не с сервера.
+        // false means userinfo has not happened in this run. That is itself
+        // informative: a restored session with ProfileFetched = true makes no
+        // request at all, and the name comes from PlayerPrefs, not the server.
         public static bool HasSnapshot { get; private set; }
 
-        // Только ИМЕНА всех клеймов ответа, без значений: по ним видно, есть ли в
-        // ответе вообще nickname или given_name, и при этом на экран не попадает
-        // ничего, о чём не просили.
+        // Only the NAMES of all response claims, without values: they show
+        // whether the response contains nickname or given_name at all, without
+        // putting anything on screen that was not asked for.
         public static IReadOnlyList<string> AllKeys => _allKeys;
 
         public static void Capture(JObject claims)
@@ -60,10 +63,10 @@ namespace LongLeap.XsollaId
             {
                 keys.Add(pair.Key);
 
-                // Нестроковый клейм показываем сырым JSON'ом: ReadStringClaim
-                // отдаёт значение строго по типу, поэтому PickDisplayName такой
-                // клейм пропустит — и на панели должно быть видно, что значение
-                // есть, а имя из него всё равно не возьмётся.
+                // A non-string claim is shown as raw JSON: ReadStringClaim reads
+                // values strictly by type, so PickDisplayName skips such a
+                // claim — and the panel should show that a value exists but no
+                // name will be taken from it.
                 Values[pair.Key] = pair.Value is JValue value && value.Type == JTokenType.String
                     ? (string)value
                     : pair.Value?.ToString(Formatting.None);
@@ -75,9 +78,10 @@ namespace LongLeap.XsollaId
             HasSnapshot = true;
         }
 
-        // Три разных ответа намеренно различимы: "?" — userinfo не спрашивали,
-        // "-" — спрашивали, но клейма в ответе нет (или он пустой), всё остальное
-        // — значение. Пустая строка на панели читалась бы как «не знаю».
+        // Three deliberately distinct answers: "?" — userinfo was not
+        // requested, "-" — requested, but the claim is missing (or empty),
+        // anything else — the value. An empty string on the panel would read
+        // as "unknown".
         public static string Value(string key)
         {
             if (!HasSnapshot)

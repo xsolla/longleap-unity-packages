@@ -1,56 +1,56 @@
 namespace LongLeap.XsollaId
 {
-    // Снимок сессии Xsolla ID: кто вошёл и чем это подтверждается.
+    // Snapshot of an Xsolla ID session: who is signed in and what proves it.
     //
-    // Неизменяемый. Обновление токена не мутирует объект, а создаёт новый —
-    // так подписчики события SignedIn не могут увидеть полуобновлённое
-    // состояние, а сравнение «сессия та же?» сводится к сравнению ссылок.
+    // Immutable. A token refresh does not mutate the object but creates a new
+    // one — so SignedIn subscribers can never see a half-updated state, and
+    // "is it the same session?" reduces to a reference comparison.
     public sealed class XsollaIdSession
     {
-        // sub из токена. Единственное, что можно считать устойчивым ключом
-        // пользователя — но НЕ Firebase uid, см. XsollaUserId.
+        // sub from the token. The only thing that can be treated as a stable
+        // user key — but NOT a Firebase uid, see XsollaUserId.
         public XsollaUserId Subject { get; }
 
-        // Имя для UI: username или email из userinfo. Может быть null — если
-        // запрошен только scope openid, показывать будет нечего.
+        // Name for the UI: username or email from userinfo. May be null — with
+        // only the openid scope requested there is nothing to show.
         public string DisplayName { get; }
 
-        // Адрес картинки профиля. None — штатно, см. UserInfoResponse.Picture.
+        // Profile picture url. None is normal, see UserInfoResponse.Picture.
         public AvatarUrl Picture { get; }
 
-        // Сырые клеймы username и name — их показывает раскрытая карточка
-        // аккаунта, где под каждую величину есть своя строка. Почему этого не
-        // хватает одного DisplayName — см. UserInfoResponse.UserName.
+        // Raw username and name claims — shown by the expanded account card,
+        // which has a separate line for each. Why DisplayName alone is not
+        // enough — see UserInfoResponse.UserName.
         //
-        // Оба могут быть null, и это штатно: у аккаунта без имени в профиле
-        // клейма name не будет вовсе.
+        // Both may be null, and that is normal: an account without a name in
+        // its profile has no name claim at all.
         public string UserName { get; }
         public string FullName { get; }
 
-        // Спрашивали ли уже userinfo для ЭТОЙ личности.
+        // Whether userinfo has already been requested for THIS identity.
         //
-        // Признак нужен отдельно от «имя непустое», которое служило им раньше.
-        // У картинки клейма может не быть вовсе, и условие «картинки нет →
-        // сходи ещё раз» дёргало бы userinfo на каждое обновление токена —
-        // навсегда. Признак сохраняется вместе с сессией, поэтому догоняющий
-        // запрос случается ровно один раз на игрока.
+        // Needs its own flag rather than "name is non-empty": the picture claim
+        // may be missing entirely, and "no picture → fetch again" would hit
+        // userinfo on every token refresh, forever. The flag is persisted with
+        // the session, so the catch-up request happens exactly once per player.
         public bool ProfileFetched { get; }
 
         public AccessToken Access { get; }
 
         public RefreshToken Refresh { get; }
 
-        // Момент истечения access token'а, unix-время в миллисекундах.
+        // Access token expiry, unix time in milliseconds.
         public long ExpiresAtUnixMs { get; }
 
-        // picture и profileFetched — ТОЛЬКО в конце и только со значениями по
-        // умолчанию. Вставить picture рядом с displayName, где ему место по
-        // смыслу, нельзя: пять мест передают аргументы позиционно, и
-        // перестановка молча привязала бы их не к тем параметрам.
+        // picture, profileFetched, userName and fullName go ONLY at the end and
+        // only with default values. Moving picture next to displayName, where
+        // it belongs by meaning, is not possible: several call sites pass
+        // arguments positionally, and reordering would silently bind them to
+        // the wrong parameters.
         //
-        // profileFetched по умолчанию false, потому что безопасный ответ на
-        // вопрос «спрашивали ли?» — «нет»: путь, который забыл его выставить,
-        // получит один лишний запрос, а не навсегда потерянную картинку.
+        // profileFetched defaults to false because the safe answer to "was it
+        // requested?" is "no": a code path that forgets to set it costs one
+        // extra request, not a permanently lost picture.
         public XsollaIdSession(
             XsollaUserId subject,
             string displayName,
@@ -73,23 +73,24 @@ namespace LongLeap.XsollaId
             FullName = fullName;
         }
 
-        // Имя для показа игроку: если DisplayName это адрес почты, домен
-        // отрезан. Сырой клейм остаётся в DisplayName — он нужен в логах и
-        // отладочной панели. См. DisplayNameFormat.
+        // Name to show the player: if DisplayName is an email address, the
+        // domain is cut off. The raw claim stays in DisplayName — it is needed
+        // in logs and the debug panel. See DisplayNameFormat.
         public string ShortDisplayName => DisplayNameFormat.LocalPart(DisplayName);
 
-        // Есть чем обновиться без участия игрока.
+        // There is something to refresh with, without the player's involvement.
         public bool CanRefresh => Refresh.IsValid;
 
-        // Истёк ли access token с запасом marginMs.
+        // Whether the access token has expired, with a margin of marginMs.
         //
-        // Запас нужен, чтобы не отправить запрос с токеном, который протухнет
-        // по дороге. Значение запаса задаёт вызывающий — здесь нет константы
-        // намеренно: политику обновления держит XsollaIdAuth, а не снимок.
+        // The margin prevents sending a request with a token that expires in
+        // flight. The caller supplies it — there is deliberately no constant
+        // here: the refresh policy belongs to XsollaIdAuth, not to the snapshot.
         public bool IsExpired(long nowUnixMs, long marginMs) =>
             !Access.IsValid || nowUnixMs >= ExpiresAtUnixMs - marginMs;
 
-        // Токены наружу не печатаем: их прячут сами типы, но напомним и здесь.
+        // Tokens are never printed: the token types hide them already, but this
+        // is a reminder.
         public override string ToString() =>
             $"XsollaIdSession({Subject}, displayName={(string.IsNullOrEmpty(DisplayName) ? "none" : "set")}, " +
             $"userName={(string.IsNullOrEmpty(UserName) ? "none" : "set")}, " +

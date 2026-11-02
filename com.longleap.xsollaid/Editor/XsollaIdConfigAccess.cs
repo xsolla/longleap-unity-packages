@@ -4,13 +4,12 @@ using UnityEngine;
 
 namespace LongLeap.XsollaId.Editor
 {
-    // Доступ к ассету конфига. Раньше это жило внутри XsollaIdMenu, но теперь
-    // к тем же полям обращаются ещё и предупреждения окна, а третьей копии
-    // строковых имён полей проект уже не выдержит.
+    // Access to the config asset, shared by XsollaIdMenu and XsollaIdWarnings
+    // so the serialized field names are written in one place only.
     //
-    // Имена полей — строки, типизированной ссылки на XsollaIdConfigSO нет
-    // намеренно: ссылки на LongLeap.XsollaId у этой сборки не должно быть,
-    // иначе она рискует исчезнуть вместе с ней (см. заголовок XsollaIdMenu).
+    // Field names are strings and there is deliberately no typed reference to
+    // XsollaIdConfigSO: this assembly must not reference LongLeap.XsollaId (see
+    // the XsollaIdMenu header).
     internal static class XsollaIdConfigAccess
     {
         public const string ConfigAssetPath = "Assets/Resources/Backend/XsollaIdConfig.asset";
@@ -28,12 +27,13 @@ namespace LongLeap.XsollaId.Editor
             return config?.FindProperty(EnvironmentProperty);
         }
 
-        // Индекс ищем по имени, а не пишем 0/1 числом: перестановка членов
-        // XsollaIdEnvironment иначе тихо переключила бы среду.
+        // Look the index up by name instead of hardcoding 0/1: reordering the
+        // XsollaIdEnvironment members would otherwise silently switch the
+        // environment.
         public static int IndexOf(SerializedProperty environment, string enumName) =>
             System.Array.IndexOf(environment.enumNames, enumName);
 
-        // Имя активной среды или null, если ассета нет.
+        // Name of the active environment, or null if there is no asset.
         public static string CurrentEnvironment()
         {
             SerializedProperty environment = LoadEnvironmentProperty(out _);

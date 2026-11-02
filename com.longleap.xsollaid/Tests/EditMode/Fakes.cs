@@ -6,8 +6,8 @@ using LongLeap.XsollaId;
 
 namespace LongLeap.XsollaId.Tests
 {
-    // Подделки пишем руками: библиотеки моков в проекте нет, и остальные
-    // пакеты тестируются так же.
+    // Hand-written fakes: the project has no mocking library, and the other
+    // packages are tested the same way.
 
     internal sealed class FakePlayerPrefs : IPlayerPrefs
     {
@@ -51,15 +51,15 @@ namespace LongLeap.XsollaId.Tests
     {
         public bool IsSupported { get; set; } = true;
 
-        // Что вернуть. Если null — вернём код и присланный state (успех).
+        // What to return. If null, return the code and the received state (success).
         public BrowserAuthResult? Result;
 
-        // Подменить возвращаемый state, чтобы проверить защиту от CSRF.
+        // Override the returned state to test the CSRF protection.
         public string StateOverride;
 
-        // Если выставлен — окно «висит», пока тест не завершит задачу. Нужно
-        // для проверки single-flight: с мгновенным ответом второй вызов
-        // случился бы уже после конца первого и ничего бы не проверил.
+        // When set, the window "hangs" until the test completes the task. Needed
+        // to test single-flight: with an instant reply the second call would
+        // happen after the first one finished and prove nothing.
         public TaskCompletionSource<BrowserAuthResult> Gate;
 
         public int Calls;
@@ -136,8 +136,8 @@ namespace LongLeap.XsollaId.Tests
     {
         public static XsollaIdConfig Valid() => new XsollaIdConfig(
             XsollaIdEnvironment.Stage,
-            // 127.0.0.1, а не localhost — так же, как зарегистрировано в
-            // Xsolla ID и как теперь слушает serve.py.
+            // 127.0.0.1, not localhost: the same as registered in Xsolla ID and as
+            // the local dev server listens.
             new XsollaIdClientRegistration(
                 XsollaIdConfig.DefaultStageIssuer, "client-stage", "http://127.0.0.1:8081/xid-callback.html"),
             new XsollaIdClientRegistration(

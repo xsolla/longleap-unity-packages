@@ -1,14 +1,13 @@
 namespace LongLeap.XsollaId
 {
-    // Итог операции входа. Закрытое объединение той же формы, что и
-    // LongLeap.Core.Auth.AuthResult: приватный конструктор + вложенные sealed
-    // наследники, так что снаружи разбирают через `result is
+    // Result of a sign-in operation. A closed union of the same shape as
+    // LongLeap.Core.Auth.AuthResult: private constructor + nested sealed
+    // subclasses, so callers match with `result is
     // XsollaIdResult.Success success`.
     //
-    // Наружу из IXsollaIdAuth исключения не летят НИКОГДА — как и в
-    // FirebaseAnonymousAuthProvider. Любой сбой приезжает сюда как Failure:
-    // исключение, всплывшее в Task, который опрашивают из корутины, — это
-    // повисший бутстрап.
+    // IXsollaIdAuth NEVER lets exceptions out. Any failure arrives here as
+    // Failure: an exception surfacing in a Task that is polled from a
+    // coroutine means a hung bootstrap.
     public abstract class XsollaIdResult
     {
         private XsollaIdResult() { }
@@ -24,8 +23,8 @@ namespace LongLeap.XsollaId
         {
             public XsollaIdErrorCode Code { get; }
 
-            // Текст для лога, не для игрока: игроку показываем
-            // локализованную строку, выбранную по Code. Токенов не содержит.
+            // For the log, not for the player: the player sees a localized
+            // string chosen by Code. Never contains tokens.
             public string Message { get; }
 
             public Failure(XsollaIdErrorCode code, string message)
@@ -35,8 +34,8 @@ namespace LongLeap.XsollaId
             }
         }
 
-        // Короткие фабрики для самых частых исходов — чтобы в коде не плодить
-        // одинаковые тексты.
+        // Shorthand factories for the most common outcomes, so the same
+        // messages are not repeated across the code.
         public static XsollaIdResult Cancelled() =>
             new Failure(XsollaIdErrorCode.Cancelled, "The player closed the sign-in window.");
 

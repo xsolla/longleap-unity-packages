@@ -6,8 +6,8 @@ namespace LongLeap.XsollaId.UI.Tests
     [TestFixture]
     public class XsollaIdAccountWidgetLogicTests
     {
-        // Именованные аргументы обязательны: восемь bool'ов подряд читаются
-        // только так.
+        // Named arguments are mandatory: eight bools in a row are readable
+        // only this way.
         private static AccountWidgetState Resolve(
             bool serviceExists = true,
             bool isAvailable = true,
@@ -23,7 +23,7 @@ namespace LongLeap.XsollaId.UI.Tests
 
         // ---- Hidden ----
 
-        // Недоступность бьёт ВСЁ остальное, в любой комбинации прочих флагов.
+        // Unavailability overrides EVERYTHING else, in any combination of the other flags.
         [Test]
         public void Unavailable_IsHidden_WhateverElseIsTrue(
             [Values(true, false)] bool isReady,
@@ -47,10 +47,10 @@ namespace LongLeap.XsollaId.UI.Tests
 
         // ---- Checking ----
 
-        // GameBootstrapper.InitAccount идёт позже, чем OnEnable виджета, поэтому
-        // на первых кадрах сервиса может не быть вовсе. Мигать кнопкой входа в
-        // этот момент нельзя: игрок, который вошёл в прошлый раз, увидел бы
-        // «войти» и решил, что его выкинуло.
+        // The game's bootstrap may bind the account service later than the
+        // widget's OnEnable, so for the first frames there may be no service at
+        // all. The sign-in button must not flash then: a player who signed in last
+        // time would see "Sign in" and think they were signed out.
         [Test]
         public void NoServiceYet_IsChecking()
         {
@@ -64,14 +64,14 @@ namespace LongLeap.XsollaId.UI.Tests
             Assert.AreEqual(AccountWidgetState.Checking, Resolve(isReady: false));
         }
 
-        // Вечное «проверяем» игрок не заслужил: восстановление ходит в сеть.
+        // The player should not see "checking" forever: restore goes to the network.
         [Test]
         public void ReadyTimedOut_FallsBackToSignedOut()
         {
             Assert.AreEqual(AccountWidgetState.SignedOut, Resolve(isReady: false, readyTimedOut: true));
         }
 
-        // ---- вход ----
+        // ---- sign-in ----
 
         [Test]
         public void ReadyAndSignedOut_ShowsTheButton()
@@ -85,18 +85,18 @@ namespace LongLeap.XsollaId.UI.Tests
             Assert.AreEqual(AccountWidgetState.SigningIn, Resolve(signInPending: true));
         }
 
-        // РЕГРЕССИЯ. Adopt в XsollaIdAuth поднимает SignedIn РАНЬШЕ, чем
-        // завершится задача SignInAsync, поэтому оба флага какое-то время
-        // истинны. Если signInPending окажется приоритетнее, строка после
-        // успешного входа мигнёт обратно на «входим…».
+        // REGRESSION. Adopt in XsollaIdAuth raises SignedIn BEFORE the SignInAsync
+        // task completes, so both flags are true for a while. If signInPending
+        // took priority, the label would flash back to "Signing in..." after a
+        // successful sign-in.
         [Test]
         public void SignedInWhileTheTaskIsStillRunning_ShowsSignedIn()
         {
             Assert.AreEqual(AccountWidgetState.SignedIn, Resolve(isSignedIn: true, signInPending: true));
         }
 
-        // Игрок нажал «войти» ещё раз — на кнопке не должна висеть прошлая
-        // жалоба.
+        // The player pressed "Sign in" again: the previous error must not stay
+        // on the button.
         [Test]
         public void NewAttempt_OutranksAStaleError()
         {
@@ -109,7 +109,7 @@ namespace LongLeap.XsollaId.UI.Tests
             Assert.AreEqual(AccountWidgetState.SignedOutWithError, Resolve(hasError: true));
         }
 
-        // ---- выход ----
+        // ---- sign-out ----
 
         [Test]
         public void SignedIn_ShowsTheRow()
@@ -135,15 +135,14 @@ namespace LongLeap.XsollaId.UI.Tests
 
         // ---- ShortName ----
 
-        [TestCase("anton@mail.com", ExpectedResult = "anton")]
-        [TestCase("anton", ExpectedResult = "anton")]
-        [TestCase("anton@mail.com@x", ExpectedResult = "anton")]
-        [TestCase("Антон@почта.рф", ExpectedResult = "Антон")]
-        // Пустая локальная часть — это не адрес, а мусор, и он доезжает до
-        // экрана как есть: странное имя лучше пустого места. Решение живёт в
-        // DisplayNameFormat.LocalPart и проверено там же.
+        [TestCase("user@mail.com", ExpectedResult = "user")]
+        [TestCase("user", ExpectedResult = "user")]
+        [TestCase("user@mail.com@x", ExpectedResult = "user")]
+        // An empty local part is not an address but garbage, and it reaches the
+        // screen as is: an odd name is better than an empty one. The decision
+        // lives in DisplayNameFormat.LocalPart and is tested there.
         [TestCase("@mail.com", ExpectedResult = "@mail.com")]
-        // А вот показывать НЕЧЕГО — это null: виджет подставит запасной вариант.
+        // But having NOTHING to show is null: the widget substitutes a fallback.
         [TestCase(null, ExpectedResult = null)]
         [TestCase("", ExpectedResult = null)]
         [TestCase("   ", ExpectedResult = null)]
@@ -169,9 +168,9 @@ namespace LongLeap.XsollaId.UI.Tests
             Assert.AreEqual("averyveryverylongname", XsollaIdAccountWidgetLogic.ShortName("averyveryverylongname", -1));
         }
 
-        // Обрезка не должна разрубить суррогатную пару: половина эмодзи
-        // рисуется «крокозяброй». "ab" + 😀 — эмодзи занимает два char'а, и
-        // граница в 4 символа падает ровно на него.
+        // Truncation must not split a surrogate pair: half an emoji renders as
+        // garbage. "ab" + 😀: the emoji takes two chars, and the 4-character
+        // limit falls right on it.
         [Test]
         public void ShortName_DoesNotSplitASurrogatePair()
         {
@@ -187,8 +186,8 @@ namespace LongLeap.XsollaId.UI.Tests
         [Test]
         public void ErrorKey_SilentCodesSayNothing()
         {
-            // Игрок сам закрыл окно, и сессия, истёкшая через 30 суток, — не
-            // поводы для жалобы на экране.
+            // The player closing the window, or a session expiring after 30 days,
+            // is no reason to show an error on screen.
             Assert.IsNull(XsollaIdAccountWidgetLogic.ErrorKey(XsollaIdErrorCode.Cancelled));
             Assert.IsNull(XsollaIdAccountWidgetLogic.ErrorKey(XsollaIdErrorCode.SessionExpired));
         }
@@ -217,10 +216,10 @@ namespace LongLeap.XsollaId.UI.Tests
                 XsollaIdAccountWidgetLogic.ErrorKey(XsollaIdErrorCode.TokenExchangeFailed));
         }
 
-        // ---- раскрытая карточка ----
+        // ---- expanded card ----
 
-        // Раскрытость ортогональна состоянию: SigningOut её не складывает, иначе
-        // карточка мигала бы, пока отзыв токена в полёте.
+        // Expansion is orthogonal to the state: SigningOut does not collapse it,
+        // otherwise the card would flicker while the token revocation is in flight.
         [Test]
         public void ShowsExpandedPanel_OnlyWhileSignedIn()
         {
@@ -229,7 +228,7 @@ namespace LongLeap.XsollaId.UI.Tests
 
             Assert.IsTrue(
                 XsollaIdAccountWidgetLogic.ShowsExpandedPanel(AccountWidgetState.SigningOut, expanded: true),
-                "выход в полёте не должен складывать карточку");
+                "a sign-out in flight must not collapse the card");
         }
 
         [Test]
@@ -239,13 +238,13 @@ namespace LongLeap.XsollaId.UI.Tests
             {
                 Assert.IsFalse(
                     XsollaIdAccountWidgetLogic.ShowsExpandedPanel(state, expanded: false),
-                    $"{state} со свёрнутым флагом не должен показывать карточку");
+                    $"{state} with the collapsed flag must not show the card");
             }
         }
 
-        // Тест на ПОЛНОТУ: карточка с чужими именем и username не должна
-        // показываться ни в одном состоянии, кроме двух «вошёл». Забыть свернуть
-        // её при выходе — ошибка, которую видно только на следующем входе.
+        // COMPLETENESS test: the card with someone's name and username must not be
+        // shown in any state other than the two "signed in" ones. Forgetting to
+        // collapse it on sign-out is a bug visible only on the next sign-in.
         [Test]
         public void ShowsExpandedPanel_HiddenInEveryStateButSignedIn()
         {
@@ -266,7 +265,7 @@ namespace LongLeap.XsollaId.UI.Tests
         [Test]
         public void Shorten_KeepsUsernameWhole_AndDoesNotCutAtAtSign()
         {
-            // Ровно то, чем ShortName здесь не годится: '@' не разделитель.
+            // Exactly why ShortName does not fit here: '@' is not a separator.
             Assert.AreEqual("id19334455", XsollaIdAccountWidgetLogic.Shorten("id19334455", 18));
             Assert.AreEqual("a@b.c", XsollaIdAccountWidgetLogic.Shorten("a@b.c", 18));
         }
@@ -279,10 +278,10 @@ namespace LongLeap.XsollaId.UI.Tests
             Assert.IsNull(XsollaIdAccountWidgetLogic.Shorten("   ", 18));
         }
 
-        // Тест на ПОЛНОТУ. Когда в пакете появится новый код ошибки, этот тест
-        // либо промолчит (если код осмысленно попал в default), либо покажет, что
-        // его забыли — вместо того чтобы игрок увидел пустое место там, где
-        // должна быть причина.
+        // COMPLETENESS test. When the package gets a new error code, this test
+        // either stays green (if the code deliberately falls into default) or
+        // shows it was forgotten, instead of the player seeing an empty space
+        // where the reason should be.
         [Test]
         public void ErrorKey_EveryCodeIsEitherSilentOnPurposeOrHasAKey()
         {

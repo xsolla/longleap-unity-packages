@@ -19,7 +19,7 @@ namespace LongLeap.XsollaId.Web
     // The server never returns other players' xsollaId (there is no auth, so
     // an id would open that player's saves to anyone). Each row carries isMe
     // instead; the player's own row gets the account id as uid, every other
-    // row an opaque "rank:N", which is enough for LeaderboardScreen to find
+    // row an opaque "rank:N", which is enough for the leaderboard UI to find
     // "you" in the list.
     //
     // The player is identified by xsollaId (sub) without a token — same as
@@ -27,7 +27,7 @@ namespace LongLeap.XsollaId.Web
     // ignored: it is always this account (see XsollaAccountAuthProvider).
     public sealed class XsollaLeaderboardProvider : ILeaderboardProvider
     {
-        // Default for when the caller passes no path; BackPackConfig holds the
+        // Default for when the caller passes no path; the game config holds the
         // configured one (_leaderboardsPath).
         public const string DefaultLeaderboardsPath = "/leaderboards";
 
@@ -165,7 +165,7 @@ namespace LongLeap.XsollaId.Web
             }
         }
 
-        // Not supported by the server: an empty page. LeaderboardScreen then
+        // Not supported by the server: an empty page. The leaderboard UI then
         // builds the player's own row from GetPlayerRankAsync.
         public Task<LeaderboardPage> GetSurroundingsAsync(BoardId boardId, SortDirection sort, string uid, int radius) =>
             Task.FromResult(LeaderboardPage.Empty());

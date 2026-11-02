@@ -8,107 +8,118 @@ using UnityEngine.UI;
 
 namespace LongLeap.XsollaId.UI
 {
-    // Блок аккаунта Xsolla ID в правом верхнем углу главного меню. Один префаб,
-    // три состояния-ребёнка: «проверяем», «войти», «вошёл».
+    // Xsolla ID account block, typically in the top-right corner of the main
+    // menu. One prefab, three child states: "checking", "sign in", "signed in".
     //
-    // МОДАЛЬНОСТЬ НЕ ТРОГАЕТ. Это не окно: ScreenService.TryOpen/Close здесь нет
-    // и быть не должно — заняв гейт, виджет не дал бы открыться самому меню.
-    // Образец для такого «всегда включённого» элемента — CoinBalanceLabel:
-    // подписка в OnEnable, отписка в OnDisable, перерисовка на каждом включении
-    // (пока объект был выключен, события до нас не доходили).
+    // DOES NOT TOUCH MODALITY. This is not a window: there is no
+    // ScreenService.TryOpen/Close here and there must not be — by taking the
+    // gate the widget would block the menu itself from opening. It follows the
+    // pattern of an "always on" element: subscribe in OnEnable, unsubscribe in
+    // OnDisable, redraw on every enable (events did not reach us while the
+    // object was disabled).
     //
-    // Ни одного #if: доступность спрашиваем у IXsollaIdAuth.IsAvailable, а
-    // картинку — у IXsollaIdAvatarLoader, у обоих есть заглушки. Видимость
-    // ссылки на BackPack — тоже: она приходит флагом в Bind, потому что зависит
-    // от дефайнов КОНКРЕТНОЙ игры, про которые пакет не знает и знать не должен.
+    // No #if at all: availability comes from IXsollaIdAuth.IsAvailable and the
+    // picture from IXsollaIdAvatarLoader, both of which have stubs. The same
+    // goes for the BackPack link visibility: it arrives as a flag in Bind,
+    // because it depends on the defines of a SPECIFIC game, which the package
+    // does not and must not know about.
     //
-    // Зависимости приходят через Bind и никак иначе. Виджет НИЧЕГО не ищет сам:
-    // пакет не знает и не должен знать про локатор сервисов конкретной игры.
-    // Тот же приём, что у LongLeap.Settings.UI.SettingsToggleRow.Bind.
+    // Dependencies arrive through Bind and nothing else. The widget looks up
+    // NOTHING by itself: the package does not and must not know a particular
+    // game's service locator. Same approach as
+    // LongLeap.Settings.UI.SettingsToggleRow.Bind.
     //
-    // Bind можно звать в любой момент, в том числе до первого OnEnable и
-    // повторно: до него виджет показывает «проверяем», а не гостя.
+    // Bind may be called at any time, including before the first OnEnable and
+    // repeatedly: until then the widget shows "checking", not a guest.
     [DisallowMultipleComponent]
     public sealed class XsollaIdAccountWidget : MonoBehaviour
     {
-        // Ключи статических подписей. Держим КЛЮЧИ, а не готовые строки: при
-        // смене языка перерисовываемся сами (Docs/Localization.md).
+        // Keys of the static labels. We keep KEYS, not resolved strings, so we
+        // can redraw ourselves when the language changes.
         private const string KeySignIn = "btn_xsolla_sign_in";
         private const string KeySigningIn = "btn_xsolla_signing_in";
         private const string KeyNameUnknown = "xsolla_name_unknown";
         private const string BackPackUrl = "https://backpack.xsolla.com/";
 
-        [Header("Состояния")]
-        [Tooltip("Три взаимоисключающих ребёнка. Все три выключены — блока нет " +
-            "вовсе (вход недоступен). САМ объект виджета выключать нельзя: " +
-            "выключенный компонент себя обратно не включит и сервис не переспросит.")]
+        [Header("States")]
+        [Tooltip("Three mutually exclusive children. All three off means no block " +
+            "at all (sign-in unavailable). Do NOT disable the widget object ITSELF: " +
+            "a disabled component never re-enables itself or re-queries the service.")]
         [SerializeField] private GameObject checkingRoot;
         [SerializeField] private GameObject signedOutRoot;
         [SerializeField] private GameObject signedInRoot;
 
-        [Header("Вход")]
+        [Header("Sign-in")]
         [SerializeField] private Button signInButton;
 
-        [Tooltip("Подпись кнопки входа. Нужен именно LocalizedText, а не " +
-            "TMP_Text: ключ переключается кодом на «входим…», и компонент сам " +
-            "переведёт заново при смене языка.")]
+        [Tooltip("Sign-in button label. Must be a LocalizedText, not a TMP_Text: " +
+            "code switches its key to \"signing in…\", and the component re-translates " +
+            "itself when the language changes.")]
         [SerializeField] private LongLeap.Localization.LocalizedText signInLabel;
 
-        [Tooltip("Строка причины неудачи. Пусто — причину покажем только в логе.")]
+        [Tooltip("Failure reason line. Empty — the reason goes to the log only.")]
         [SerializeField] private TMP_Text errorLabel;
 
-        [Header("Вошёл")]
+        [Header("Signed in")]
         [SerializeField] private Image avatarImage;
 
-        [Tooltip("Заглушка на всё время, пока картинки нет: не загрузилась, " +
-            "не отдалась CDN или клейма picture у аккаунта не оказалось.")]
+        [Tooltip("Shown whenever there is no picture: it failed to load, the CDN " +
+            "did not serve it, or the account has no picture claim.")]
         [SerializeField] private Sprite avatarPlaceholder;
 
         [SerializeField] private TMP_Text nameLabel;
         [SerializeField] private Button logOutButton;
 
-        [Tooltip("Ссылка на рюкзак Xsolla. В префабе лежит РЯДОМ с тремя " +
-            "состояниями-детьми, а не внутри них, поэтому её видимость " +
-            "переключается отдельно — флагом в Bind.")]
+        [Tooltip("Link to the Xsolla Backpack. In the prefab it sits NEXT TO the " +
+            "three state children, not inside them, so its visibility is toggled " +
+            "separately — via a flag in Bind.")]
         [SerializeField] private Button openBackpackUrl;
 
-        [Tooltip("Свёрнутая строка: логотип Xsolla и аватар. Нажатие раскрывает " +
-            "карточку и складывает её обратно.")]
+        [Tooltip("Collapsed row: Xsolla logo and avatar. Clicking it expands the " +
+            "card and collapses it again.")]
         [SerializeField] private Button expandButton;
 
-        [Tooltip("Карточка с именем, username и «выйти». Выключена, пока по " +
-            "свёрнутой строке не нажали.")]
+        [Tooltip("Card with the name, username and \"sign out\". Hidden until the " +
+            "collapsed row is clicked.")]
         [SerializeField] private GameObject expandedRoot;
 
-        [Tooltip("Строка username под именем. Клейма username может не быть — " +
-            "тогда строка прячется целиком, а не остаётся пустой.")]
+        [Tooltip("Username line under the name. The username claim may be absent — " +
+            "then the line is hidden entirely rather than left empty.")]
         [SerializeField] private TMP_Text userNameLabel;
 
-        [Header("Настройки")]
-        [Tooltip("Как часто опрашивать IsReady. События у него НЕТ, а бутстрап " +
-            "выбрасывает задачу RestoreAsync — опрос это единственный способ " +
-            "узнать, что ответ окончательный.")]
+        [Header("Font")]
+        [Tooltip("Font for every label in the widget. Empty — each label keeps its " +
+            "own font, and labels without one use the project's TMP default font " +
+            "(TMP Settings). The prefab ships without a font, so set this once " +
+            "instead of overriding every label.")]
+        [SerializeField] private TMP_FontAsset fontOverride;
+
+        [Header("Settings")]
+        [Tooltip("How often to poll IsReady. It has NO event, and the bootstrap " +
+            "discards the RestoreAsync task — polling is the only way to learn " +
+            "that the answer is final.")]
         [Min(0.02f)] [SerializeField] private float readyPollSeconds = 0.2f;
 
-        [Tooltip("Сколько всего ждать окончательного ответа, прежде чем показать " +
-            "гостя. Восстановление ходит в сеть; вечное «проверяем» игрок не " +
-            "заслужил.")]
+        [Tooltip("Total time to wait for a final answer before showing the guest " +
+            "state. Restore goes over the network; the player should not see " +
+            "\"checking\" forever.")]
         [Min(1f)] [SerializeField] private float readyTimeoutSeconds = 12f;
 
-        [Tooltip("Сколько держать строку ошибки. 0 — до следующего нажатия.")]
+        [Tooltip("How long to keep the error line. 0 — until the next click.")]
         [Min(0f)] [SerializeField] private float errorHoldSeconds = 8f;
 
-        [Tooltip("Максимум символов в имени. Длиннее — обрезаем с многоточием, " +
-            "иначе длинный e-mail растянет строку через полэкрана.")]
+        [Tooltip("Maximum characters in the name. Longer names are truncated with " +
+            "an ellipsis, otherwise a long e-mail stretches the row across half the screen.")]
         [Min(4)] [SerializeField] private int nameMaxChars = 18;
 
-        // Отданное через Bind. Переживает выключение объекта.
+        // What was passed to Bind. Survives the object being disabled.
         private IXsollaIdAuth _boundAuth;
         private IXsollaIdAvatarLoader _boundAvatars;
 
-        // Показывать ли ссылку на рюкзак. По умолчанию ДА: так виджет, которому
-        // Bind ещё не позвали, и превью в редакторе выглядят как в сборке, где
-        // ссылка включена. Игра, которой она не нужна, передаёт false явно.
+        // Whether to show the BackPack link. Defaults to YES so that a widget
+        // that has not been bound yet, and the editor preview, look like a build
+        // with the link enabled. A game that does not need it passes false
+        // explicitly.
         private bool _showBackPackLink = true;
 
         // What the "Sign in" button does instead of the widget's own sign-in.
@@ -117,7 +128,7 @@ namespace LongLeap.XsollaId.UI
         // the transition to that screen here.
         private Action _signInRequested;
 
-        // На что подписаны прямо сейчас. null — подписки нет.
+        // What we are subscribed to right now. null — no subscription.
         private IXsollaIdAuth _account;
         private IXsollaIdAvatarLoader _avatars;
         private Task<XsollaIdResult> _signInTask;
@@ -128,18 +139,17 @@ namespace LongLeap.XsollaId.UI
         private bool _readyTimedOut;
         private bool _signOutPending;
 
-        // Раскрыта ли карточка аккаунта. Живёт только в памяти и намеренно НЕ
-        // сохраняется: развёрнутая карточка — это ответ на нажатие «прямо
-        // сейчас», а не настройка. Открытой после перезагрузки страницы она
-        // выглядела бы застрявшей.
+        // Whether the account card is expanded. Memory only and deliberately NOT
+        // persisted: an expanded card is a response to a click "right now", not
+        // a setting. Open after a page reload it would look stuck.
         private bool _expanded;
 
-        // КЛЮЧ, не готовая строка: иначе при смене языка на экране осталась бы
-        // прошлая локализация.
+        // A KEY, not a resolved string: otherwise the previous language would
+        // stay on screen after a language change.
         private string _errorKey;
 
-        // Загруженный аватар. Спрайт ОБЩИЙ и принадлежит загрузчику — не
-        // уничтожаем и не меняем, см. IXsollaIdAvatarLoader.
+        // The loaded avatar. The sprite is SHARED and owned by the loader — do
+        // not destroy or modify it, see IXsollaIdAvatarLoader.
         private Sprite _avatar;
         private AvatarUrl _avatarUrl;
 
@@ -161,7 +171,7 @@ namespace LongLeap.XsollaId.UI
             if (openBackpackUrl == null)
                 Debug.LogError("XsollaIdAccountWidget: the BackPack button is not assigned.", this);
 
-            // Дублированный префаб: ссылка может указывать на объект чужой копии.
+            // Duplicated prefab: the reference may point at another copy's object.
             if (signInLabel != null && !signInLabel.transform.IsChildOf(transform))
             {
                 Debug.LogError(
@@ -179,19 +189,34 @@ namespace LongLeap.XsollaId.UI
                     "and nowhere to show the name and username.", this);
             }
 
-            // Клики вешаем здесь и один раз, с предварительным RemoveListener —
-            // как MainMenuScreen.Wire, чтобы повторное включение объекта не
-            // наплодило дублей.
+            // Click handlers are attached here, once, with a RemoveListener
+            // first, so re-enabling the object does not create duplicates.
             Wire(signInButton, OnSignInClicked);
             Wire(logOutButton, OnLogOutClicked);
             Wire(openBackpackUrl, OnOpenBackPackClicked);
             Wire(expandButton, OnExpandClicked);
+
+            ApplyFontOverride();
+        }
+
+        // Once, in Awake: labels inside disabled states are included, so a state
+        // switched on later already has the right font.
+        //
+        // The font setter also swaps the material to the font's default one,
+        // which is what a label without its own material needs.
+        private void ApplyFontOverride()
+        {
+            if (fontOverride == null)
+                return;
+
+            foreach (TMP_Text text in GetComponentsInChildren<TMP_Text>(includeInactive: true))
+                text.font = fontOverride;
         }
 
         void OnEnable()
         {
-            // Имя и строку ошибки ставим кодом, значит подписка на смену языка
-            // обязательна — и парная отписка тоже.
+            // The name and error line are set from code, so subscribing to
+            // language changes is required — and so is the matching unsubscribe.
             Loc.OnLanguageChanged += Apply;
 
             SubscribeAccount();
@@ -212,31 +237,32 @@ namespace LongLeap.XsollaId.UI
             StopWatch(ref _signOutWatch);
             StopWatch(ref _errorTimer);
 
-            // Задачу входа НЕ отменяем — отмены у SignInAsync нет. Ссылку
-            // бросаем: при повторном включении Apply увидит IsSignedIn, а
-            // повторный клик по контракту вернёт ТУ ЖЕ задачу и второго окна не
-            // откроет.
+            // The sign-in task is NOT cancelled — SignInAsync has no
+            // cancellation. We drop the reference: on re-enable Apply will see
+            // IsSignedIn, and a repeated click returns THE SAME task by contract
+            // and does not open a second window.
             _signInTask = null;
             _signOutPending = false;
 
-            // Меню закрыли — складываем карточку. Иначе она встретит игрока
-            // раскрытой при следующем открытии, хотя он её не открывал.
+            // The menu was closed — collapse the card. Otherwise it would greet
+            // the player expanded next time, although they never opened it.
             _expanded = false;
         }
 
-        // Страховка: при выгрузке сцены OnDisable может не прийти.
+        // Safety net: OnDisable may not arrive when the scene is unloaded.
         void OnDestroy() => UnbindAccount();
 
-        // Отдать виджету вход и загрузчик картинок.
+        // Hand the widget the sign-in service and the avatar loader.
         //
-        // Звать можно когда угодно: и до того, как объект впервые включится, и
-        // после. До вызова виджет честно показывает «проверяем» — объявлять
-        // гостем игрока, про которого мы ещё ничего не знаем, нельзя.
+        // May be called at any time: before the object is first enabled or
+        // after. Until then the widget shows "checking" — declaring a player we
+        // know nothing about a guest would be wrong.
         //
-        // showBackPackLink — показывать ли кнопку рюкзака. Решает игра: рюкзак —
-        // отдельный продукт Xsolla, и в сборке, которая с ним не работает,
-        // ссылка ведёт игрока в пустоту. Дефайном здесь это не решить: пакет
-        // уезжает в другие проекты, где такого дефайна нет вовсе.
+        // showBackPackLink — whether to show the BackPack button. The game
+        // decides: BackPack is a separate Xsolla product, and in a build that
+        // does not work with it the link leads nowhere. A define cannot decide
+        // this here: the package goes into other projects that have no such
+        // define.
         //
         // signInRequested replaces the widget's own sign-in on the "Sign in"
         // button (see _signInRequested). null means the widget signs in by
@@ -264,8 +290,8 @@ namespace LongLeap.XsollaId.UI
             if (_account != null)
                 return;
 
-            // Не ошибка: владелец сцены мог ещё не позвать Bind — сторожевая
-            // корутина дождётся и подпишется тогда же.
+            // Not an error: the scene owner may not have called Bind yet — the
+            // watch coroutine waits and subscribes then.
             if (_boundAuth == null)
                 return;
 
@@ -286,9 +312,9 @@ namespace LongLeap.XsollaId.UI
             _account.SignedOut -= OnSignedOut;
             _account.SessionUpdated -= OnSessionUpdated;
 
-            // Обнуляем только подписку. Переданное в Bind не трогаем: объект
-            // могут выключить и включить снова, а второй раз Bind никто не
-            // позовёт.
+            // Only the subscription is cleared. What was passed to Bind is kept:
+            // the object may be disabled and enabled again, and nobody will call
+            // Bind a second time.
             _account = null;
         }
 
@@ -302,60 +328,59 @@ namespace LongLeap.XsollaId.UI
 
         void OnSignedOut()
         {
-            // Чужое лицо и чужое имя после выхода — самый заметный баг такого
-            // блока.
+            // Someone else's face and name after sign-out is the most visible
+            // bug such a block can have.
             _avatar = null;
             _avatarUrl = AvatarUrl.None;
             _signOutPending = false;
 
-            // Карточка принадлежала вышедшему игроку: оставить её раскрытой
-            // означало бы показать следующему чужие имя и username.
+            // The card belonged to the player who signed out: leaving it open
+            // would show the next player someone else's name and username.
             _expanded = false;
 
             Apply();
         }
 
-        // Обновился токен либо догрузился профиль: игрок тот же, а объект сессии
-        // новый. Картинка могла появиться только сейчас.
+        // Token refreshed or profile topped up: same player, new session
+        // object. The picture may have appeared only now.
         void OnSessionUpdated(XsollaIdSession session)
         {
             RefreshAvatar();
             Apply();
         }
 
-        // ---- ожидание окончательного ответа ----
+        // ---- waiting for the final answer ----
 
         void StartReadyWatch()
         {
             if (_readyWatch != null)
                 return;
 
-            // Ответ уже окончательный — ждать нечего.
+            // The answer is already final — nothing to wait for.
             if (_account != null && (!_account.IsAvailable || _account.IsReady))
                 return;
 
             _readyWatch = StartCoroutine(WatchReady());
         }
 
-        // У IsReady нет события: RestoreAsync выставляет его в finally, а
-        // бутстрап саму задачу ВЫБРАСЫВАЕТ (#pragma warning disable CS4014) —
-        // ручки, чтобы её дождаться, ни у кого нет. Вдобавок если восстанавливать
-        // было нечего, RestoreAsync вернёт Expired и SignedOut не выстрелит
-        // вовсе. Поэтому опрос — единственный способ узнать, что «гость» это
-        // окончательный ответ.
+        // IsReady has no event: RestoreAsync sets it in finally, and the caller
+        // usually fires the task and forgets it — nobody has a handle to await.
+        // On top of that, if there was nothing to restore, RestoreAsync returns
+        // Expired and SignedOut never fires. So polling is the only way to know
+        // that "guest" is the final answer.
         //
-        // Корутина, а не Update с флагом: Update тикал бы каждый кадр всю жизнь
-        // виджета, а корутина заканчивается ровно тогда, когда ответ получен, и
-        // умирает вместе с объектом.
+        // A coroutine rather than Update with a flag: Update would tick every
+        // frame for the widget's whole life, while the coroutine ends exactly
+        // when the answer arrives and dies with the object.
         IEnumerator WatchReady()
         {
-            // Реальное время: меню живёт при замороженном игровом
-            // (GameplayFreeze), и WaitForSeconds там не тикает.
+            // Real time: the menu may run while game time is frozen
+            // (timeScale = 0), where WaitForSeconds does not tick.
             float deadline = Time.unscaledTime + readyTimeoutSeconds;
 
             while (true)
             {
-                // Сервис мог появиться только что — тогда же и подпишемся.
+                // The service may have just appeared — subscribe right away.
                 SubscribeAccount();
 
                 if (_account != null && (!_account.IsAvailable || _account.IsReady))
@@ -380,12 +405,11 @@ namespace LongLeap.XsollaId.UI
             Apply();
         }
 
-        // ---- вход ----
+        // ---- sign-in ----
 
-        // ВНИМАНИЕ: SignInAsync зовём СИНХРОННО, первой же строкой после
-        // проверок. Ни одного await до него быть не может — браузер посчитает
-        // всплывающее окно непрошеным и заблокирует. Рабочий образец:
-        // XsollaIdDebugPanel.
+        // WARNING: SignInAsync is called SYNCHRONOUSLY, right after the checks.
+        // There must be no await before it — the browser would treat the popup
+        // as unsolicited and block it. Working example: XsollaIdDebugPanel.
         void OnSignInClicked()
         {
             if (_account == null || !_account.IsAvailable)
@@ -403,8 +427,9 @@ namespace LongLeap.XsollaId.UI
                 return;
             }
 
-            // Окно уже открыто. По контракту повторный SignInAsync вернул бы ту
-            // же задачу и второго окна не открыл, но лишний жест гасим здесь.
+            // The window is already open. By contract a repeated SignInAsync
+            // would return the same task and not open a second window, but the
+            // extra click is swallowed here anyway.
             if (_signInTask != null && !_signInTask.IsCompleted)
                 return;
 
@@ -419,11 +444,11 @@ namespace LongLeap.XsollaId.UI
             _signInWatch = StartCoroutine(WatchSignIn(_signInTask));
         }
 
-        // Задачу дожидаемся КОРУТИНОЙ, а не async void. Причина не
-        // стилистическая: сцена перезагружается при смерти игрока, и продолжение
-        // async-метода писало бы в уже уничтоженный объект
-        // (MissingReferenceException где-то через кадр). Корутина умирает вместе
-        // с GameObject'ом.
+        // The task is awaited by a COROUTINE, not async void. Not a matter of
+        // style: the scene may be reloaded meanwhile, and an async method's
+        // continuation would write into a destroyed object
+        // (MissingReferenceException a frame later). A coroutine dies together
+        // with the GameObject.
         IEnumerator WatchSignIn(Task<XsollaIdResult> task)
         {
             while (!task.IsCompleted)
@@ -434,8 +459,8 @@ namespace LongLeap.XsollaId.UI
             if (_signInTask == task)
                 _signInTask = null;
 
-            // Из IXsollaIdAuth исключения не летят НИКОГДА, но задача, сорванная
-            // чем-то посторонним, не должна валить виджет.
+            // IXsollaIdAuth NEVER throws, but a task broken by something else
+            // must not take the widget down.
             XsollaIdResult result = task.Status == TaskStatus.RanToCompletion
                 ? task.Result
                 : new XsollaIdResult.Failure(
@@ -448,7 +473,7 @@ namespace LongLeap.XsollaId.UI
 
                 _errorKey = null;
 
-                // SignedIn мог прийти событием раньше — Resolve это учитывает.
+                // SignedIn may have arrived as an event earlier — Resolve accounts for that.
                 RefreshAvatar();
                 Apply();
                 yield break;
@@ -456,8 +481,8 @@ namespace LongLeap.XsollaId.UI
 
             var failure = (XsollaIdResult.Failure)result;
 
-            // Логируем ВСЕГДА, включая молчаливые исходы: молчание — для игрока,
-            // не для лога.
+            // ALWAYS log, including the silent outcomes: silence is for the
+            // player, not for the log.
             Debug.LogWarning(
                 $"XsollaIdAccountWidget: sign-in failed — {failure.Code}: {failure.Message}");
 
@@ -482,13 +507,13 @@ namespace LongLeap.XsollaId.UI
             Apply();
         }
 
-        // ---- раскрытие карточки ----
+        // ---- expanding the card ----
 
-        // Никакой модальности и никакого перехвата клика мимо карточки.
-        // Ловушка на весь экран свернула бы её «как принято», но виджет живёт
-        // поверх главного меню и съедал бы нажатия по нему — а этот блок
-        // модальность не трогает принципиально (см. комментарий у класса).
-        // Поэтому закрывается карточка тем же нажатием, что и открылась.
+        // No modality and no catching clicks outside the card. A full-screen
+        // trap would collapse it "the usual way", but the widget sits on top of
+        // the main menu and would eat clicks meant for it — and this block
+        // deliberately never touches modality (see the class comment). So the
+        // card closes with the same click that opened it.
         void OnExpandClicked()
         {
             if (_account == null || !_account.IsSignedIn)
@@ -499,10 +524,10 @@ namespace LongLeap.XsollaId.UI
             Apply();
         }
 
-        // ---- выход ----
+        // ---- sign-out ----
 
-        // Открываем прямо из обработчика клика: в WebGL браузер разрешает
-        // новую вкладку только как непосредственную реакцию на жест игрока.
+        // Opened straight from the click handler: in WebGL the browser allows a
+        // new tab only as a direct response to a user gesture.
         void OnOpenBackPackClicked() => Application.OpenURL(BackPackUrl);
 
         void OnLogOutClicked()
@@ -510,10 +535,10 @@ namespace LongLeap.XsollaId.UI
             if (_account == null || !_account.IsSignedIn || !_account.CanSignOut)
                 return;
 
-            // Подтверждения нет по решению: выход обратим — гостевой сейв живёт
-            // отдельной ветвью и после выхода возвращается как был, а прогресс
-            // аккаунта остаётся при аккаунте (см. SaveSwitch). Двойной выход всё
-            // равно гасим.
+            // No confirmation, by design: sign-out is reversible — the guest
+            // save lives separately and comes back unchanged after sign-out,
+            // while the account's progress stays with the account. A double
+            // sign-out is still suppressed.
             if (_signOutPending)
                 return;
 
@@ -522,10 +547,10 @@ namespace LongLeap.XsollaId.UI
             _signOutPending = true;
             Apply();
 
-            // Локальную часть выхода сервис делает всегда, даже если отзыв
-            // токена на сервере не прошёл — событие SignedOut придёт и
-            // перерисует нас. Задачу всё равно дожидаемся: если сервер отвалился,
-            // кнопка не должна остаться серой навсегда.
+            // The service always performs the local part of sign-out, even if
+            // server-side token revocation fails — SignedOut will arrive and
+            // redraw us. We still wait for the task: if the server is down, the
+            // button must not stay greyed out forever.
             StopWatch(ref _signOutWatch);
             _signOutWatch = StartCoroutine(WatchSignOut(_account.SignOutAsync()));
         }
@@ -541,11 +566,11 @@ namespace LongLeap.XsollaId.UI
             Apply();
         }
 
-        // ---- аватар ----
+        // ---- avatar ----
 
-        // Виджет сам ТЯНЕТ картинку у загрузчика: адрес живёт в сессии, а
-        // готовый спрайт — в кэше загрузчика, который переживает перезагрузку
-        // сцены.
+        // The widget PULLS the picture from the loader itself: the address lives
+        // in the session, and the ready sprite in the loader's cache, which
+        // survives scene reloads.
         void RefreshAvatar()
         {
             AvatarUrl url = _account?.Current?.Picture ?? AvatarUrl.None;
@@ -559,8 +584,8 @@ namespace LongLeap.XsollaId.UI
             if (_avatars == null || !url.IsValid)
                 return;
 
-            // Уже в памяти — берём без ожидания, чтобы не показывать заглушку
-            // лишний кадр после перезагрузки сцены.
+            // Already in memory — take it without waiting, so the placeholder
+            // does not flash for a frame after a scene reload.
             if (_avatars.TryGetCached(url, out Sprite cached))
             {
                 _avatar = cached;
@@ -575,8 +600,8 @@ namespace LongLeap.XsollaId.UI
             while (!task.IsCompleted)
                 yield return null;
 
-            // Пока качали, игрок мог выйти или войти другим — тогда результат
-            // уже не про него.
+            // While downloading, the player may have signed out or signed in as
+            // someone else — then the result is no longer about them.
             if (url != _avatarUrl)
                 yield break;
 
@@ -587,21 +612,21 @@ namespace LongLeap.XsollaId.UI
                 yield break;
             }
 
-            // Заглушка остаётся на месте: игроку об отсутствии картинки не
-            // сообщаем. А в консоль пишем ВСЕГДА — она разработчику, и именно
-            // эта строка показала, что Xsolla ID отдаёт webp, который
-            // DownloadHandlerTexture не берёт.
+            // The placeholder stays: the player is not told the picture is
+            // missing. But the console ALWAYS gets a line — it is for the
+            // developer (this is how we found out Xsolla ID serves webp, which
+            // DownloadHandlerTexture cannot decode).
             var failure = task.Result as AvatarResult.Failure;
 
             if (failure != null)
                 Debug.LogWarning($"XsollaIdAccountWidget: avatar unavailable — {failure.Code}: {failure.Message}");
         }
 
-        // ---- отрисовка ----
+        // ---- rendering ----
 
-        // ЕДИНСТВЕННОЕ место, где состояние превращается в картинку. Все
-        // события, таймеры и клики только меняют поля и зовут Apply — двух путей
-        // к экрану нет намеренно.
+        // The ONLY place where state turns into visuals. All events, timers and
+        // clicks only change fields and call Apply — there are deliberately no
+        // two paths to the screen.
         void Apply()
         {
             AccountWidgetState state = XsollaIdAccountWidgetLogic.Resolve(
@@ -644,17 +669,17 @@ namespace LongLeap.XsollaId.UI
                 expandedRoot,
                 XsollaIdAccountWidgetLogic.ShowsExpandedPanel(state, _expanded));
 
-            // Сессию не кэшируем: обновление токена подменяет Current новым
-            // объектом, и читать надо живое значение.
+            // The session is not cached: a token refresh replaces Current with a
+            // new object, so the live value must be read.
             XsollaIdSession current = _account?.Current;
 
             if (nameLabel != null)
             {
-                // Имя из профиля идёт первым, DisplayName — запасным. Клейма
-                // name у аккаунта может не быть вовсе, а пустая строка на месте
-                // имени выглядит как сломанная верстка, поэтому запасной путь
-                // обязателен: DisplayName выбран из четырёх клеймов и пустым
-                // почти не бывает.
+                // The profile name comes first, DisplayName is the fallback. The
+                // account may have no name claim at all, and an empty string in
+                // place of a name looks like broken layout, so the fallback is
+                // mandatory: DisplayName is picked from four claims and is
+                // almost never empty.
                 string shown = XsollaIdAccountWidgetLogic.ShortName(current?.FullName, nameMaxChars)
                                ?? XsollaIdAccountWidgetLogic.ShortName(current?.DisplayName, nameMaxChars);
 
@@ -663,13 +688,13 @@ namespace LongLeap.XsollaId.UI
 
             if (userNameLabel != null)
             {
-                // Shorten, а не ShortName: username не адрес почты, и резать его
-                // по '@' нечего — но длину ограничить надо, сгенерированный
-                // id<цифры> иначе растянет карточку.
+                // Shorten, not ShortName: a username is not an e-mail address and
+                // has no '@' to cut at — but its length still needs a limit, or a
+                // generated id<digits> stretches the card.
                 string user = XsollaIdAccountWidgetLogic.Shorten(current?.UserName, nameMaxChars);
 
-                // Строку прячем целиком: пустая оставила бы в карточке дырку
-                // ровно там, где игрок ожидает увидеть значение.
+                // Hide the whole line: an empty one would leave a gap exactly
+                // where the player expects a value.
                 SetActiveSafe(userNameLabel.gameObject, user != null);
 
                 if (user != null)
@@ -688,23 +713,24 @@ namespace LongLeap.XsollaId.UI
             {
                 logOutButton.interactable = !_signOutPending;
 
-                // Где входом владеет площадка, выхода нет вовсе — прячем, а не
-                // гасим, как и остальное недоступное.
+                // Where the platform owns sign-in there is no sign-out at all —
+                // hide it rather than disable it, like everything else unavailable.
                 SetActiveSafe(logOutButton.gameObject, _account == null || _account.CanSignOut);
             }
 
-            // ПРЯЧЕМ, а не гасим — как и весь виджет при недоступном входе.
+            // HIDE rather than disable — like the whole widget when sign-in is
+            // unavailable.
             //
-            // И делаем это здесь, хотя остальные кнопки видимостью не управляют
-            // вовсе: BackPackBtn лежит в префабе ребёнком КОРНЯ, рядом с тремя
-            // состояниями, а не внутри signedInRoot. Ни одно переключение
-            // состояний её не касается, а сам корень не выключается никогда —
-            // без этой строки кнопка видна всегда, включая Hidden.
+            // Done here even though the other buttons do not control visibility
+            // at all: BackPackBtn is a child of the prefab ROOT, next to the
+            // three states, not inside signedInRoot. No state switch touches it,
+            // and the root itself is never disabled — without this line the
+            // button would always be visible, including in Hidden.
             if (openBackpackUrl != null)
                 SetActiveSafe(openBackpackUrl.gameObject, _showBackPackLink);
         }
 
-        // ---- мелочи ----
+        // ---- helpers ----
 
         static void Wire(Button button, UnityEngine.Events.UnityAction handler)
         {
@@ -715,8 +741,7 @@ namespace LongLeap.XsollaId.UI
             button.onClick.AddListener(handler);
         }
 
-        // SetActive только на изменение: лишний вызов перестраивает разметку
-        // канваса.
+        // SetActive only on change: a redundant call rebuilds the canvas layout.
         static void SetActiveSafe(GameObject target, bool active)
         {
             if (target != null && target.activeSelf != active)
@@ -733,45 +758,45 @@ namespace LongLeap.XsollaId.UI
         }
 
 #if UNITY_EDITOR
-        // Превью верстки в редакторе: шестерёнка компонента → Preview: …
+        // Layout preview in the editor: component gear menu → Preview: …
         //
-        // Нужно потому, что настоящий вход в редакторе недоступен ВСЕГДА:
-        // XsollaIdWebBrowser.IsSupported живёт под #if UNITY_WEBGL &&
-        // !UNITY_EDITOR, поэтому фабрика отдаёт UnavailableXsollaIdAuth, и
-        // виджет честно прячется. Верстку «вошёл» иначе не увидеть вовсе.
+        // Needed because real sign-in is NEVER available in the editor:
+        // XsollaIdWebBrowser.IsSupported lives under #if UNITY_WEBGL &&
+        // !UNITY_EDITOR, so the factory returns UnavailableXsollaIdAuth and the
+        // widget hides itself. The "signed in" layout could not be seen otherwise.
         //
-        // Зовите на ЭКЗЕМПЛЯРЕ в сцене, а не в режиме правки префаба — иначе
-        // SetActive осядет в префабе как правка.
-        // username намеренно похож на настоящий: Xsolla ID выдаёт аккаунту без
-        // своего username сгенерированный id<цифры>, и превью должно показывать
-        // именно эту пару, а не два похожих слова.
+        // Call it on an INSTANCE in a scene, not in prefab edit mode — otherwise
+        // SetActive is saved into the prefab as an override.
+        // The username deliberately looks real: Xsolla ID gives an account
+        // without its own username a generated id<digits>, and the preview
+        // should show exactly that pair, not two similar words.
         private const string PreviewUserName = "id19334455";
-        private const string PreviewFullName = "Anton Smirnov";
+        private const string PreviewFullName = "Editor User";
 
         [ContextMenu("Preview: signed in")]
         private void PreviewSignedIn() => PreviewWith(
-            FakeXsollaIdAuth.SignedInAs("anton@mail.com", PreviewUserName, PreviewFullName));
+            FakeXsollaIdAuth.SignedInAs("user@mail.com", PreviewUserName, PreviewFullName));
 
-        // Раскрытая карточка отдельным пунктом: сама раскрытость живёт в поле, а
-        // не в сервисе, поэтому иначе её в редакторе не увидеть — нажатие по
-        // кнопке в режиме правки не идёт.
+        // The expanded card is a separate item: expansion lives in a field, not
+        // in the service, so it cannot be seen in the editor otherwise — button
+        // clicks do not work in edit mode.
         [ContextMenu("Preview: signed in (expanded)")]
         private void PreviewSignedInExpanded()
         {
-            PreviewWith(FakeXsollaIdAuth.SignedInAs("anton@mail.com", PreviewUserName, PreviewFullName));
+            PreviewWith(FakeXsollaIdAuth.SignedInAs("user@mail.com", PreviewUserName, PreviewFullName));
 
             _expanded = true;
 
             Apply();
         }
 
-        // Аккаунт без клейма name: имя должно уехать на запасной путь, а строка
-        // username — исчезнуть целиком. Именно здесь ломается верстка, если
-        // пустые значения не прятать.
+        // Account without a name claim: the name must fall back, and the
+        // username line must disappear entirely. This is exactly where the
+        // layout breaks if empty values are not hidden.
         [ContextMenu("Preview: signed in (expanded, no claims)")]
         private void PreviewSignedInExpandedBare()
         {
-            PreviewWith(FakeXsollaIdAuth.SignedInAs("anton@mail.com"));
+            PreviewWith(FakeXsollaIdAuth.SignedInAs("user@mail.com"));
 
             _expanded = true;
 

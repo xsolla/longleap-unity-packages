@@ -9,8 +9,8 @@ namespace LongLeap.XsollaId.Web.Tests
     {
         private const string Issuer = "https://id.xsolla.com";
 
-        // Ровно то, что отдаёт прод: authorize/token/userinfo под /api/oauth2/,
-        // а revoke — в корне. Именно это расхождение и лечит запасной путь.
+        // Exactly what production serves: authorize/token/userinfo under
+        // /api/oauth2/, revoke at the root. The fallback path fixes this mismatch.
         private const string AdvertisedRevoke = Issuer + "/oauth2/revoke";
         private const string AlternateRevoke = Issuer + "/api/oauth2/revoke";
 
@@ -24,8 +24,8 @@ namespace LongLeap.XsollaId.Web.Tests
                 AdvertisedRevoke));
         }
 
-        // Записывает КАЖДЫЙ адрес, а не только последний: весь смысл тестов —
-        // сколько раз и куда именно сходили.
+        // Records EVERY address, not just the last one: the whole point of these
+        // tests is how many calls were made and where.
         private sealed class FakeTransport
         {
             private readonly Queue<HttpReply> _replies = new Queue<HttpReply>();
@@ -56,11 +56,11 @@ namespace LongLeap.XsollaId.Web.Tests
         private static XsollaIdTokenClient Create(FakeTransport transport) =>
             new XsollaIdTokenClient(Config(), new FakeDiscovery(), transport.AsHttp());
 
-        // Регрессия. В браузере корневой /oauth2/revoke режется CORS'ом: без
-        // Access-Control-Allow-Origin ответ (вместе с его 405) до нас не
-        // доходит, UnityWebRequest отдаёт ConnectionError, а StatusCode
-        // остаётся нулём. Пока условие смотрело только на 404/405, запасной
-        // путь не пробовался никогда и отзыв токена тихо терялся.
+        // Regression. In the browser the root /oauth2/revoke is blocked by CORS:
+        // without Access-Control-Allow-Origin the response (and its 405) never
+        // reaches us, UnityWebRequest reports ConnectionError, and StatusCode stays
+        // zero. While the condition only checked 404/405, the fallback path was
+        // never tried and token revocation was silently lost.
         [Test]
         public async Task Revoke_FallsBackToAlternatePath_OnTransportError()
         {
@@ -96,8 +96,8 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreEqual(1, transport.Urls.Count, "a successful revoke must not be repeated");
         }
 
-        // Отказ по существу (сервер ответил и всё понял) повторять незачем:
-        // второй путь лечит только «не туда постучались».
+        // A real rejection (the server answered and understood the request) is not
+        // worth retrying: the second path only fixes "knocked on the wrong door".
         [Test]
         public async Task Revoke_DoesNotRetry_OnServerRefusal()
         {
@@ -117,19 +117,18 @@ namespace LongLeap.XsollaId.Web.Tests
 
         // ---- userinfo ----
 
-        // GetUserInfoAsync делает ровно один запрос, поэтому одного ответа в
-        // очереди достаточно.
+        // GetUserInfoAsync makes exactly one request, so one queued reply is enough.
         private static Task<UserInfoResponse> UserInfo(string json) =>
             Create(new FakeTransport(HttpReply.Ok(json))).GetUserInfoAsync("access-1");
 
         [Test]
         public async Task UserInfo_PicksUsernameOverEmail()
         {
-            UserInfoResponse info = await UserInfo("{\"sub\":\"s\",\"username\":\"anton\",\"email\":\"a@b.c\"}");
+            UserInfoResponse info = await UserInfo("{\"sub\":\"s\",\"username\":\"user\",\"email\":\"a@b.c\"}");
 
             Assert.IsTrue(info.IsSuccess, info.Message);
             Assert.AreEqual("s", info.Subject.Value);
-            Assert.AreEqual("anton", info.DisplayName);
+            Assert.AreEqual("user", info.DisplayName);
         }
 
         [Test]
@@ -141,10 +140,10 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreEqual("a@b.c", info.DisplayName);
         }
 
-        // Регрессия. Клейм, приехавший объектом, ронял приведение
-        // (string)o[key], а InvalidCastException ловил общий catch и превращал
-        // ВЕСЬ userinfo в отказ — игрок оставался без имени, хотя sub на месте
-        // и email рядом лежит читаемый.
+        // Regression. A claim that arrived as an object broke the (string)o[key]
+        // cast, and the general catch turned the InvalidCastException into a
+        // failure of the WHOLE userinfo: the player was left without a name, even
+        // though sub was present and a readable email was right there.
         [Test]
         public async Task UserInfo_NonStringNameClaim_DoesNotFailTheWholeResponse()
         {
@@ -157,8 +156,8 @@ namespace LongLeap.XsollaId.Web.Tests
         [Test]
         public async Task UserInfo_NonStringSub_Fails()
         {
-            // sub обязателен по OIDC Core: без него ответ не тот, за который
-            // себя выдаёт, и это как раз повод отказать.
+            // sub is mandatory per OIDC Core: without it the response is not what it
+            // claims to be, which is exactly a reason to reject it.
             UserInfoResponse info = await UserInfo("{\"sub\":{\"id\":1},\"email\":\"a@b.c\"}");
 
             Assert.IsFalse(info.IsSuccess);
@@ -179,15 +178,15 @@ namespace LongLeap.XsollaId.Web.Tests
         public async Task UserInfo_ReadsPictureClaim()
         {
             UserInfoResponse info = await UserInfo(
-                "{\"sub\":\"s\",\"username\":\"anton\",\"picture\":\"https://cdn.xsolla.com/a.png\"}");
+                "{\"sub\":\"s\",\"username\":\"user\",\"picture\":\"https://cdn.xsolla.com/a.png\"}");
 
             Assert.IsTrue(info.IsSuccess, info.Message);
             Assert.AreEqual("https://cdn.xsolla.com/a.png", info.Picture.Value);
         }
 
-        // САМЫЙ ВАЖНЫЙ тест этой пачки. Отдаёт ли конкретный инстанс Xsolla ID
-        // клейм picture, заранее неизвестно — вся затея обязана вырождаться в
-        // «картинки нет», не задевая вход.
+        // The MOST IMPORTANT test in this group. Whether a given Xsolla ID instance
+        // returns the picture claim is unknown in advance; the whole feature must
+        // degrade to "no picture" without affecting sign-in.
         [Test]
         public async Task UserInfo_NoPictureClaim_StillSucceeds()
         {
@@ -220,8 +219,8 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreEqual("https://cdn.xsolla.com/real.png", info.Picture.Value);
         }
 
-        // Непригодный адрес роняет ТОЛЬКО картинку. Вход из-за аватара
-        // проваливаться не имеет права.
+        // An unusable address drops ONLY the picture. Sign-in must never fail
+        // because of an avatar.
         [TestCase("http://cdn.xsolla.com/a.png")]
         [TestCase("data:image/png;base64,AAAA")]
         [TestCase("javascript:alert(1)")]
@@ -231,18 +230,18 @@ namespace LongLeap.XsollaId.Web.Tests
         public async Task UserInfo_UnusablePicture_DoesNotFailSignIn(string raw)
         {
             UserInfoResponse info = await UserInfo(
-                "{\"sub\":\"s\",\"username\":\"anton\",\"picture\":\"" + raw + "\"}");
+                "{\"sub\":\"s\",\"username\":\"user\",\"picture\":\"" + raw + "\"}");
 
             Assert.IsTrue(info.IsSuccess, raw);
             Assert.IsFalse(info.Picture.IsValid, raw);
-            Assert.AreEqual("anton", info.DisplayName);
+            Assert.AreEqual("user", info.DisplayName);
         }
 
         [Test]
         public async Task UserInfo_NonStringPictureClaim_DoesNotFailUserInfo()
         {
             UserInfoResponse info = await UserInfo(
-                "{\"sub\":\"s\",\"username\":\"anton\",\"picture\":{\"url\":\"https://cdn.xsolla.com/a.png\"}}");
+                "{\"sub\":\"s\",\"username\":\"user\",\"picture\":{\"url\":\"https://cdn.xsolla.com/a.png\"}}");
 
             Assert.IsTrue(info.IsSuccess, info.Message);
             Assert.IsFalse(info.Picture.IsValid);

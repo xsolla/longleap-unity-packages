@@ -16,18 +16,18 @@
 <p id="status">Signing in…</p>
 <script>
 (function () {
-  // Куда разрешено отдавать результат. targetOrigin у postMessage должен быть
-  // конкретным: с '*' любой сайт, сумевший открыть эту страницу, прочитал бы
-  // живой код авторизации. Сообщение с неподходящим targetOrigin браузер
-  // молча выбрасывает, поэтому просто перебираем список — лишнего не утечёт.
+  // Origins the result may be delivered to. postMessage needs a specific
+  // targetOrigin: with '*' any site able to open this page could read a live
+  // authorization code. The browser silently drops a message whose
+  // targetOrigin does not match, so we simply try each entry — nothing leaks.
   //
-  // Список нужен потому, что страница и игра НЕ обязаны быть на одном
-  // origin'е: в портальной сборке игру отдаёт GamePix, а эта страница может
-  // лежать на нашем домене. Добавлять новые адреса игры — здесь.
-  // Портальные origin'ы — оба: игру отдаёт iframe, и его адрес НЕ совпадает с
-  // адресом страницы игры (www.gamepix.com/play/<slug>). Опener у этого окна —
-  // именно iframe, поэтому нужен его origin. Лишняя запись бесплатна: браузер
-  // молча отбрасывает сообщение с неподходящим targetOrigin.
+  // A list is needed because this page and the game do NOT have to share an
+  // origin: in a portal build the portal serves the game, while this page can
+  // live on our own domain. Add new game origins here.
+  // For a portal, list both origins: the game runs in an iframe whose origin
+  // differs from the portal's game page (e.g. www.gamepix.com/play/<slug>),
+  // and the opener of this window is that iframe. An extra entry costs
+  // nothing: mismatching messages are dropped by the browser.
   var ALLOWED_GAME_ORIGINS = [
     'http://127.0.0.1:8081',
     'https://blood-red-snow.pages.dev',
@@ -42,20 +42,20 @@
     type: 'xsolla-id-auth',
     code: params.get('code') || '',
     state: params.get('state') || '',
-    // Может прийти access_denied — игрок нажал «отмена».
+    // May be access_denied — the player pressed "cancel".
     error: params.get('error') || params.get('error_description') || ''
   };
 
   var target = window.opener;
 
   if (!target) {
-    // Открыли страницу напрямую, не из игры. Кода тут нет смысла показывать.
+    // Opened directly, not from the game. No point showing the code here.
     document.getElementById('status').textContent =
       'Nothing to do here — open the game and sign in from there.';
     return;
   }
 
-  // Своему origin'у отдаём всегда: случай, когда страница и игра рядом.
+  // Always deliver to our own origin: the case where page and game sit together.
   var origins = ALLOWED_GAME_ORIGINS.slice();
   if (origins.indexOf(window.location.origin) === -1) {
     origins.push(window.location.origin);
@@ -65,12 +65,12 @@
     try {
       target.postMessage(payload, origins[i]);
     } catch (e) {
-      // Неподходящий origin — браузер и так отбросит; идём дальше.
+      // Mismatching origin — the browser drops it anyway; move on.
     }
   }
 
-  // Игра сама закроет окно, получив сообщение. Закрываемся и сами — на
-  // случай, если она этого не сделает.
+  // The game closes this window once it gets the message. Close ourselves
+  // too, in case it does not.
   window.setTimeout(function () {
     window.close();
   }, 300);

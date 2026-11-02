@@ -5,10 +5,10 @@ using LongLeap.Core.Auth;
 namespace LongLeap.XsollaId.Web
 {
     // Hands LeaderboardService the Xsolla ID account as its uid, in place of
-    // the Firebase anonymous uid it used before.
+    // the Firebase anonymous uid.
     //
     // LeaderboardService submits and looks the player up under the uid from
-    // IAuthProvider, and LeaderboardScreen finds "you" in the list by it. With
+    // IAuthProvider, and the leaderboard UI finds "you" in the list by it. With
     // XsollaLeaderboardProvider the player's own row comes back with the
     // account id as uid, so both sides must use the same value — this one.
     //

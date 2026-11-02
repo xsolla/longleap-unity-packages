@@ -5,11 +5,11 @@ using Newtonsoft.Json.Linq;
 
 namespace LongLeap.XsollaId.Web
 {
-    // Обмен кода на токены, обновление, userinfo и отзыв.
+    // Code exchange, token refresh, userinfo and revocation.
     //
-    // Ничего не бросает: сбои возвращаются кодом XsollaIdErrorCode, потому что
-    // выше эти задачи опрашивает корутина бутстрапа, а исключение в ней — это
-    // повисшая загрузка.
+    // Never throws: failures come back as an XsollaIdErrorCode, because these
+    // tasks are polled by a bootstrap coroutine upstream, and an exception
+    // there means a hung loading screen.
     public sealed class XsollaIdTokenClient : IXsollaIdTokenClient
     {
         private readonly XsollaIdConfig _config;
@@ -36,8 +36,8 @@ namespace LongLeap.XsollaId.Web
             if (oidc == null)
                 return TokenResponse.Failed(XsollaIdErrorCode.NotConfigured, "discovery unavailable.");
 
-            // Публичный клиент: секрета нет, подлинность доказывает
-            // code_verifier. client_id уезжает в теле.
+            // Public client: there is no secret, code_verifier proves
+            // authenticity. client_id goes in the body.
             var form = new Dictionary<string, string>
             {
                 ["grant_type"] = "authorization_code",
@@ -91,16 +91,17 @@ namespace LongLeap.XsollaId.Web
                 JObject o = JObject.Parse(reply.Body);
 
 #if XSOLLA_ID_DEBUG
-                // Снимок для отладочной панели: сама она до этого JSON не
-                // достаёт, а наружу из userinfo уезжает только выбранное имя.
-                // Снимаем ДО проверки sub — ответ без sub тоже надо разглядеть.
+                // Snapshot for the debug panel: it cannot reach this JSON
+                // itself, and only the chosen name leaves userinfo. Captured
+                // BEFORE the sub check — a response without sub is worth
+                // inspecting too.
                 XsollaIdDebugClaims.Capture(o);
 #endif
 
                 string sub = ReadStringClaim(o, "sub");
 
-                // sub обязателен по OIDC Core. Нет его — ответ не тот, за
-                // который себя выдаёт.
+                // sub is mandatory per OIDC Core. Without it the response is
+                // not what it claims to be.
                 if (string.IsNullOrEmpty(sub))
                 {
                     return UserInfoResponse.Failed(
@@ -110,9 +111,10 @@ namespace LongLeap.XsollaId.Web
                 string rawPicture = PickPictureUrl(o);
                 AvatarUrl picture = AvatarUrl.TryParse(rawPicture);
 
-                // Клейм пришёл, но непригоден: либо схема не https, либо там
-                // вообще не адрес. Вход это не ломает, но заметить стоит. Сам
-                // адрес в лог не печатаем — он может нести токен CDN.
+                // The claim arrived but is unusable: either the scheme is not
+                // https or it is not a URL at all. Sign-in is unaffected, but it
+                // is worth noticing. The URL itself is not logged — it may
+                // carry a CDN token.
                 if (!picture.IsValid && !string.IsNullOrEmpty(rawPicture))
                     XsollaIdHttp.LogWarning("userinfo returned a picture claim that is not an absolute https url.");
 
@@ -121,8 +123,9 @@ namespace LongLeap.XsollaId.Web
                     PickDisplayName(o),
                     picture,
 
-                    // Те же два клейма, что и в PickDisplayName, но БЕЗ выбора:
-                    // раскрытой карточке нужны обе величины по отдельности.
+                    // The same two claims as in PickDisplayName, but WITHOUT
+                    // picking: the expanded account card needs both values
+                    // separately.
                     ReadStringClaim(o, "username"),
                     ReadStringClaim(o, "name"));
             }
@@ -151,18 +154,18 @@ namespace LongLeap.XsollaId.Web
             if (reply.IsSuccess)
                 return;
 
-            // Известная беда: discovery объявляет revocation_endpoint в корне
-            // (/oauth2/revoke), а обработчик живёт под /api/oauth2/ — и корень
-            // отдаёт 405. Пробуем второй путь ровно один раз, вместо того
-            // чтобы навсегда терять отзыв токена.
+            // Known issue: discovery declares revocation_endpoint at the root
+            // (/oauth2/revoke), while the handler lives under /api/oauth2/ — and
+            // the root returns 405. Try the other path exactly once instead of
+            // losing revocation for good.
             //
-            // Транспортную ошибку сюда пускаем ОБЯЗАТЕЛЬНО. В браузере корень
-            // режется ещё и CORS'ом: на /oauth2/revoke нет
-            // Access-Control-Allow-Origin, поэтому ответ (вместе с его 405) до
-            // нас не доходит вовсе — UnityWebRequest видит ConnectionError, а
-            // StatusCode остаётся нулём. Проверка только на 404/405 работала на
-            // desktop и никогда не срабатывала на WebGL: отзыв тихо терялся.
-            // У /api/oauth2/revoke CORS настроен, так что второй путь спасает.
+            // A transport error MUST trigger the retry too. In the browser the
+            // root is also blocked by CORS: /oauth2/revoke has no
+            // Access-Control-Allow-Origin, so the response (with its 405) never
+            // reaches us — UnityWebRequest sees ConnectionError and StatusCode
+            // stays 0. A 404/405-only check would work on desktop and never on
+            // WebGL. /api/oauth2/revoke has CORS configured, so the second path
+            // works.
             string alternate = SwapApiPrefix(oidc.RevocationEndpoint);
 
             if (alternate != null &&
@@ -182,7 +185,7 @@ namespace LongLeap.XsollaId.Web
             XsollaIdHttp.LogWarning(Describe(reply, "token revocation"));
         }
 
-        // /oauth2/... ↔ /api/oauth2/... Возвращает null, если ни то, ни другое.
+        // /oauth2/... ↔ /api/oauth2/... Returns null if the URL has neither.
         public static string SwapApiPrefix(string url)
         {
             if (string.IsNullOrEmpty(url))
@@ -216,9 +219,9 @@ namespace LongLeap.XsollaId.Web
 
                 string refresh = (string)o["refresh_token"];
 
-                // expires_in — секунды от «сейчас». Переводим в абсолютное
-                // время сразу: относительное значение бессмысленно после
-                // сохранения на диск.
+                // expires_in is seconds from "now". Convert to absolute time
+                // immediately: a relative value is meaningless once saved to
+                // disk.
                 int expiresIn = (int?)o["expires_in"] ?? 0;
                 long expiresAt = _nowUnixMs() + Math.Max(0, expiresIn) * 1000L;
 
@@ -235,14 +238,15 @@ namespace LongLeap.XsollaId.Web
             }
         }
 
-        // Отдельно транспорт, отдельно отказ сервера: UI на них реагирует
-        // по-разному, а истёкший refresh token — вообще штатный исход.
+        // Transport failures and server rejections are kept apart: the UI
+        // reacts to them differently, and an expired refresh token is a normal
+        // outcome, not an error.
         private static XsollaIdErrorCode Classify(HttpReply reply)
         {
             if (reply.IsTransportError)
                 return XsollaIdErrorCode.Network;
 
-            // 400 invalid_grant на refresh_token означает «сессии больше нет».
+            // 400 invalid_grant on refresh_token means "the session is gone".
             if (reply.StatusCode == 400 && Contains(reply.Body, "invalid_grant"))
                 return XsollaIdErrorCode.SessionExpired;
 
@@ -260,7 +264,8 @@ namespace LongLeap.XsollaId.Web
                 ? $"{what}: {reply.TransportError}"
                 : $"{what}: server responded {reply.StatusCode} ({ShortBody(reply.Body)})";
 
-        // Тело ошибки может содержать описание — но не весь JSON в лог.
+        // The error body may contain a description — but not the whole JSON in
+        // the log.
         private static string ShortBody(string body)
         {
             if (string.IsNullOrEmpty(body))
@@ -269,21 +274,20 @@ namespace LongLeap.XsollaId.Web
             return body.Length <= 200 ? body : body.Substring(0, 200) + "…";
         }
 
-        // Клейм читаем строго по типу.
+        // Claims are read strictly by type.
         //
-        // (string)o[key] на клейме, который приехал объектом или массивом,
-        // бросает InvalidCastException — а его ловит общий catch в
-        // GetUserInfoAsync и превращает ВЕСЬ userinfo в отказ. Из-за одного
-        // мусорного поля игрок остался бы без имени, хотя sub на месте.
+        // (string)o[key] on a claim that arrived as an object or array throws
+        // InvalidCastException — which the general catch in GetUserInfoAsync
+        // turns into a failure of the WHOLE userinfo. One junk field would
+        // leave the player without a name even though sub is present.
         private static string ReadStringClaim(JObject o, string key) =>
             o[key] is JValue value && value.Type == JTokenType.String ? (string)value : null;
 
-        // Имя для UI: первый непустой из клеймов.
+        // Name for the UI: the first non-empty of these claims.
         //
-        // preferred_username в claims_supported у Xsolla ID НЕТ — оставлен на
-        // случай другого инстанса, стоит дёшево. email идёт последним: это
-        // запасной вариант, и показывать его целиком нельзя (см.
-        // DisplayNameFormat).
+        // Xsolla ID does NOT list preferred_username in claims_supported — it
+        // is kept for other instances, at no cost. email comes last: it is a
+        // fallback and must not be shown in full (see DisplayNameFormat).
         private static string PickDisplayName(JObject o)
         {
             foreach (string key in new[] { "username", "preferred_username", "name", "email" })
@@ -297,16 +301,16 @@ namespace LongLeap.XsollaId.Web
             return null;
         }
 
-        // Адрес картинки профиля.
+        // Profile picture URL.
         //
-        // picture — стандартный клейм OIDC Core, входит в scope profile, который
-        // мы и так запрашиваем (XsollaIdConfig.DefaultScopes), и объявлен в
-        // claims_supported у прода. Остальные три имени — подстраховка на другие
-        // инстансы, стоят дёшево.
+        // picture is a standard OIDC Core claim, part of the profile scope we
+        // already request (XsollaIdConfig.DefaultScopes), and listed in
+        // production's claims_supported. The other three names are a fallback
+        // for other instances, at no cost.
         //
-        // avatar без суффикса идёт ПОСЛЕДНИМ намеренно: у части провайдеров под
-        // этим именем лежит не адрес, а идентификатор пресета. Проверку схемы
-        // такое не пройдёт, но пусть сначала попробуются honest-адреса.
+        // Plain avatar goes LAST on purpose: some providers put a preset id
+        // rather than a URL under that name. It would fail the scheme check
+        // anyway, but real URLs should be tried first.
         public static string PickPictureUrl(JObject o)
         {
             foreach (string key in new[] { "picture", "picture_url", "avatar_url", "avatar" })

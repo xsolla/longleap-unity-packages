@@ -9,21 +9,21 @@ namespace LongLeap.XsollaId
         Production
     }
 
-    // Регистрация OAuth-клиента для одной среды.
+    // OAuth client registration for one environment.
     //
-    // Stage и Production — РАЗНЫЕ регистрации: свой clientId, свой список
-    // redirect uri. Поэтому храним их раздельно, а не подставляем один
-    // clientId к разным хостам.
+    // Stage and Production are DIFFERENT registrations, each with its own
+    // clientId and list of redirect uris. That is why they are stored
+    // separately instead of pairing one clientId with different hosts.
     public sealed class XsollaIdClientRegistration
     {
-        // Например https://id.xsolla.com — без завершающего слэша.
+        // E.g. https://id.xsolla.com — without a trailing slash.
         public string IssuerBaseUrl { get; }
 
-        // Публичный клиент (секрета в сборке нет и быть не может).
+        // Public client (there is no secret in the build, and there cannot be).
         public string ClientId { get; }
 
-        // Должен СИМВОЛ В СИМВОЛ совпадать с зарегистрированным: протокол,
-        // хост, порт, путь. Несовпадение — отказ на стороне сервера.
+        // Must match the registered value CHARACTER FOR CHARACTER: scheme,
+        // host, port, path. Any mismatch is rejected by the server.
         public string RedirectUri { get; }
 
         public XsollaIdClientRegistration(string issuerBaseUrl, string clientId, string redirectUri)
@@ -46,21 +46,19 @@ namespace LongLeap.XsollaId
         public const string DefaultStageIssuer = "https://id-staging.xsolla.com";
         public const string DefaultProductionIssuer = "https://id.xsolla.com";
 
-        // openid обязателен; profile/email нужны, чтобы в UI было что
-        // показать кроме непрозрачного sub.
+        // openid is required; profile/email are needed so the UI has something
+        // to show besides the opaque sub.
         //
-        // offline — то, ради чего игроку не приходится входить заново после
-        // перезагрузки страницы: именно этот scope заставляет выдать refresh
-        // token.
+        // offline is what saves the player from signing in again after a page
+        // reload: this scope is what makes the server issue a refresh token.
         //
-        // ВНИМАНИЕ: здесь НЕ offline_access. Discovery прода объявляет оба
-        // (scopes_supported: offline_access, offline, openid, profile, email,
-        // phone), но дизайн-док Xsolla ID «Backpack Cat Integration with XPWA»
-        // (Confluence 24612667695, сверено с живым клиентом SquadBlast в
-        // админке Xsolla ID 18.05.2026) прямо говорит: на этом инстансе Hydra
-        // refresh token выдаёт именно offline. Более того, если наш клиент
-        // зарегистрирован на offline, запрос offline_access может отлететь как
-        // invalid_scope — то есть сломать вход целиком, а не только refresh.
+        // NOTE: this is NOT offline_access. Production discovery advertises
+        // both (scopes_supported: offline_access, offline, openid, profile,
+        // email, phone), but per the Xsolla ID integration design doc, this
+        // Hydra instance issues refresh tokens for offline specifically.
+        // Moreover, if the client is registered for offline, requesting
+        // offline_access may be rejected as invalid_scope — breaking sign-in
+        // entirely, not just refresh.
         public const string DefaultScopes = "openid offline email profile";
 
         public XsollaIdEnvironment Environment { get; }
@@ -68,12 +66,12 @@ namespace LongLeap.XsollaId
         public XsollaIdClientRegistration Production { get; }
         public string Scopes { get; }
 
-        // Origin'ы, с которых вход имеет смысл открывать.
+        // Origins from which it makes sense to open sign-in.
         //
-        // Отдельно от redirect uri, потому что совпадать они не обязаны: в
-        // портальной сборке игру отдаёт GamePix со своего origin'а, а
-        // страница обратного вызова может лежать на нашем домене. Пустой
-        // список = не проверяем.
+        // Separate from the redirect uri because the two need not match: in a
+        // portal build the portal (e.g. GamePix) serves the game from its own
+        // origin, while the callback page may live on our domain. An empty list
+        // means no check.
         public IReadOnlyList<string> AllowedGameOrigins { get; }
 
         public XsollaIdConfig(
@@ -95,19 +93,20 @@ namespace LongLeap.XsollaId
 
         public bool IsValid => Active != null && Active.IsValid;
 
-        // Копия с подменённым redirect_uri у АКТИВНОЙ регистрации.
+        // A copy with the redirect_uri of the ACTIVE registration replaced.
         //
-        // Нужна потому, что адрес страницы обратного вызова у сборок, которые
-        // отдаём мы сами, вычисляется в рантайме (см. XsollaIdRedirect), а не
-        // лежит в ассете: одно поле на три хоста означало бы правку ассета
-        // перед каждой сборкой.
+        // Needed because for self-hosted builds the callback page address is
+        // computed at runtime (see XsollaIdRedirect) rather than stored in the
+        // asset: a single field for several hosts would mean editing the asset
+        // before every build.
         //
-        // Копия, а не запись на месте: конфиг неизменяем, и его читают из двух
-        // мест (адрес авторизации и обмен кода) — подмена под ними разъехалась
-        // бы с тем, что уже ушло на сервер.
+        // A copy rather than an in-place write: the config is immutable and is
+        // read from two places (the authorize url and the code exchange) — a
+        // replacement underneath them could diverge from what was already sent
+        // to the server.
         //
-        // Пустой redirectUri возвращает конфиг как есть: «вычислить не удалось»
-        // означает «оставьте значение из ассета», а не «сотрите его».
+        // An empty redirectUri returns the config unchanged: "could not compute"
+        // means "keep the asset value", not "erase it".
         public XsollaIdConfig WithRedirectUri(string redirectUri)
         {
             if (string.IsNullOrEmpty(redirectUri) || Active == null)

@@ -7,8 +7,8 @@ using UnityEngine.Networking;
 
 namespace LongLeap.XsollaId.Web
 {
-    // Что отправляем. Отдельная структура, а не длинный список аргументов:
-    // так подделка в тестах подменяет один делегат и видит всё сразу.
+    // What is being sent. A struct rather than a long argument list: a test
+    // fake replaces a single delegate and sees everything at once.
     public readonly struct HttpCall
     {
         public string Method { get; }
@@ -33,9 +33,10 @@ namespace LongLeap.XsollaId.Web
         }
     }
 
-    // Ответ: либо код состояния с телом, либо транспортная ошибка (запрос
-    // вообще не дошёл). Различать важно: 400 от сервера и обрыв сети ведут к
-    // разным кодам XsollaIdErrorCode и к разному поведению UI.
+    // Reply: either a status code with a body, or a transport error (the
+    // request never got through). The distinction matters: a 400 from the
+    // server and a dropped connection map to different XsollaIdErrorCode values
+    // and different UI behaviour.
     public readonly struct HttpReply
     {
         public long StatusCode { get; }
@@ -57,11 +58,11 @@ namespace LongLeap.XsollaId.Web
         public static HttpReply Status(long code, string body = null) => new HttpReply(code, body, null);
     }
 
-    // Транспорт для запросов к Xsolla ID. Форма и повадки скопированы с
-    // FirebaseHttpClient, чтобы в проекте был один способ ходить по сети:
-    // UnityWebRequest, ожидание через `while (!op.isDone) await Task.Yield()`
-    // (единственный безопасный вариант под WebGL — потоков там нет),
-    // request.timeout = 10 и вычищенные от секретов сообщения об ошибках.
+    // Transport for Xsolla ID requests. Shape and behaviour mirror
+    // FirebaseHttpClient so there is one way of doing network calls:
+    // UnityWebRequest, waiting via `while (!op.isDone) await Task.Yield()`
+    // (the only safe option under WebGL, which has no threads),
+    // request.timeout = 10, and error messages scrubbed of secrets.
     public sealed class XsollaIdHttp
     {
         private const int TimeoutSeconds = 10;
@@ -128,15 +129,15 @@ namespace LongLeap.XsollaId.Web
             if (request.result == UnityWebRequest.Result.ConnectionError ||
                 request.result == UnityWebRequest.Result.DataProcessingError)
             {
-                // Сети не хватило — кода состояния нет вовсе.
+                // The network failed — there is no status code at all.
                 return HttpReply.Transport($"{call.Method} {Sanitize(call.Url)} — {request.error}");
             }
 
             return new HttpReply(request.responseCode, request.downloadHandler?.text, null);
         }
 
-        // Секретов в url'ах Xsolla ID нет, но code и state в логах ни к чему:
-        // code одноразовый, а state — часть защиты от CSRF.
+        // Xsolla ID URLs carry no secrets, but code and state have no place in
+        // logs: code is single-use, and state is part of the CSRF protection.
         public static string Sanitize(string url)
         {
             if (string.IsNullOrEmpty(url))

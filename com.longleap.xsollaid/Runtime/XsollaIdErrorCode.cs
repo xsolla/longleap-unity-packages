@@ -1,45 +1,49 @@
 namespace LongLeap.XsollaId
 {
-    // Причина неудачи входа. Код нужен отдельно от текста, потому что UI
-    // реагирует на разные исходы противоположно: закрытое игроком окно — не
-    // ошибка и показывать нечего, а сетевой сбой требует кнопки «повторить».
+    // Reason a sign-in failed. The code is separate from the text because the
+    // UI reacts to different outcomes in opposite ways: a window closed by the
+    // player is not an error and shows nothing, while a network failure needs
+    // a "retry" button.
     //
-    // Этим контракт отличается от LongLeap.Core.Auth.AuthResult.Failure, где
-    // есть только строка: там результат никто не показывает игроку.
+    // This is where the contract differs from LongLeap.Core.Auth.AuthResult.Failure,
+    // which has only a string: that result is never shown to the player.
     public enum XsollaIdErrorCode
     {
-        // Игрок закрыл окно входа или нажал «отмена». Молчим.
+        // The player closed the sign-in window or pressed "cancel". Stay silent.
         Cancelled,
 
-        // Браузер заблокировал всплывающее окно. Нужна подсказка игроку.
+        // The browser blocked the popup window. The player needs a hint.
         PopupBlocked,
 
-        // Вход недоступен на этой сборке (портал) или выключен дефайном.
+        // Sign-in is not available in this build (portal) or is disabled by the
+        // define.
         Unavailable,
 
-        // Нет конфига: не задан clientId, issuer или redirect uri.
+        // No config: clientId, issuer or redirect uri is not set.
         NotConfigured,
 
-        // Сеть недоступна, DNS, обрыв соединения.
+        // Network unavailable, DNS, connection dropped.
         Network,
 
-        // Ответа не дождались за отведённое время.
+        // No response within the allotted time.
         Timeout,
 
-        // Параметр state не совпал с ожидаемым — возможная CSRF-атака либо
-        // протухший запрос. Обмен кода на токен в этом случае НЕ делаем.
+        // The state parameter did not match the expected one — a possible CSRF
+        // attack or a stale request. The code is NOT exchanged for a token in
+        // this case.
         InvalidState,
 
-        // Сервер отверг обмен кода на токен либо вернул мусор.
+        // The server rejected the code exchange or returned garbage.
         TokenExchangeFailed,
 
-        // Сессии нет или refresh token уже не принимают (истёк, отозван).
-        // Это штатный исход через 30 суток, а не сбой: молча уходим в гости.
+        // There is no session, or the refresh token is no longer accepted
+        // (expired, revoked). A normal outcome after 30 days, not a failure:
+        // quietly fall back to guest.
         SessionExpired,
 
-        // Картинку профиля получить не удалось: адреса нет, сервер отдал не
-        // 2xx, либо в ответе оказалась не картинка. Вход это НЕ затрагивает —
-        // UI просто показывает заглушку.
+        // The profile picture could not be obtained: no url, the server returned
+        // non-2xx, or the response was not an image. Sign-in is NOT affected —
+        // the UI just shows a placeholder.
         PictureUnavailable
     }
 }

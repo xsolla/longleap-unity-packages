@@ -9,27 +9,27 @@ using UnityEngine;
 
 namespace LongLeap.XsollaId.Editor
 {
-    // Кладёт xid-callback.html в корень собранной игры.
+    // Copies xid-callback.html into the root of the built game.
     //
-    // Страница обязана быть доступна РОВНО по зарегистрированному адресу:
-    // сервер сверяет redirect_uri посимвольно. Отсюда корень сборки —
-    // http://127.0.0.1:8081/xid-callback.html локально (serve.py отдаёт
-    // Builds/WebGL) и <домен>/xid-callback.html в проде.
+    // The page must be reachable at EXACTLY the registered address: the server
+    // compares redirect_uri character by character. Hence the build root —
+    // e.g. http://127.0.0.1:8081/xid-callback.html on the local dev server and
+    // <domain>/xid-callback.html in production.
     //
-    // Почему постпроцесс, а не файл в Assets: в Assets он попал бы в сборку
-    // как ассет (и не оказался бы отдельным файлом рядом с index.html), а
-    // менять шаблон WebGL нельзя — плагин GamePix перезаписывает настройки
-    // шаблона на каждый билд. Тот же приём и по той же причине использует
-    // GamePixIndexPostprocessor.
+    // Why a postprocessor rather than a file in Assets: in Assets it would be
+    // packed into the build as an asset (not a separate file next to
+    // index.html), and the WebGL template cannot be changed because the
+    // GamePix plugin overwrites the template settings on every build. The
+    // GamePix package's index postprocessor uses the same approach for the
+    // same reason.
     //
-    // Дефайном XSOLLA_ID не огорожено намеренно: класс должен компилироваться
-    // всегда, чтобы предупредить, если страницу забыли, и убрать её, когда
-    // вход выключен.
+    // Deliberately not gated by XSOLLA_ID: the class must always compile so it
+    // can warn when the page is missing and remove it when sign-in is off.
     public sealed class XsollaIdCallbackPagePostprocessor : IPostprocessBuildWithReport
     {
         private const string FileName = "xid-callback.html";
 
-        // После GamePix (0), чтобы не мешать его правкам index.html.
+        // After GamePix (0), so it does not interfere with its index.html edits.
         public int callbackOrder => 100;
 
         public void OnPostprocessBuild(BuildReport report)
@@ -41,7 +41,7 @@ namespace LongLeap.XsollaId.Editor
 
             if (!IsXsollaIdEnabled())
             {
-                // Вход выключен — страница в сборке только сбивает с толку.
+                // Sign-in is off — the page in the build would only confuse.
                 if (File.Exists(destination))
                 {
                     File.Delete(destination);
@@ -74,8 +74,8 @@ namespace LongLeap.XsollaId.Editor
                    defines.Split(';').Any(d => d.Trim() == "XSOLLA_ID");
         }
 
-        // Ищем файл рядом с исходником этого класса: путь пакета может быть
-        // и Packages/, и Library/PackageCache/, так что зашивать его нельзя.
+        // Look for the file next to this class's source: the package may live in
+        // Packages/ or in Library/PackageCache/, so the path cannot be hardcoded.
         private static string FindSourceFile()
         {
             string assemblyName = typeof(XsollaIdCallbackPagePostprocessor).Assembly.GetName().Name;

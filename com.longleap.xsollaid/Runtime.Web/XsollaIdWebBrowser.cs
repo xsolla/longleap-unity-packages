@@ -7,21 +7,21 @@ using UnityEngine;
 
 namespace LongLeap.XsollaId.Web
 {
-    // Открывает окно входа и принимает ответ из JS.
+    // Opens the sign-in window and receives the answer from JS.
     //
-    // Мост односторонний в обе стороны по отдельности: C# → JS через
-    // [DllImport("__Internal")], JS → C# через SendMessage в объект-приёмник.
-    // Такой же приём использовал вендорский SDK Xsolla; своего повода
-    // изобретать другой нет.
+    // The bridge is one-way in each direction: C# → JS via
+    // [DllImport("__Internal")], JS → C# via SendMessage to a receiver object.
+    // The vendor Xsolla SDK uses the same approach; there is no reason to
+    // invent another.
     public sealed class XsollaIdWebBrowser : IXsollaIdBrowser
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
         [DllImport("__Internal")]
         private static extern void OpenXsollaIdPopup(string url);
 #else
-        // В редакторе и на других платформах окна нет: IsSupported вернёт
-        // false и до вызова дело не дойдёт. Заглушка нужна только для
-        // компиляции.
+        // In the editor and on other platforms there is no window: IsSupported
+        // returns false and the call is never reached. The stub exists only so
+        // the code compiles.
         private static void OpenXsollaIdPopup(string url) =>
             throw new NotSupportedException("XsollaIdWebBrowser: the popup window exists only in a WebGL build.");
 #endif
@@ -44,9 +44,9 @@ namespace LongLeap.XsollaId.Web
 
             XsollaIdCallbackReceiver receiver = XsollaIdCallbackReceiver.Instance;
 
-            // Один вход за раз. XsollaIdAuth уже отдаёт ту же задачу на
-            // повторный клик, но приёмник один на всю игру, и второй
-            // одновременный вход перепутал бы ответы.
+            // One sign-in at a time. XsollaIdAuth already returns the same task
+            // on a repeated click, but there is one receiver for the whole game,
+            // and a second concurrent sign-in would mix up the answers.
             if (!receiver.TryBegin(out TaskCompletionSource<BrowserAuthResult> completion))
             {
                 return Task.FromResult(BrowserAuthResult.Failed(
@@ -57,7 +57,8 @@ namespace LongLeap.XsollaId.Web
 
             try
             {
-                // Синхронно и последним действием: жест игрока ещё «горячий».
+                // Synchronously and as the last action: the player's gesture is
+                // still "hot".
                 OpenXsollaIdPopup(authorizeUrl);
             }
             catch (Exception ex)
@@ -70,12 +71,11 @@ namespace LongLeap.XsollaId.Web
         }
     }
 
-    // Приёмник сообщений из JS. Живёт в DontDestroyOnLoad, потому что окно
-    // входа переживает перезагрузку сцены (рестарт после смерти), а ответ
-    // должен дойти в любом случае.
+    // Receives messages from JS. Lives in DontDestroyOnLoad because the sign-in
+    // window can outlive a scene reload, and the answer must arrive either way.
     internal sealed class XsollaIdCallbackReceiver : MonoBehaviour
     {
-        // Имя объекта, по которому SendMessage из XsollaId.jslib его находит.
+        // Object name SendMessage in XsollaId.jslib uses to find it.
         internal const string ReceiverName = "XsollaIdCallbacks";
 
         private TaskCompletionSource<BrowserAuthResult> _completion;
@@ -89,8 +89,8 @@ namespace LongLeap.XsollaId.Web
             {
                 if (_instance == null)
                 {
-                    // Имя фиксированное: по нему SendMessage из jslib находит
-                    // объект. Менять только вместе с XsollaId.jslib.
+                    // Fixed name: SendMessage in the jslib finds the object by
+                    // it. Change only together with XsollaId.jslib.
                     _instance = new GameObject(ReceiverName).AddComponent<XsollaIdCallbackReceiver>();
                 }
 
@@ -108,8 +108,8 @@ namespace LongLeap.XsollaId.Web
                 return false;
             }
 
-            // RunContinuationsAsynchronously: продолжение не должно
-            // выполняться внутри кадра SendMessage.
+            // RunContinuationsAsynchronously: the continuation must not run
+            // inside the SendMessage frame.
             _completion = new TaskCompletionSource<BrowserAuthResult>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -141,7 +141,7 @@ namespace LongLeap.XsollaId.Web
                 XsollaIdErrorCode.Timeout, "the sign-in window did not respond in time."));
         }
 
-        // --- вызывается из XsollaId.jslib, имена не менять ---
+        // --- called from XsollaId.jslib, do not rename ---
 
         public void OnAuthCallback(string payload)
         {
@@ -153,7 +153,7 @@ namespace LongLeap.XsollaId.Web
 
                 if (!string.IsNullOrEmpty(error))
                 {
-                    // access_denied — игрок нажал «отмена» на стороне Xsolla.
+                    // access_denied — the player pressed "cancel" on the Xsolla side.
                     bool denied = error.IndexOf("access_denied", StringComparison.OrdinalIgnoreCase) >= 0;
 
                     Complete(BrowserAuthResult.Failed(
@@ -182,8 +182,8 @@ namespace LongLeap.XsollaId.Web
         {
             _timeout?.Cancel();
 
-            // TrySetResult, а не SetResult: приехать может и ответ, и закрытие
-            // окна — кто первый, тот и прав.
+            // TrySetResult, not SetResult: both the answer and the window
+            // closing can arrive — whichever comes first wins.
             _completion?.TrySetResult(result);
         }
     }

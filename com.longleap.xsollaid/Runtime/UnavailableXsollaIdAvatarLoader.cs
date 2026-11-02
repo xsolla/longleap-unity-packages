@@ -3,10 +3,10 @@ using UnityEngine;
 
 namespace LongLeap.XsollaId
 {
-    // Заглушка загрузчика на случай, когда картинок нет: портальная сборка или
-    // выключенный дефайн XSOLLA_ID.
+    // Stub loader for when pictures are unavailable: a portal build or the
+    // XSOLLA_ID define turned off.
     //
-    // Парная к UnavailableXsollaIdAuth и по той же причине.
+    // Counterpart of UnavailableXsollaIdAuth, for the same reason.
     public sealed class UnavailableXsollaIdAvatarLoader : IXsollaIdAvatarLoader
     {
         public bool IsAvailable => false;

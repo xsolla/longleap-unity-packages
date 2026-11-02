@@ -2,13 +2,14 @@ using System.Threading.Tasks;
 
 namespace LongLeap.XsollaId
 {
-    // Адреса эндпоинтов авторизационного сервера.
+    // Endpoint addresses of the authorization server.
     //
-    // Пути НЕ зашиты в код намеренно. У Xsolla ID эндпоинты Hydra сейчас
-    // отдаются под /api/oauth2/*, а документ discovery объявляет их в корне
-    // (/oauth2/*); принятое к реализации решение переносит всё в корень,
-    // какое-то время держит оба пути и затем /api/oauth2/* выключает.
-    // Зашить сегодняшний путь — значит гарантированно сломаться на выключении.
+    // The paths are deliberately NOT hardcoded. Xsolla ID currently serves its
+    // Hydra endpoints under /api/oauth2/*, while the discovery document
+    // declares them at the root (/oauth2/*); the planned migration moves
+    // everything to the root, keeps both paths for a while and then turns
+    // /api/oauth2/* off. Hardcoding today's path guarantees breakage at that
+    // point.
     public sealed class OidcConfiguration
     {
         public string Issuer { get; }
@@ -31,22 +32,22 @@ namespace LongLeap.XsollaId
             RevocationEndpoint = revocationEndpoint;
         }
 
-        // Минимум, без которого вход невозможен. userinfo и revoke
-        // необязательны: без первого просто не будет имени в UI, без второго
-        // выход останется локальным.
+        // The minimum required for sign-in. userinfo and revoke are optional:
+        // without the first the UI has no name to show, without the second
+        // sign-out stays local only.
         public bool IsUsable =>
             !string.IsNullOrEmpty(AuthorizationEndpoint) && !string.IsNullOrEmpty(TokenEndpoint);
     }
 
-    // Загрузка /.well-known/openid-configuration.
+    // Loads /.well-known/openid-configuration.
     //
-    // Результат обязателен к КЭШИРОВАНИЮ и к загрузке заранее, на старте: если
-    // сходить за ним между кликом игрока и window.open, окно заблокирует
-    // браузер — жест пользователя к тому моменту уже «протухнет».
+    // The result MUST be cached and loaded ahead of time, at startup: fetching
+    // it between the player's click and window.open gets the window blocked by
+    // the browser — the user gesture has expired by then.
     //
-    // Документ у Xsolla ID дважды расходился с реальностью в проде
-    // (end_session_endpoint отдавал страницу логина, revocation_endpoint —
-    // 405), поэтому пришедшее надо проверять, а не принимать на веру.
+    // The Xsolla ID document has twice disagreed with reality in production
+    // (end_session_endpoint served the login page, revocation_endpoint returned
+    // 405), so its contents must be validated, not taken on trust.
     public interface IOidcDiscovery
     {
         Task<OidcConfiguration> GetAsync();

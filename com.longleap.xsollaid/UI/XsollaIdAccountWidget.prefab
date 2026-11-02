@@ -68,8 +68,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: Log out
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: c16fdcf5d26d82649a4cb446109254f3, type: 2}
-  m_sharedMaterial: {fileID: -6643788631889042875, guid: c16fdcf5d26d82649a4cb446109254f3, type: 2}
+  m_fontAsset: {fileID: 0}
+  m_sharedMaterial: {fileID: 0}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -961,8 +961,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: id19334455
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: c16fdcf5d26d82649a4cb446109254f3, type: 2}
-  m_sharedMaterial: {fileID: -6643788631889042875, guid: c16fdcf5d26d82649a4cb446109254f3, type: 2}
+  m_fontAsset: {fileID: 0}
+  m_sharedMaterial: {fileID: 0}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -1099,8 +1099,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "Checking account\u2026"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: c16fdcf5d26d82649a4cb446109254f3, type: 2}
-  m_sharedMaterial: {fileID: -6643788631889042875, guid: c16fdcf5d26d82649a4cb446109254f3, type: 2}
+  m_fontAsset: {fileID: 0}
+  m_sharedMaterial: {fileID: 0}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -1622,8 +1622,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: 
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: c16fdcf5d26d82649a4cb446109254f3, type: 2}
-  m_sharedMaterial: {fileID: -6643788631889042875, guid: c16fdcf5d26d82649a4cb446109254f3, type: 2}
+  m_fontAsset: {fileID: 0}
+  m_sharedMaterial: {fileID: 0}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -1794,8 +1794,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: Sign in
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: c16fdcf5d26d82649a4cb446109254f3, type: 2}
-  m_sharedMaterial: {fileID: -6643788631889042875, guid: c16fdcf5d26d82649a4cb446109254f3, type: 2}
+  m_fontAsset: {fileID: 0}
+  m_sharedMaterial: {fileID: 0}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -2401,8 +2401,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: Player
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: c16fdcf5d26d82649a4cb446109254f3, type: 2}
-  m_sharedMaterial: {fileID: -6643788631889042875, guid: c16fdcf5d26d82649a4cb446109254f3, type: 2}
+  m_fontAsset: {fileID: 0}
+  m_sharedMaterial: {fileID: 0}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []

@@ -30,8 +30,8 @@ namespace LongLeap.XsollaId.Tests
             picture: AvatarUrl.TryParse("https://cdn.xsolla.com/a.png"),
             profileFetched: true);
 
-        // Ровно тот JSON, который пишет отгруженная игрокам версия: без ключей
-        // picture и profileFetched.
+        // Exactly the JSON written by the version already shipped to players:
+        // no picture and profileFetched keys.
         private const string OldBlob =
             "{\"subject\":\"sub-1\",\"displayName\":\"Player One\",\"access\":\"access-1\"," +
             "\"refresh\":\"refresh-1\",\"expiresAtUnixMs\":1700000000000}";
@@ -43,12 +43,11 @@ namespace LongLeap.XsollaId.Tests
             picture: AvatarUrl.None,
             profileFetched: true,
             userName: "id19334455",
-            fullName: "Anton Smirnov");
+            fullName: "Editor User");
 
-        // Раскрытая карточка показывает username и имя из профиля по отдельности,
-        // поэтому оба обязаны переживать перезагрузку страницы: userinfo после
-        // восстановления сессии НЕ случается (ProfileFetched), и взять их
-        // заново будет негде.
+        // The expanded account card shows username and the profile name separately,
+        // so both must survive a page reload: userinfo is NOT called after a session
+        // restore (ProfileFetched), so there would be nowhere to get them again.
         [Test]
         public void SaveThenLoad_RoundTripsUserNameAndFullName()
         {
@@ -57,12 +56,12 @@ namespace LongLeap.XsollaId.Tests
             XsollaIdSession loaded = _store.Load();
 
             Assert.AreEqual("id19334455", loaded.UserName);
-            Assert.AreEqual("Anton Smirnov", loaded.FullName);
+            Assert.AreEqual("Editor User", loaded.FullName);
         }
 
-        // Блоб, записанный до появления этих двух ключей, обязан читаться и
-        // отдавать null'ы, а не терять сессию целиком: у игрока, который просто
-        // обновил игру, вход не должен разваливаться.
+        // A blob written before these two keys existed must still load and return
+        // nulls instead of losing the whole session: a player who just updated the
+        // game must stay signed in.
         [Test]
         public void Load_BlobWithoutTheNewClaims_KeepsSessionAndLeavesThemNull()
         {
@@ -70,7 +69,7 @@ namespace LongLeap.XsollaId.Tests
 
             XsollaIdSession loaded = _store.Load();
 
-            Assert.IsNotNull(loaded, "старый блоб не должен обнулять сессию");
+            Assert.IsNotNull(loaded, "an old blob must not wipe the session");
             Assert.AreEqual("Player One", loaded.DisplayName);
             Assert.IsNull(loaded.UserName);
             Assert.IsNull(loaded.FullName);
@@ -109,8 +108,8 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public void Load_WithoutRefreshToken_ReturnsNull()
         {
-            // Без refresh token'а восстанавливать нечего — молча считаем, что
-            // сессии нет.
+            // Without a refresh token there is nothing to restore; silently treat
+            // it as no session.
             _prefs.SetString(StoreKey, "{\"subject\":\"sub-1\",\"access\":\"a\"}");
 
             Assert.IsNull(_store.Load());
@@ -129,8 +128,8 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsTrue(loaded.ProfileFetched);
         }
 
-        // ГЛАВНЫЙ тест миграции. Блоб уже лежит у игроков, и обновление игры не
-        // имеет права стоить им сессии.
+        // The KEY migration test. The blob is already on players' devices, and a
+        // game update must not cost them their session.
         [Test]
         public void Load_OldBlobWithoutPictureKey_KeepsSessionAndAsksForRefetch()
         {
@@ -144,16 +143,16 @@ namespace LongLeap.XsollaId.Tests
             Assert.AreEqual("refresh-1", loaded.Refresh.Value);
             Assert.IsFalse(loaded.Picture.IsValid);
 
-            // Отсутствие ключа = «профиль не спрашивали». Именно это заставляет
-            // XsollaIdAuth сходить за картинкой ровно один раз.
+            // A missing key means "profile not fetched yet". That is what makes
+            // XsollaIdAuth fetch the picture exactly once.
             Assert.IsFalse(loaded.ProfileFetched);
             Assert.IsTrue(_prefs.HasKey(StoreKey), "the blob must not be cleared by the upgrade");
         }
 
-        // Линчпин миграции: признак «блоб старый» — это ОТСУТСТВИЕ ключа. Если
-        // писать ключи только при непустом значении, признак перестанет
-        // отличать старый блоб от нового без картинки, и догоняющий запрос
-        // будет повторяться вечно.
+        // The linchpin of the migration: an "old blob" is detected by the ABSENCE
+        // of the key. If keys were written only for non-empty values, an old blob
+        // would be indistinguishable from a new one without a picture, and the
+        // top-up request would repeat forever.
         [Test]
         public void Save_AlwaysWritesPictureAndProfileFetchedKeys()
         {
@@ -178,12 +177,13 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsNotNull(loaded);
             Assert.IsFalse(loaded.Picture.IsValid);
 
-            // Спрашивали и картинки не оказалось — второй раз ходить незачем.
+            // Already fetched and there was no picture: no reason to ask again.
             Assert.IsTrue(loaded.ProfileFetched);
         }
 
-        // Адрес перепроверяется на чтении: блоб мог записать билд с другими
-        // правилами, а в WebGL это IndexedDB, куда игрок способен залезть руками.
+        // The address is re-validated on read: the blob may have been written by a
+        // build with different rules, and in WebGL it lives in IndexedDB, which the
+        // player can edit by hand.
         [Test]
         public void Load_GarbagePicture_DropsOnlyThePicture()
         {
@@ -213,10 +213,10 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsFalse(loaded.ProfileFetched, "an unreadable flag falls back to \"not asked\"");
         }
 
-        // Регрессия. Раньше поля читались через (string)o[key], и приведение
-        // поля-объекта бросало InvalidCastException — а его ловит catch в Load,
-        // который ЧИСТИТ КЛЮЧ. То есть одно мусорное поле стоило игроку всей
-        // сессии, хотя subject и refresh были на месте.
+        // Regression. Fields used to be read via (string)o[key], and casting an
+        // object field threw InvalidCastException, caught by the catch in Load,
+        // which CLEARS THE KEY. One garbage field cost the player the whole
+        // session, even though subject and refresh were intact.
         [Test]
         public void Load_NonStringDisplayName_KeepsTheSession()
         {
@@ -246,8 +246,8 @@ namespace LongLeap.XsollaId.Tests
 
             Assert.IsNotNull(loaded);
 
-            // 0 значит «истёк давно» — сессия честно пойдёт обновляться, а не
-            // исчезнет.
+            // 0 means "expired long ago": the session goes to refresh instead of
+            // disappearing.
             Assert.AreEqual(0L, loaded.ExpiresAtUnixMs);
         }
 
@@ -272,9 +272,9 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public void NeverTouchesFirebaseAuthKey()
         {
-            // Анонимная личность Firebase держит облачные сохранения; если её
-            // затереть, игрок при выходе из аккаунта получит чужой пустой
-            // прогресс вместо своего гостевого.
+            // The anonymous Firebase identity owns the cloud saves; if it were
+            // overwritten, a player signing out would get someone else's empty
+            // progress instead of their own guest one.
             _prefs.SetString(FirebaseAuthKey, "firebase-blob");
 
             _store.Save(Session());

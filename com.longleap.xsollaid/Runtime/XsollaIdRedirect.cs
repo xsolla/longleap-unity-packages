@@ -2,45 +2,46 @@ using System;
 
 namespace LongLeap.XsollaId
 {
-    // Откуда берётся redirect_uri.
+    // Where redirect_uri comes from.
     //
-    // Зачем вычислять, а не просто брать из конфига: страница обратного вызова
-    // едет В САМОЙ СБОРКЕ (её кладёт в корень XsollaIdCallbackPagePostprocessor),
-    // поэтому у всякой сборки, которую отдаём мы сами, правильный адрес — рядом
-    // с ней. А таких адресов минимум три: 127.0.0.1 у serve.py, домен Pages и
-    // объектное хранилище. Одно поле в ассете на все три означало бы правку
-    // ассета перед каждой сборкой — и забытую правку в релизе, где вход
-    // открывает окно на мёртвый адрес.
+    // Why compute it instead of just reading the config: the callback page
+    // ships INSIDE the build (XsollaIdCallbackPagePostprocessor puts it in the
+    // root), so for every self-hosted build the correct address is right next
+    // to the game. And there are usually several such hosts (local dev server,
+    // static hosting, object storage). A single asset field for all of them
+    // would mean editing the asset before every build — and a forgotten edit
+    // in a release, where sign-in opens a window to a dead address.
     //
-    // Портальная сборка — исключение, и вычислить её адрес нельзя: игру отдаёт
-    // площадка со своего origin'а, положить туда свою страницу мы не можем, а
-    // адрес площадки в клиенте Xsolla ID не зарегистрирован (и не может быть —
-    // сервер сверяет redirect_uri посимвольно). Там адрес берётся из конфига.
+    // Portal builds are the exception, and their address cannot be computed:
+    // the portal serves the game from its own origin, we cannot put our page
+    // there, and the portal address is not registered in the Xsolla ID client
+    // (and cannot be — the server compares redirect_uri character by
+    // character). There the address comes from the config.
     //
-    // Чистая функция без UnityEngine — как OriginGuard, и по той же причине:
-    // ошибка здесь видна только на живом входе, поэтому проверяется тестами.
-    // Причину неудачи отдаём наружу out-параметром, тоже как OriginGuard:
-    // логировать должен тот, у кого есть UnityEngine, иначе класс перестал бы
-    // проверяться без сцены.
+    // A pure function without UnityEngine — like OriginGuard, and for the same
+    // reason: a mistake here only shows up during a live sign-in, so it is
+    // covered by tests. The failure reason is returned via an out parameter,
+    // also like OriginGuard: logging belongs to the caller that has
+    // UnityEngine, otherwise the class could not be tested without a scene.
     public static class XsollaIdRedirect
     {
-        // Имя обязано совпадать с тем, что кладёт в сборку постпроцесс
-        // (XsollaIdCallbackPagePostprocessor.FileName). Разъехавшись, они дали
-        // бы 404 в окне входа.
+        // Must match the file name the postprocessor puts into the build
+        // (XsollaIdCallbackPagePostprocessor.FileName). If they diverge, the
+        // sign-in window shows a 404.
         public const string CallbackFileName = "xid-callback.html";
 
-        // Адрес страницы обратного вызова рядом с игрой либо null, если
-        // вычислить нельзя. null означает «возьмите значение из конфига» — сам
-        // по себе он ничего не ломает.
+        // Address of the callback page next to the game, or null if it cannot
+        // be computed. null means "use the config value" — by itself it breaks
+        // nothing.
         //
-        // problem — почему не получилось, готовой фразой для лога; null при
-        // успехе. Без неё «взяли адрес из ассета» выглядело бы в логе
-        // неотличимо от «вычислили» — а это ровно та развилка, из-за которой
-        // сервер отказывает в окне входа.
+        // problem is why it failed, as a ready-made log phrase; null on
+        // success. Without it, "taken from the asset" would look the same in
+        // the log as "computed" — and that is exactly the fork that leads to
+        // the server rejecting the sign-in window.
         //
-        // Считаем от КАТАЛОГА страницы, а не от одного origin'а: сборку могут
-        // отдавать из подпапки (https://host/game/index.html), и страница
-        // обратного вызова лежит там же, а не в корне домена.
+        // Computed from the page's DIRECTORY, not just its origin: the build
+        // may be served from a subfolder (https://host/game/index.html), and
+        // the callback page sits there too, not at the domain root.
         public static string TryDerive(string pageUrl, out string problem)
         {
             problem = null;
@@ -57,8 +58,8 @@ namespace LongLeap.XsollaId
                 return null;
             }
 
-            // Схемы вроде file:// отпадают: у них нет origin'а, который сервер
-            // мог бы принять.
+            // Schemes like file:// are rejected: they have no origin the server
+            // could accept.
             if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
             {
                 problem = $"the page is served over '{uri.Scheme}', which has no origin the server would accept; open the build over http(s)";
@@ -76,8 +77,8 @@ namespace LongLeap.XsollaId
             return origin + DirectoryOf(uri.AbsolutePath) + CallbackFileName;
         }
 
-        // Каталог страницы, всегда со слэшем на конце. Query и fragment сюда не
-        // попадают: AbsolutePath их не содержит.
+        // The page's directory, always with a trailing slash. Query and fragment
+        // never get here: AbsolutePath does not contain them.
         private static string DirectoryOf(string absolutePath)
         {
             if (string.IsNullOrEmpty(absolutePath))

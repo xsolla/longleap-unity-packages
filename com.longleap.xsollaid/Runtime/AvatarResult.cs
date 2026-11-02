@@ -2,21 +2,21 @@ using UnityEngine;
 
 namespace LongLeap.XsollaId
 {
-    // Итог загрузки картинки профиля. Форма и повадки — как у XsollaIdResult:
-    // приватный конструктор, вложенные sealed наследники, разбирают через
+    // Result of loading the profile picture. Same shape as XsollaIdResult:
+    // private constructor and nested sealed subclasses, matched with
     // `result is AvatarResult.Success ok`.
     //
-    // Наружу из IXsollaIdAvatarLoader исключения не летят НИКОГДА. Загрузку
-    // опрашивает UI, и повисшее там исключение — это пустое место на экране без
-    // единой строчки в логе.
+    // IXsollaIdAvatarLoader NEVER lets exceptions out. The UI polls the load,
+    // and an exception stuck there means an empty spot on screen with nothing
+    // in the log.
     public abstract class AvatarResult
     {
         private AvatarResult() { }
 
         public sealed class Success : AvatarResult
         {
-            // Спрайт ОБЩИЙ: один адрес — один экземпляр на всё время страницы.
-            // Его нельзя Destroy'ить и нельзя менять, см.
+            // The sprite is SHARED: one url, one instance for the lifetime of
+            // the page. Do not Destroy or modify it, see
             // IXsollaIdAvatarLoader.
             public Sprite Sprite { get; }
 
@@ -27,8 +27,8 @@ namespace LongLeap.XsollaId
         {
             public XsollaIdErrorCode Code { get; }
 
-            // Текст для лога, не для игрока. Адреса картинки не содержит: тот
-            // может нести подписанный токен CDN.
+            // For the log, not for the player. Never contains the picture url:
+            // it may carry a signed CDN token.
             public string Message { get; }
 
             public Failure(XsollaIdErrorCode code, string message)
@@ -38,9 +38,9 @@ namespace LongLeap.XsollaId
             }
         }
 
-        // Картинки у аккаунта нет — это НЕ сбой и не повод для строчки в логе.
-        // Клейм picture необязателен, и вернёт ли его конкретный инстанс Xsolla
-        // ID, заранее неизвестно.
+        // The account has no picture — this is NOT a failure and not worth a log
+        // line. The picture claim is optional, and whether a given Xsolla ID
+        // instance returns it is not known in advance.
         public static AvatarResult NoPicture() =>
             new Failure(XsollaIdErrorCode.PictureUnavailable, "The account has no usable picture url.");
 

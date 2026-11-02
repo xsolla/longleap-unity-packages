@@ -1,28 +1,29 @@
 namespace LongLeap.XsollaId
 {
-    // Как показывать DisplayName игроку.
+    // How DisplayName is shown to the player.
     //
-    // Отдельный чистый метод, а не логика в виджете: userinfo отдаёт имя
-    // четырьмя разными клеймами (XsollaIdTokenClient.PickDisplayName), и
-    // последний из них — email. То есть у части игроков «имя» это адрес почты,
-    // и показывать его целиком нельзя: главное меню попадает в скриншоты и
-    // стримы.
+    // A separate pure method rather than logic in the widget: userinfo provides
+    // the name through four different claims (XsollaIdTokenClient.PickDisplayName),
+    // the last of which is email. So for some players the "name" is an email
+    // address, and it must not be shown in full: the main menu ends up in
+    // screenshots and streams.
     public static class DisplayNameFormat
     {
-        // anton@mail.com → anton. Имя без '@' отдаём как есть.
+        // user@mail.com → user. A name without '@' is returned as is.
         //
-        // Режем по ПЕРВОМУ '@', хотя RFC 5321 для разбора адреса предписывает
-        // последний. Задача здесь не разобрать адрес, а гарантированно не
-        // вывести домен на экран — по первому '@' это выполняется всегда.
+        // Splits at the FIRST '@', although RFC 5321 says to use the last one
+        // when parsing an address. The goal here is not to parse the address but
+        // to guarantee the domain never reaches the screen — splitting at the
+        // first '@' always achieves that.
         //
-        // Пустая локальная часть (@mail.com, просто @) — это не адрес, а мусор:
-        // отдаём как есть, потому что пустое место на экране хуже странного
-        // имени.
+        // An empty local part (@mail.com, or just @) is garbage, not an address:
+        // it is returned as is, because an empty spot on screen is worse than an
+        // odd-looking name.
         public static string LocalPart(string displayName)
         {
-            // null отдаём null'ом, а не пустой строкой: вызывающие уже умеют его
-            // обрабатывать (`?? "-"` в XsollaIdDebugPanel), а подмена на ""
-            // эту проверку тихо обошла бы.
+            // null stays null rather than becoming an empty string: callers
+            // already handle it (`?? "-"` in XsollaIdDebugPanel), and replacing
+            // it with "" would silently bypass that check.
             if (displayName == null)
                 return null;
 
@@ -33,8 +34,8 @@ namespace LongLeap.XsollaId
 
             int at = trimmed.IndexOf('@');
 
-            // -1 — '@' нет вовсе, 0 — пустая локальная часть. Оба случая
-            // означают «резать нечего».
+            // -1 means there is no '@', 0 means an empty local part. Either way
+            // there is nothing to cut.
             if (at <= 0)
                 return trimmed;
 

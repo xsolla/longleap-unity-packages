@@ -4,9 +4,9 @@ using UnityEngine;
 
 namespace LongLeap.XsollaId.Tests
 {
-    // Тип небольшой, но именно его получает игровой UI, когда вход выключен
-    // дефайном или собрана портальная версия — то есть в редакторе он работает
-    // ВСЕГДА.
+    // A small type, but it is exactly what the game UI gets when sign-in is
+    // disabled by the define or in a portal build, which means in the editor
+    // it is ALWAYS the one in use.
     [TestFixture]
     public class UnavailableXsollaIdAvatarLoaderTests
     {

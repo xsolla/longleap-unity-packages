@@ -13,9 +13,9 @@ namespace LongLeap.XsollaId.Web.Tests
 
         private FakeDownloader _downloads;
 
-        // Кэш загрузчика СТАТИЧЕСКИЙ, а NUnit гоняет все фикстуры в одном
-        // домене. Без сброса с двух сторон тесты видели бы кэш друг друга, а в
-        // редакторе за ними оставались бы текстуры.
+        // The loader cache is STATIC, and NUnit runs all fixtures in one domain.
+        // Without resetting on both sides, tests would see each other's cache, and
+        // textures would be left behind in the editor.
         [SetUp]
         public void SetUp()
         {
@@ -32,9 +32,9 @@ namespace LongLeap.XsollaId.Web.Tests
 
             public readonly List<string> Urls = new List<string>();
 
-            // Если выставлен — загрузка «висит», пока тест не завершит задачу.
-            // Нужно для проверки склейки одновременных запросов: с мгновенным
-            // ответом второй вызов случился бы уже после конца первого.
+            // When set, the load "hangs" until the test completes the task. Needed
+            // to test coalescing of concurrent requests: with an instant reply the
+            // second call would happen after the first one finished.
             public TaskCompletionSource<TextureReply> Gate;
 
             public void Enqueue(params TextureReply[] replies)
@@ -55,7 +55,7 @@ namespace LongLeap.XsollaId.Web.Tests
             }
         }
 
-        // 4x4 хватает: содержимое неважно, важен факт декодированной текстуры.
+        // 4x4 is enough: the content does not matter, only that a texture was decoded.
         private static Texture2D NewTexture() => new Texture2D(4, 4);
 
         private XsollaIdAvatarLoader Create() => new XsollaIdAvatarLoader(_downloads.Download);
@@ -84,7 +84,7 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreSame(first.Sprite, second.Sprite, "the sprite is shared, not re-created");
         }
 
-        // Два виджета в одном кадре не должны качать картинку дважды.
+        // Two widgets in the same frame must not download the picture twice.
         [Test]
         public async Task Load_ConcurrentSameUrl_DownloadsOnce()
         {
@@ -103,9 +103,9 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.IsInstanceOf<AvatarResult.Success>(await first);
         }
 
-        // Именно так выглядит отсутствие CORS-заголовка на хосте картинки:
-        // ответ до нас не доходит, StatusCode остаётся нулём, и от «нет сети»
-        // это неотличимо.
+        // This is exactly what a missing CORS header on the image host looks like:
+        // the response never reaches us, StatusCode stays zero, and it is
+        // indistinguishable from "no network".
         [Test]
         public async Task Load_TransportError_IsNetwork()
         {
@@ -130,10 +130,10 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreEqual(XsollaIdErrorCode.PictureUnavailable, failure.Code);
         }
 
-        // Регрессия по живому билду. Xsolla ID отдаёт аватар в webp, байты
-        // доезжают целиком (CORS у cdn.xsolla.net настроен), а декодер их не
-        // берёт. Это НЕ сеть: предлагать «повторить» бессмысленно, повторится
-        // ровно то же самое. Транспорт такие случаи отдаёт кодом 415.
+        // Regression from a live build. Xsolla ID serves avatars as webp; the bytes
+        // arrive in full (CORS on cdn.xsolla.net is configured), but the decoder
+        // rejects them. This is NOT a network issue: offering "retry" is pointless,
+        // the same thing would happen. The transport reports such cases as 415.
         [Test]
         public async Task Load_UndecodableBody_IsPictureUnavailableNotNetwork()
         {
@@ -147,8 +147,7 @@ namespace LongLeap.XsollaId.Web.Tests
                 "a format the decoder cannot read is not a network problem");
         }
 
-        // 200, но декодировать было нечего — например, пришла html-страница
-        // ошибки.
+        // 200, but nothing to decode, e.g. an HTML error page came back.
         [Test]
         public async Task Load_SuccessWithoutATexture_IsPictureUnavailable()
         {
@@ -160,8 +159,8 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreEqual(XsollaIdErrorCode.PictureUnavailable, failure.Code);
         }
 
-        // Отказ кэшируется тоже: иначе мёртвый адрес переспрашивался бы на
-        // каждой перезагрузке сцены, а она случается на каждой смерти игрока.
+        // Failures are cached too: otherwise a dead address would be requested
+        // again on every scene reload.
         [Test]
         public async Task Load_Failure_IsCachedAndNotRetried()
         {
@@ -196,7 +195,7 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreEqual(2, _downloads.Urls.Count);
         }
 
-        // ---- TryGetCached: путь перезагрузки сцены ----
+        // ---- TryGetCached: the scene reload path ----
 
         [Test]
         public void TryGetCached_BeforeAnyLoad_IsFalse()
@@ -212,8 +211,8 @@ namespace LongLeap.XsollaId.Web.Tests
 
             var ok = await loader.LoadAsync(AvatarUrl.TryParse(Url)) as AvatarResult.Success;
 
-            // Новый экземпляр — как после перезагрузки сцены: кэш статический,
-            // поэтому картинка должна найтись без ожидания.
+            // A new instance, as after a scene reload: the cache is static, so the
+            // picture must be found without waiting.
             Assert.IsTrue(Create().TryGetCached(AvatarUrl.TryParse(Url), out Sprite sprite));
             Assert.AreSame(ok.Sprite, sprite);
         }

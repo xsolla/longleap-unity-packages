@@ -5,22 +5,22 @@ using UnityEngine;
 
 namespace LongLeap.XsollaId.Web
 {
-    // Декодирование картинки профиля силами браузера.
+    // Decodes the profile picture using the browser.
     //
-    // ЗАЧЕМ. Xsolla ID отдаёт аватар в WEBP
-    // (cdn.xsolla.net/xsolla-id-v2-assets-prod/iam-assets/avatars/…/*.webp), а
-    // DownloadHandlerTexture умеет только PNG и JPEG. Байты доезжают целиком —
-    // CORS у CDN настроен, — но декодер спотыкается, и UnityWebRequest отдаёт
-    // DataProcessingError. Браузер webp декодирует сам, поэтому под WebGL мы
-    // просим его, а в Unity приходит уже сырой RGBA.
+    // WHY. Xsolla ID serves avatars as WEBP
+    // (cdn.xsolla.net/xsolla-id-v2-assets-prod/iam-assets/avatars/…/*.webp),
+    // while DownloadHandlerTexture only handles PNG and JPEG. The bytes arrive
+    // in full (the CDN has CORS configured), but the decoder fails and
+    // UnityWebRequest reports DataProcessingError. The browser decodes webp
+    // natively, so under WebGL we ask it to, and Unity receives raw RGBA.
     //
-    // Заодно это снимает вопрос про будущие форматы: avif и всё, что Xsolla
-    // включит завтра, поедет тем же путём без правок здесь.
+    // This also covers future formats: avif and anything else Xsolla enables
+    // later goes through the same path with no changes here.
     //
-    // Опрос, а не обратный вызов: ровно так же весь остальной пакет ждёт сеть
-    // (`while (!op.isDone) await Task.Yield()`) — единственный безопасный
-    // способ под WebGL, где потоков нет. Так не нужен ни SendMessage, ни
-    // объект-приёмник на сцене.
+    // Polling rather than a callback: the rest of the package waits for the
+    // network the same way (`while (!op.isDone) await Task.Yield()`), the only
+    // safe option under WebGL, which has no threads. No SendMessage and no
+    // receiver object in the scene are needed.
     internal static class XsollaIdWebGLImageDecoder
     {
         private const int StatusPending = 0;
@@ -49,9 +49,9 @@ namespace LongLeap.XsollaId.Web
 
         public static bool IsSupported => true;
 #else
-        // Вне браузера декодировать нечем. Заглушки нужны только чтобы файл
-        // компилировался в редакторе и в тестовых сборках; звать их нельзя, и
-        // IsSupported это гарантирует.
+        // Outside the browser there is nothing to decode with. These stubs only
+        // let the file compile in the editor and in test assemblies; they must
+        // never be called, and IsSupported guarantees that.
         private static int XsollaIdBeginImageDecode(string url) => 0;
         private static int XsollaIdPollImageDecode(int handle) => StatusNetworkFailed;
         private static int XsollaIdImageWidth(int handle) => 0;
@@ -62,8 +62,8 @@ namespace LongLeap.XsollaId.Web
         public static bool IsSupported => false;
 #endif
 
-        // Ничего не бросает: любой сбой приезжает как TextureReply, чтобы
-        // загрузчик выше классифицировал его так же, как обычный ответ сети.
+        // Never throws: every failure comes back as a TextureReply so the loader
+        // above classifies it the same way as a regular network reply.
         public static async Task<TextureReply> DecodeAsync(string url, int timeoutSeconds)
         {
             if (!IsSupported)
@@ -94,18 +94,18 @@ namespace LongLeap.XsollaId.Web
 
                 if (status == StatusNetworkFailed)
                 {
-                    // Сюда же попадает срез по CORS: ответ до нас не доходит, и
-                    // отличить его от «нет сети» нельзя — ровно как в
-                    // XsollaIdHttp.
+                    // A CORS rejection also lands here: the response never
+                    // reaches us and cannot be told apart from "no network",
+                    // same as in XsollaIdHttp.
                     return TextureReply.Transport($"GET {XsollaIdHttp.Sanitize(url)} — the request did not complete.");
                 }
 
                 if (status != StatusReady)
                 {
-                    // Сервер ответил, но картинкой это не оказалось: 403/404 у
-                    // CDN либо html-страница ошибки. Не транспортная ошибка —
-                    // отдаём кодом, чтобы загрузчик назвал это
-                    // PictureUnavailable, а не сетью.
+                    // The server answered, but not with an image: a 403/404 from
+                    // the CDN or an HTML error page. Not a transport error — we
+                    // return a status code so the loader reports
+                    // PictureUnavailable rather than a network failure.
                     return TextureReply.Status(415);
                 }
 
@@ -126,13 +126,13 @@ namespace LongLeap.XsollaId.Web
                     var pixels = new byte[byteLength];
                     Marshal.Copy(buffer, pixels, 0, byteLength);
 
-                    // RGBA32 без мипмапов: формат обязан совпасть байт в байт с
-                    // тем, что отдал getImageData.
+                    // RGBA32 without mipmaps: the format must match what
+                    // getImageData returned byte for byte.
                     var texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
                     texture.LoadRawTextureData(pixels);
 
-                    // makeNoLongerReadable: копия на стороне CPU больше не нужна,
-                    // спрайту достаточно текстуры на GPU.
+                    // makeNoLongerReadable: the CPU-side copy is no longer
+                    // needed, the sprite only needs the GPU texture.
                     texture.Apply(false, true);
 
                     return TextureReply.Ok(texture);
@@ -148,8 +148,8 @@ namespace LongLeap.XsollaId.Web
             }
             finally
             {
-                // Иначе аватар остаётся лежать в куче JS до перезагрузки
-                // страницы.
+                // Otherwise the avatar stays in the JS heap until the page
+                // reloads.
                 XsollaIdReleaseImage(handle);
             }
         }

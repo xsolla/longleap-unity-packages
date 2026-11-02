@@ -2,13 +2,13 @@ using System;
 
 namespace LongLeap.XsollaId
 {
-    // Access token Xsolla ID (JWT). Предъявляется как Bearer при обращении к
-    // userinfo и revoke.
+    // Xsolla ID access token (JWT). Sent as a Bearer token to userinfo and
+    // revoke.
     //
-    // Это bearer-credential: кто держит строку — тот и есть пользователь, пока
-    // токен не истёк. Поэтому ToString() значение НЕ печатает (как
-    // LongLeap.Core.Auth.IdToken и как SanitizeUrl в FirebaseHttpClient):
-    // токен в логе — это готовый вход в чужой аккаунт.
+    // This is a bearer credential: whoever holds the string is the user until
+    // the token expires. That is why ToString() never prints the value (same as
+    // LongLeap.Core.Auth.IdToken and SanitizeUrl in FirebaseHttpClient): a
+    // token in a log is a ready-made way into someone else's account.
     public readonly struct AccessToken : IEquatable<AccessToken>
     {
         public string Value { get; }

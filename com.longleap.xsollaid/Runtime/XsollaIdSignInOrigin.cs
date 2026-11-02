@@ -1,22 +1,23 @@
 namespace LongLeap.XsollaId
 {
-    // Откуда взялась текущая сессия.
+    // Where the current session came from.
     //
-    // Различать это нужно ровно одному подписчику — переключателю сейвов.
-    // Событие SignedIn срабатывает и на нажатие кнопки, и на тихое
-    // восстановление сессии на старте, а спрашивать игрока «какой сейв
-    // оставить?» можно только в первом случае: во втором он ничего не нажимал,
-    // и окно посреди загрузки выглядело бы поломкой.
+    // Typically only the game's save switcher needs to tell these apart.
+    // SignedIn fires both on a button press and on the silent session restore
+    // at startup, but asking the player "which save to keep?" is only
+    // acceptable in the first case: in the second they pressed nothing, and a
+    // dialog in the middle of loading would look like a bug.
     public enum XsollaIdSignInOrigin
     {
-        // Игрок нажал кнопку входа, и открывалось окно Xsolla ID.
+        // The player pressed the sign-in button and the Xsolla ID window opened.
         Interactive,
 
-        // Сессия поднята из сохранённого refresh token'а на старте. Жеста
-        // игрока не было.
+        // The session was restored from the saved refresh token at startup. No
+        // player gesture was involved.
         Restored,
 
-        // Обновился токен у уже вошедшего игрока. Личность не менялась.
+        // The token of an already signed-in player was refreshed. The identity
+        // did not change.
         Refreshed
     }
 }

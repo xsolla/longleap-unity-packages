@@ -5,13 +5,13 @@ using UnityEngine;
 
 namespace LongLeap.XsollaId
 {
-    // Сессия Xsolla ID в PlayerPrefs (в WebGL это IndexedDB).
+    // Xsolla ID session in PlayerPrefs (IndexedDB on WebGL).
     //
-    // КЛЮЧ СВОЙ И ЧУЖИЕ НЕ ТРОГАЕТ. Анонимная личность Firebase лежит в
-    // "longleap_auth", и её надо сохранить нетронутой: именно она держит
-    // облачные сохранения, и именно благодаря ей выход из аккаунта возвращает
-    // игрока к ТОЙ ЖЕ гостевой личности, а не заводит новую с пустым
-    // прогрессом. На это есть отдельный тест.
+    // USES ITS OWN KEY AND NEVER TOUCHES OTHERS. The anonymous Firebase identity
+    // lives under "longleap_auth" and must stay intact: it owns the cloud saves,
+    // and it is what makes signing out return the player to THE SAME guest
+    // identity instead of creating a new one with empty progress. There is a
+    // dedicated test for this.
     public sealed class PlayerPrefsXsollaIdSessionStore : IXsollaIdSessionStore
     {
         private const string StoreKey = "longleap_xsollaid";
@@ -38,8 +38,8 @@ namespace LongLeap.XsollaId
                 string access = ReadString(o, "access");
                 string refresh = ReadString(o, "refresh");
 
-                // Без sub и без refresh восстанавливать нечего: тихо считаем,
-                // что сессии нет.
+                // Without sub and refresh there is nothing to restore: quietly
+                // treat it as no session.
                 if (string.IsNullOrEmpty(subject) || string.IsNullOrEmpty(refresh))
                 {
                     Clear();
@@ -53,26 +53,27 @@ namespace LongLeap.XsollaId
                     new RefreshToken(refresh),
                     ReadLong(o, "expiresAtUnixMs"),
 
-                    // Адрес перепроверяем на чтении, а не доверяем блобу: его
-                    // мог записать билд с другими правилами.
+                    // The url is re-validated on read instead of trusting the
+                    // blob: it may have been written by a build with different
+                    // rules.
                     AvatarUrl.TryParse(ReadString(o, "picture")),
 
-                    // Ключа нет — блоб записан до появления картинки. Считаем
-                    // профиль непрочитанным: XsollaIdAuth дотянет его один раз
-                    // и перезапишет блоб уже в новом виде.
+                    // Missing key means the blob predates picture support. The
+                    // profile is treated as not fetched: XsollaIdAuth fetches it
+                    // once and rewrites the blob in the new format.
                     ReadBool(o, "profileFetched"),
 
-                    // У блоба, записанного до появления этих двух ключей, они
-                    // приедут null'ами. Отдельного признака миграции им не надо:
-                    // profileFetched выше уже решает, идти ли за userinfo, а
-                    // раскрытая карточка на null отвечает прочерком.
+                    // A blob written before these two keys existed yields nulls.
+                    // No separate migration flag is needed: profileFetched above
+                    // already decides whether to call userinfo, and the expanded
+                    // card shows a dash for null.
                     ReadString(o, "userName"),
                     ReadString(o, "fullName"));
             }
             catch (Exception ex)
             {
-                // Битый блоб — не повод падать на старте. Выкидываем и живём
-                // дальше гостем.
+                // A corrupted blob is no reason to crash at startup. Drop it and
+                // carry on as a guest.
                 Debug.LogWarning(
                     $"{nameof(PlayerPrefsXsollaIdSessionStore)}: failed to read the session, key cleared. {ex.Message}");
                 Clear();
@@ -96,19 +97,20 @@ namespace LongLeap.XsollaId
                 ["refresh"] = session.Refresh.Value,
                 ["expiresAtUnixMs"] = session.ExpiresAtUnixMs,
 
-                // Эти два ключа пишем ВСЕГДА, даже когда значений нет.
-                // Отсутствие ключа — это признак блоба, записанного до
-                // появления картинки, и именно по нему Load решает, что профиль
-                // надо перечитать. Если писать ключ только при непустом
-                // значении, признак сломается и миграция не случится.
+                // These two keys are ALWAYS written, even without values. A
+                // missing key marks a blob written before picture support, and
+                // Load uses exactly that to decide the profile must be
+                // re-fetched. Writing the key only for non-empty values would
+                // break the marker and the migration would never happen.
                 //
-                // Пустой адрес уедет как "picture": null — ключ на месте, а это
-                // всё, что нужно. displayName выше ведёт себя так же.
+                // An empty url is written as "picture": null — the key is there,
+                // and that is all that matters. displayName above behaves the
+                // same way.
                 ["picture"] = session.Picture.Value,
                 ["profileFetched"] = session.ProfileFetched,
 
-                // Тоже всегда, тоже вместе с null'ами — по той же причине, что
-                // picture выше.
+                // Also always, nulls included — for the same reason as picture
+                // above.
                 ["userName"] = session.UserName,
                 ["fullName"] = session.FullName
             };
@@ -123,13 +125,14 @@ namespace LongLeap.XsollaId
             _prefs.Save();
         }
 
-        // Поля блоба читаем строго по типу, а не через (string)o[key].
+        // Blob fields are read strictly by type, not via (string)o[key].
         //
-        // Приведение поля, которое приехало объектом или массивом, бросает
-        // InvalidCastException — и его ловит catch в Load, который ЧИСТИТ КЛЮЧ.
-        // То есть одно мусорное поле стоило бы игроку всей сессии. Блоб мог
-        // записать билд с другими правилами, а в WebGL это IndexedDB, куда
-        // игрок способен залезть руками.
+        // Casting a field that arrived as an object or array throws
+        // InvalidCastException — caught by the catch in Load, which CLEARS THE
+        // KEY. So a single garbage field would cost the player the whole
+        // session. The blob may have been written by a build with different
+        // rules, and on WebGL it is IndexedDB, which the player can edit by
+        // hand.
         private static string ReadString(JObject o, string key) =>
             o[key] is JValue value && value.Type == JTokenType.String ? (string)value : null;
 

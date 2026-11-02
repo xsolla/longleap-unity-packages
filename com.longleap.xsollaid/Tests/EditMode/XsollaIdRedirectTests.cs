@@ -2,16 +2,16 @@ using NUnit.Framework;
 
 namespace LongLeap.XsollaId.Tests
 {
-    // Вычисление redirect_uri из адреса самой игры.
+    // Deriving redirect_uri from the game's own address.
     //
-    // Проверяется тестами, потому что ошибка здесь не видна нигде, кроме живого
-    // входа: сервер сверяет redirect_uri посимвольно и отказывает уже ПОСЛЕ
-    // открытия окна.
+    // Covered by tests because a mistake here only shows up in a live sign-in:
+    // the server compares redirect_uri character by character and rejects it
+    // only AFTER the window has opened.
     [TestFixture]
     public class XsollaIdRedirectTests
     {
-        // Три адреса, ради которых вычисление и появилось: под каждый пришлось
-        // бы править ассет перед сборкой.
+        // The three addresses this derivation exists for: each would otherwise
+        // require editing the asset before a build.
         [TestCase("http://127.0.0.1:8081/index.html", "http://127.0.0.1:8081/xid-callback.html")]
         [TestCase("https://blood-red-snow.pages.dev/index.html", "https://blood-red-snow.pages.dev/xid-callback.html")]
         [TestCase("https://bloodredsnow.hel1.your-objectstorage.com/index.html",
@@ -20,13 +20,13 @@ namespace LongLeap.XsollaId.Tests
         {
             Assert.AreEqual(expected, XsollaIdRedirect.TryDerive(pageUrl, out string problem));
 
-            // На успехе жаловаться не на что — иначе лог сообщал бы о проблеме
-            // там, где всё получилось.
+            // Nothing to report on success, otherwise the log would flag a problem
+            // where everything worked.
             Assert.IsNull(problem);
         }
 
-        // Сборку могут отдавать из подпапки — страница обратного вызова лежит
-        // там же, а не в корне домена.
+        // The build may be served from a subfolder; the callback page lives
+        // there too, not at the domain root.
         [Test]
         public void Derives_FromTheDirectory_NotTheDomainRoot()
         {
@@ -35,7 +35,7 @@ namespace LongLeap.XsollaId.Tests
                 XsollaIdRedirect.TryDerive("https://host.example/game/index.html", out _));
         }
 
-        // Адрес без имени файла: каталог — он сам.
+        // An address without a file name: the directory is the address itself.
         [Test]
         public void Derives_WhenThePathIsADirectory()
         {
@@ -44,8 +44,8 @@ namespace LongLeap.XsollaId.Tests
                 XsollaIdRedirect.TryDerive("https://host.example/game/", out _));
         }
 
-        // Query и fragment в redirect_uri попадать не имеют права: сервер
-        // сверяет строку посимвольно.
+        // Query and fragment must never end up in redirect_uri: the server
+        // compares the string character by character.
         [Test]
         public void Derives_WithoutQueryOrFragment()
         {
@@ -54,7 +54,7 @@ namespace LongLeap.XsollaId.Tests
                 XsollaIdRedirect.TryDerive("http://127.0.0.1:8081/index.html?sid=42#anchor", out _));
         }
 
-        // Нестандартный порт — часть origin'а, и потерять его нельзя.
+        // A non-default port is part of the origin and must not be lost.
         [Test]
         public void Derives_KeepsTheNonDefaultPort()
         {
@@ -62,8 +62,8 @@ namespace LongLeap.XsollaId.Tests
                 "http://127.0.0.1:8081/", XsollaIdRedirect.TryDerive("http://127.0.0.1:8081/", out _));
         }
 
-        // Редактор и standalone: адреса страницы нет. null означает «возьмите
-        // значение из ассета», и это не сбой.
+        // Editor and standalone: there is no page address. null means "use the
+        // asset value", and that is not a failure.
         [TestCase("")]
         [TestCase(null)]
         [TestCase("not a url")]
@@ -73,8 +73,8 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsNull(XsollaIdRedirect.TryDerive(pageUrl, out _));
         }
 
-        // Причина обязана быть у КАЖДОЙ неудачи: она уходит в лог, и без неё
-        // «взяли адрес из ассета» не отличить от «вычислили».
+        // EVERY failure must have a reason: it goes to the log, and without it
+        // "took the asset value" is indistinguishable from "derived".
         [TestCase("")]
         [TestCase(null)]
         [TestCase("not a url")]
@@ -86,8 +86,9 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsFalse(string.IsNullOrWhiteSpace(problem), "a failure with no explanation would be silent in the log");
         }
 
-        // Разные неудачи объясняются по-разному: пустой адрес в редакторе —
-        // норма, а file:// и мусор в строке — нет, и путать их в логе нельзя.
+        // Different failures get different explanations: an empty address in the
+        // editor is normal, file:// or a garbage string is not, and the log must
+        // not mix them up.
         [Test]
         public void ExplainsFailures_Distinctly()
         {
@@ -99,12 +100,12 @@ namespace LongLeap.XsollaId.Tests
             StringAssert.Contains("not an absolute URL", garbage);
             StringAssert.Contains("file", scheme);
 
-            // Неразобранный адрес попадает в лог целиком: без него неясно, что
-            // именно приехало из браузера.
+            // An unparseable address is logged in full: otherwise it is unclear what
+            // exactly came from the browser.
             StringAssert.Contains("not a url", garbage);
         }
 
-        // ---- подмена в конфиге ----
+        // ---- config override ----
 
         [Test]
         public void WithRedirectUri_ReplacesTheActiveRegistrationOnly()
@@ -118,15 +119,15 @@ namespace LongLeap.XsollaId.Tests
 
             Assert.AreEqual("http://127.0.0.1:8081/xid-callback.html", replaced.Active.RedirectUri);
 
-            // Вторая регистрация не тронута: переключение среды из меню не
-            // должно унести с собой чужой адрес.
+            // The other registration is untouched: switching the environment from the
+            // menu must not carry the other address along.
             Assert.AreEqual("https://stage/cb", replaced.Stage.RedirectUri);
 
-            // clientId и issuer активной регистрации переезжают как есть.
+            // clientId and issuer of the active registration are carried over as is.
             Assert.AreEqual("prod-id", replaced.Active.ClientId);
             Assert.AreEqual("https://id.xsolla.com", replaced.Active.IssuerBaseUrl);
 
-            // Исходный конфиг неизменяем.
+            // The original config is immutable.
             Assert.AreEqual("https://prod/cb", config.Active.RedirectUri);
         }
 
@@ -144,8 +145,8 @@ namespace LongLeap.XsollaId.Tests
             Assert.AreEqual("https://prod/cb", replaced.Production.RedirectUri);
         }
 
-        // Ничего не вычислилось — конфиг остаётся как есть. Стереть адрес было
-        // бы хуже: вход стал бы недоступен вместо «работает по значению из ассета».
+        // Nothing derived: the config stays as is. Erasing the address would be
+        // worse: sign-in would become unavailable instead of using the asset value.
         [TestCase("")]
         [TestCase(null)]
         public void WithRedirectUri_KeepsTheAssetValue_WhenNothingDerived(string derived)
@@ -158,8 +159,8 @@ namespace LongLeap.XsollaId.Tests
             Assert.AreEqual("https://prod/cb", config.WithRedirectUri(derived).Active.RedirectUri);
         }
 
-        // Вычисленный адрес обязан быть тем же файлом, который постпроцесс
-        // кладёт в сборку: разъехавшись, они дали бы 404 в окне входа.
+        // The derived address must point to the same file the post-build step puts
+        // into the build: if they diverge, the sign-in window shows a 404.
         [Test]
         public void CallbackFileName_MatchesWhatIsDerived()
         {

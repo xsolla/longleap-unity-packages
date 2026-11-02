@@ -3,39 +3,39 @@ using System.Threading.Tasks;
 
 namespace LongLeap.XsollaId
 {
-    // Шов над браузером: открыть окно авторизации и дождаться, пока страница
-    // обратного вызова пришлёт code и state.
+    // Seam over the browser: open the authorization window and wait until the
+    // callback page sends back code and state.
     //
-    // Вынесен в незаблокированную дефайном сборку, чтобы EditMode-тесты
-    // подставляли подделку и обходились без браузера, без WebGL и без
-    // зарегистрированного clientId. Настоящая реализация (jslib + popup)
-    // живёт в сборке под XSOLLA_ID.
+    // Lives in the assembly that is not gated by the define, so EditMode tests
+    // can plug in a fake and run without a browser, without WebGL and without
+    // a registered clientId. The real implementation (jslib + popup) lives in
+    // the XSOLLA_ID assembly.
     public interface IXsollaIdBrowser
     {
-        // На этой платформе окно открыть можно.
+        // Whether a window can be opened on this platform.
         bool IsSupported { get; }
 
-        // Открывает authorizeUrl и ждёт ответ.
+        // Opens authorizeUrl and waits for the response.
         //
-        // ВАЖНО: реализация обязана вызвать window.open синхронно внутри
-        // обработчика клика — если между кликом и открытием окна успеет
-        // произойти await, браузер посчитает окно непрошеным и заблокирует.
-        // Поэтому authorizeUrl приходит сюда уже готовой строкой: собирать её
-        // (и тем более ходить за discovery) здесь нельзя.
+        // IMPORTANT: the implementation must call window.open synchronously
+        // inside the click handler — if an await happens between the click and
+        // opening the window, the browser treats the window as unsolicited and
+        // blocks it. That is why authorizeUrl arrives as a ready-made string:
+        // building it here (let alone fetching discovery) is not allowed.
         Task<BrowserAuthResult> AuthorizeAsync(string authorizeUrl, string expectedState, TimeSpan timeout);
     }
 
-    // Что вернулось со страницы обратного вызова.
+    // What came back from the callback page.
     public readonly struct BrowserAuthResult
     {
-        // Одноразовый код авторизации. Значим только при Error == null.
+        // One-time authorization code. Meaningful only when Error == null.
         public string Code { get; }
 
-        // state, как его вернул сервер. Сверять с ожидаемым — задача
-        // вызывающего: шов не решает, что делать при расхождении.
+        // state as returned by the server. Comparing it with the expected value
+        // is the caller's job: the seam does not decide what to do on mismatch.
         public string State { get; }
 
-        // null — успех.
+        // null means success.
         public XsollaIdErrorCode? Error { get; }
 
         public string Message { get; }

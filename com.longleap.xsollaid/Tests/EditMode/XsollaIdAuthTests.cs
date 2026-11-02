@@ -12,8 +12,7 @@ namespace LongLeap.XsollaId.Tests
         private FakeTokenClient _tokens;
         private PlayerPrefsXsollaIdSessionStore _store;
 
-        // Управляемые часы: тесты про истечение токена не должны зависеть от
-        // реального времени.
+        // Controllable clock: token-expiry tests must not depend on real time.
         private long _now;
 
         [SetUp]
@@ -27,15 +26,15 @@ namespace LongLeap.XsollaId.Tests
             _now = 1_000_000_000_000;
         }
 
-        // pageUrl пустой — как в редакторе: проверку origin'а это проходит,
-        // и тесты не зависят от того, где «открыта» игра. Отдельно её
-        // поведение проверяет OriginGuardTests.
+        // Empty pageUrl, as in the editor: it passes the origin check, so the
+        // tests do not depend on where the game is "opened". That behavior is
+        // covered separately by OriginGuardTests.
         private XsollaIdAuth Create(XsollaIdConfig config = null, string pageUrl = "") => new XsollaIdAuth(
             config ?? TestConfig.Valid(), _discovery, _browser, _tokens, _store, () => _now, () => pageUrl);
 
-        // profileFetched по умолчанию true: сохранённая сессия «уже спрашивала
-        // профиль», и все тесты про восстановление написаны именно про этот
-        // случай. Миграционные тесты передают false явно.
+        // profileFetched defaults to true: the stored session has "already fetched
+        // the profile", and all restore tests are written for that case. Migration
+        // tests pass false explicitly.
         private void StoreSession(
             long expiresAtUnixMs, bool withRefresh = true, bool profileFetched = true,
             string picture = null, bool withAccess = true) => _store.Save(
@@ -47,7 +46,7 @@ namespace LongLeap.XsollaId.Tests
                 AvatarUrl.TryParse(picture),
                 profileFetched));
 
-        // ---- вход ----
+        // ---- sign-in ----
 
         [Test]
         public async Task SignIn_Success_SetsSessionSavesAndRaisesEventOnce()
@@ -141,7 +140,7 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsNull(_store.Load());
         }
 
-        // ---- восстановление ----
+        // ---- restore ----
 
         [Test]
         public async Task Restore_NoStoredSession_ReturnsExpiredAndBecomesReady()
@@ -170,15 +169,15 @@ namespace LongLeap.XsollaId.Tests
             Assert.AreEqual(0, _tokens.RefreshCalls);
             Assert.AreEqual(0, _tokens.ExchangeCalls);
 
-            // Теперь имя теста означает буквально то, что написано: профиль уже
-            // спрашивали, и догоняющего userinfo быть не должно.
+            // The test name means exactly what it says: the profile was already
+            // fetched, so there must be no top-up userinfo call.
             Assert.AreEqual(0, _tokens.UserInfoCalls);
         }
 
         [Test]
         public async Task Restore_ExpiredSession_RefreshesExactlyOnce()
         {
-            // Внутри пятиминутного запаса — считается истёкшим.
+            // Within the five-minute margin: treated as expired.
             StoreSession(_now + 60_000);
 
             XsollaIdAuth auth = Create();
@@ -186,7 +185,7 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsInstanceOf<XsollaIdResult.Success>(await auth.RestoreAsync());
             Assert.AreEqual(1, _tokens.RefreshCalls);
             Assert.AreEqual("access-2", auth.Current.Access.Value);
-            // Личность уже известна из сохранённой сессии — userinfo не нужен.
+            // The identity is already known from the stored session; userinfo is not needed.
             Assert.AreEqual(0, _tokens.UserInfoCalls);
             Assert.AreEqual("Stored Name", auth.Current.DisplayName);
         }
@@ -211,8 +210,8 @@ namespace LongLeap.XsollaId.Tests
         {
             StoreSession(_now - 1, withRefresh: false);
 
-            // Без refresh token'а сохранённая сессия вообще не читается —
-            // хранилище отдаёт null и чистит ключ.
+            // Without a refresh token the stored session is not loaded at all:
+            // the store returns null and clears the key.
             XsollaIdAuth auth = Create();
 
             var failure = await auth.RestoreAsync() as XsollaIdResult.Failure;
@@ -221,7 +220,7 @@ namespace LongLeap.XsollaId.Tests
             Assert.AreEqual(0, _tokens.RefreshCalls);
         }
 
-        // ---- картинка профиля и догоняющий запрос ----
+        // ---- profile picture and top-up request ----
 
         [Test]
         public async Task SignIn_CarriesThePictureIntoTheSession()
@@ -245,14 +244,14 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsInstanceOf<XsollaIdResult.Success>(await auth.SignInAsync());
             Assert.IsFalse(auth.Current.Picture.IsValid);
 
-            // Спрашивали и не получили — второй раз ходить незачем.
+            // Fetched and got nothing: no reason to ask again.
             Assert.IsTrue(auth.Current.ProfileFetched);
         }
 
-        // САМЫЙ ВАЖНЫЙ тест этой пачки: ловит наивную починку условия в
-        // BuildSessionAsync. Если признаком «надо спросить» сделать «картинки
-        // нет», то у игрока без клейма picture userinfo будет дёргаться на
-        // КАЖДОЕ обновление токена — навсегда.
+        // The MOST IMPORTANT test in this group: it catches a naive fix of the
+        // condition in BuildSessionAsync. If "no picture" were the trigger to ask,
+        // a player without a picture claim would hit userinfo on EVERY token
+        // refresh, forever.
         [Test]
         public async Task Refresh_DoesNotAskUserInfoAgain_EvenWithoutAPicture()
         {
@@ -282,9 +281,9 @@ namespace LongLeap.XsollaId.Tests
             Assert.AreEqual(1, _tokens.UserInfoCalls);
         }
 
-        // Миграция: блоб записан версией без картинки, поэтому признака в нём
-        // нет, а токен ещё живой — обновления (где userinfo и так случается)
-        // можно ждать час.
+        // Migration: the blob was written by a version without pictures, so it has
+        // no flag, while the token is still valid; the next refresh (where userinfo
+        // happens anyway) may be an hour away.
         [Test]
         public async Task Restore_UnfetchedProfile_TopsUpExactlyOnceAndRewritesTheBlob()
         {
@@ -317,15 +316,15 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsTrue(auth.IsSignedIn, "a missing avatar must never cost the player the session");
             Assert.AreEqual("Stored Name", auth.Current.DisplayName, "the stored name must survive the failure");
 
-            // Не отмечаем «спрашивали»: разовый сбой сети не должен навсегда
-            // лишить игрока картинки.
+            // Do not mark as fetched: a one-off network failure must not cost the
+            // player the picture forever.
             Assert.IsFalse(_store.Load().ProfileFetched);
         }
 
-        // Блоб без access token'а хранилище допускает, и до догоняющего запроса
-        // такая сессия НЕ доходит: IsExpired считает отсутствие токена
-        // истечением, поэтому она уходит на обновление. Там userinfo случается
-        // штатно — уже с новым токеном.
+        // The store accepts a blob without an access token, but such a session
+        // never reaches the top-up request: IsExpired treats a missing token as
+        // expired, so it goes to refresh, where userinfo is called normally with
+        // the new token.
         [Test]
         public async Task Restore_WithoutAccessToken_RefreshesInsteadOfToppingUp()
         {
@@ -339,8 +338,8 @@ namespace LongLeap.XsollaId.Tests
             Assert.AreEqual(1, _tokens.RefreshCalls, "a session with no access token has to be refreshed");
             Assert.AreEqual("access-2", auth.Current.Access.Value);
 
-            // Ровно один запрос: обновление и догоняющий профиль не должны
-            // сложиться в два.
+            // Exactly one request: the refresh and the profile top-up must not add
+            // up to two.
             Assert.AreEqual(1, _tokens.UserInfoCalls);
             Assert.AreEqual("https://cdn.xsolla.com/a.png", auth.Current.Picture.Value);
         }
@@ -386,7 +385,7 @@ namespace LongLeap.XsollaId.Tests
             Assert.AreEqual(0, sessionUpdated);
         }
 
-        // ---- выход ----
+        // ---- sign-out ----
 
         [Test]
         public async Task SignOut_ClearsEverythingAndRaisesEvent()
@@ -409,8 +408,8 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public async Task SignOut_SurvivesRevokeFailure()
         {
-            // Эндпоинт отзыва у Xsolla ID уже отдавал 405 — выход из аккаунта
-            // не должен от него зависеть.
+            // The Xsolla ID revocation endpoint has returned 405 before; signing out
+            // must not depend on it.
             _tokens.RevokeThrows = true;
 
             XsollaIdAuth auth = Create();
@@ -421,7 +420,7 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsNull(_store.Load());
         }
 
-        // ---- недоступность ----
+        // ---- unavailability ----
 
         [Test]
         public async Task Unavailable_WhenBrowserUnsupported()
@@ -455,7 +454,7 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public async Task SignIn_DisallowedOrigin_FailsBeforeOpeningWindow()
         {
-            // Игра открыта на localhost, а разрешён только 127.0.0.1.
+            // The game is opened on localhost, but only 127.0.0.1 is allowed.
             XsollaIdAuth auth = Create(pageUrl: "http://localhost:8081/index.html");
 
             var failure = await auth.SignInAsync() as XsollaIdResult.Failure;
@@ -476,9 +475,9 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public void DefaultScopes_RequestOfflineForRefreshToken()
         {
-            // Именно offline, а не offline_access: на этом инстансе Hydra
-            // refresh token выдаёт он (Confluence 24612667695). Без него игрок
-            // будет входить заново после каждой перезагрузки.
+            // offline, not offline_access: on this Hydra instance it is the scope
+            // that issues a refresh token. Without it the player has to sign in again
+            // after every reload.
             CollectionAssert.Contains(XsollaIdConfig.DefaultScopes.Split(' '), "offline");
             StringAssert.DoesNotContain("offline_access", XsollaIdConfig.DefaultScopes);
         }

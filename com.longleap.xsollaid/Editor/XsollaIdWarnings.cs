@@ -5,20 +5,20 @@ using UnityEditor;
 
 namespace LongLeap.XsollaId.Editor
 {
-    // Замечания о конфиге входа.
+    // Build Manager warnings about the sign-in config.
     //
-    // Среда в окне Build Manager не показывается (это выбор из двух, у него
-    // своё меню), но её НЕПРАВИЛЬНОСТЬ показывается — иначе окно с блоком
-    // BackPack и без блока Xsolla ID наводило бы на мысль, что со входом всё
-    // в порядке. Сейчас как раз не в порядке: активна Production, а redirect
-    // uri у неё смотрит на 127.0.0.1.
+    // The environment itself is not shown in the Build Manager window (it is a
+    // choice between two values with its own menu), but problems with it are:
+    // otherwise a window without an Xsolla ID block would suggest sign-in is
+    // fine — for example when Production is active but its redirect uri still
+    // points at 127.0.0.1.
     internal sealed class XsollaIdWarnings : IProjectWarningProvider
     {
         private const string LocalHostPrefix = "http://127.0.0.1";
 
         public IEnumerable<ProjectWarning> GetWarnings(IProjectOptionState pendingState)
         {
-            // Без включённого входа конфиг ни на что не влияет.
+            // With sign-in off the config affects nothing.
             if (pendingState == null || !pendingState.IsDefineOn("XSOLLA_ID"))
                 yield break;
 
@@ -46,8 +46,8 @@ namespace LongLeap.XsollaId.Editor
             string clientId = XsollaIdConfigAccess.GetString(config, prefix + "ClientId");
             string redirectUri = XsollaIdConfigAccess.GetString(config, prefix + "RedirectUri");
 
-            // То же, о чём предупреждает WarnIfIncomplete при переключении, но
-            // видно без переключения.
+            // Same check as WarnIfIncomplete on switching, but visible without
+            // switching.
             if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(redirectUri))
             {
                 yield return new ProjectWarning(
@@ -62,8 +62,8 @@ namespace LongLeap.XsollaId.Editor
                 yield break;
             }
 
-            // Прод, смотрящий на localhost, собирается и запускается — и
-            // молча не пускает никого, кроме того, кто собрал.
+            // Production pointing at localhost builds and runs — and silently
+            // lets nobody in except the person who built it.
             if (current == XsollaIdConfigAccess.ProductionEnumName
                 && redirectUri.StartsWith(LocalHostPrefix))
             {

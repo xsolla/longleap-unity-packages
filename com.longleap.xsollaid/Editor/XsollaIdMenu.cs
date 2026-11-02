@@ -5,34 +5,36 @@ using UnityEngine;
 
 namespace LongLeap.XsollaId.Editor
 {
-    // Переключатель входа через Xsolla ID и быстрый доступ к конфигу.
+    // Xsolla ID sign-in toggle and quick access to the config asset.
     //
-    // Меню разбито на подменю по тому же правилу, что и GamePixPluginMenu:
+    // The menu is split into submenus, following the same convention as the
+    // GamePix package's menu:
     //
-    //   Required/Sign-in Enabled (XSOLLA_ID) — дефайн, без которого сборок
-    //     LongLeap.XsollaId.Web в проекте нет вовсе и вход не соберётся;
-    //   Required/Environment/{Stage,Production} — какая регистрация активна.
-    //     Это не дефайн, а поле в ассете конфига; правим его через
-    //     SerializedObject, чтобы у сборки не появилось ссылки на
-    //     LongLeap.XsollaId (её нет намеренно);
-    //   Optional/Debug Panel — дефайн XSOLLA_ID_DEBUG, только на время
-    //     отладки; в сборку на площадку попадать не должен.
+    //   Required/Sign-in Enabled (XSOLLA_ID) — the define without which the
+    //     LongLeap.XsollaId.Web assembly does not exist and sign-in is not built;
+    //   Required/Environment/{Stage,Production} — which client registration is
+    //     active. This is not a define but a field in the config asset; it is
+    //     edited through SerializedObject so this assembly does not need a
+    //     reference to LongLeap.XsollaId (it deliberately has none);
+    //   Optional/Debug Panel — the XSOLLA_ID_DEBUG define, for debugging only;
+    //     it must not reach a portal build.
     //
-    // Два дефайна теперь описаны в XsollaIdOptions, и та же таблица рисует
-    // строки в окне Build Manager — поэтому меню и окно не могут разойтись.
-    // Сами атрибуты [MenuItem] остались здесь и остаться обязаны: путь у них —
-    // константа времени компиляции, и метод нужен на каждый пункт.
+    // Both defines are described in XsollaIdOptions, and the same table draws
+    // the rows in the Build Manager window, so the menu and the window cannot
+    // drift apart. The [MenuItem] attributes have to stay here: their path is a
+    // compile-time constant and each item needs its own method.
     //
-    // СРЕДА осталась написанной руками и в окне НЕ показывается: это выбор из
-    // двух, у которого своя проверка заполненности, и трогать его в этом
-    // заходе незачем. Подсказок к пунктам меню по-прежнему нет и быть не
-    // может — у MenuItem только menuItem/priority/secondaryPriority/validate/
-    // editorModes; теперь они есть в окне, где взяты из той же таблицы.
+    // The environment is handled by hand and is NOT shown in the window: it is
+    // a choice between two values with its own completeness check. Menu items
+    // cannot have tooltips (MenuItem only has menuItem/priority/
+    // secondaryPriority/validate/editorModes); the window shows them instead,
+    // taken from the same table.
     //
-    // У этой сборки НЕТ defineConstraints намеренно: скрипт, который включает
-    // XSOLLA_ID, не может сам его требовать — иначе включить будет нечем.
-    // Ссылка на LongLeap.Core.Editor этого не нарушает: ссылка — не
-    // ограничение, и сама LongLeap.Core.Editor тоже ничем не ограничена.
+    // This assembly deliberately has NO defineConstraints: the script that
+    // turns XSOLLA_ID on cannot itself require it, or there would be nothing
+    // left to turn it on with. The reference to LongLeap.Core.Editor does not
+    // break this: a reference is not a constraint, and LongLeap.Core.Editor is
+    // unconstrained as well.
     public static class XsollaIdMenu
     {
         private const string EnabledMenuPath = "Xsolla ID/Required/Sign-in Enabled (XSOLLA_ID)";
@@ -49,8 +51,8 @@ namespace LongLeap.XsollaId.Editor
         private static bool ToggleEnabledValidate() =>
             ProjectOptionMenu.Validate(EnabledMenuPath, XsollaIdOptions.EnabledId);
 
-        // Отладочная кнопка входа (F9/F10/F11) для проверки до появления UI.
-        // В сборку на ревью попадать не должна.
+        // Debug sign-in trigger (F9/F10/F11) for testing without the UI.
+        // Must not reach a build submitted for review.
         [MenuItem(DebugMenuPath, false, 101)]
         private static void ToggleDebug() => ProjectOptionMenu.Toggle(XsollaIdOptions.DebugId);
 
@@ -58,9 +60,9 @@ namespace LongLeap.XsollaId.Editor
         private static bool ToggleDebugValidate() =>
             ProjectOptionMenu.Validate(DebugMenuPath, XsollaIdOptions.DebugId);
 
-        // Среда — не переключатель, а выбор из двух, поэтому два пункта с
-        // галочкой, а не один чекбокс: так видно, куда именно ходит вход, и не
-        // приходится догадываться, что значит снятая галочка.
+        // The environment is a choice between two values, not a toggle, so it
+        // is two checkable items rather than one checkbox: it shows exactly
+        // where sign-in goes, with no guessing what an unchecked box means.
 
         [MenuItem(EnvStageMenuPath, false, 103)]
         private static void SelectStage() => SetEnvironment(XsollaIdConfigAccess.StageEnumName);
@@ -80,7 +82,7 @@ namespace LongLeap.XsollaId.Editor
         [MenuItem(ConfigMenuPath, false, 102)]
         private static void SelectConfig() => XsollaIdConfigAccess.SelectConfigAsset();
 
-        // ---- среда ----
+        // ---- environment ----
 
         private static bool ValidateEnvironment(string menuPath, string enumName)
         {
@@ -91,7 +93,7 @@ namespace LongLeap.XsollaId.Editor
                 environment != null
                 && environment.enumValueIndex == XsollaIdConfigAccess.IndexOf(environment, enumName));
 
-            // Ассета нет — переключать нечего.
+            // No asset — nothing to switch.
             return environment != null;
         }
 
@@ -128,9 +130,9 @@ namespace LongLeap.XsollaId.Editor
             WarnIfIncomplete(config, enumName);
         }
 
-        // Пустой clientId или redirect uri делают IsValid, а за ним и
-        // IsAvailable, ложными: кнопка входа просто гаснет, ничего не сообщая.
-        // Лучше сказать об этом в момент переключения.
+        // An empty clientId or redirect uri makes IsValid, and therefore
+        // IsAvailable, false: the sign-in button just goes away without a word.
+        // Better to say so at the moment of switching.
         private static void WarnIfIncomplete(SerializedObject config, string enumName)
         {
             string prefix = XsollaIdConfigAccess.FieldPrefix(enumName);

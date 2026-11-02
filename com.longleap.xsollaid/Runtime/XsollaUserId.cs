@@ -2,17 +2,16 @@ using System;
 
 namespace LongLeap.XsollaId
 {
-    // Идентификатор пользователя Xsolla ID — клейм `sub` из OIDC-токена.
+    // Xsolla ID user identifier — the `sub` claim of the OIDC token.
     //
-    // ЭТО НЕ Firebase uid. Под ним нельзя читать/писать cloud_saves и нельзя
-    // подписывать запросы к RTDB: там принимаются только токены, выпущенные
-    // Firebase. Отдельный тип нужен именно для того, чтобы эти два
-    // идентификатора нельзя было перепутать в коде.
+    // This is NOT a Firebase uid. It cannot be used to read/write cloud_saves or
+    // to sign RTDB requests: those accept only Firebase-issued tokens. The
+    // separate type exists so the two identifiers cannot be mixed up in code.
     //
-    // В отличие от LongLeap.Core.Auth.UserId конструктор запрещает и null, и
-    // пустую строку: у UserId `new UserId(null)` молча даёт None, и на этом
-    // легко не заметить, что личности на самом деле нет. Пустое значение
-    // получают только через None.
+    // Unlike LongLeap.Core.Auth.UserId, the constructor rejects both null and
+    // the empty string: `new UserId(null)` silently yields None, which makes it
+    // easy to miss that there is no identity at all. The empty value is
+    // available only through None.
     public readonly struct XsollaUserId : IEquatable<XsollaUserId>
     {
         public string Value { get; }
@@ -34,8 +33,8 @@ namespace LongLeap.XsollaId
         public override bool Equals(object obj) => obj is XsollaUserId other && Equals(other);
         public override int GetHashCode() => Value?.GetHashCode(StringComparison.Ordinal) ?? 0;
 
-        // sub не секрет, но и в логи его лить незачем — он связывает записи
-        // между сервисами. Печатаем только факт наличия.
+        // sub is not a secret, but there is no reason to put it in logs either —
+        // it links records across services. Only its presence is printed.
         public override string ToString() => IsValid ? "XsollaUserId(set)" : "XsollaUserId(none)";
 
         public static bool operator ==(XsollaUserId left, XsollaUserId right) => left.Equals(right);

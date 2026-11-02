@@ -2,16 +2,17 @@ using System;
 
 namespace LongLeap.XsollaId
 {
-    // Проверенный адрес картинки профиля (клейм picture из userinfo).
+    // Validated profile picture url (the picture claim from userinfo).
     //
-    // Отдельный тип, а не string, по той же причине, что XsollaUserId: адрес
-    // приезжает от сервера, и «проверен» здесь — свойство типа, а не обещание
-    // вызывающего. Загрузчику картинок нельзя подсунуть сырой текст.
+    // A separate type rather than a string, for the same reason as
+    // XsollaUserId: the url comes from the server, and "validated" is a
+    // property of the type, not a promise from the caller. Raw text cannot be
+    // passed to the avatar loader.
     //
-    // В отличие от XsollaUserId конструктор НЕ бросает. sub мы обязаны
-    // проверить сами и отказать, если его нет; picture — необязательный клейм,
-    // и мусор в нём не должен ронять ни разбор userinfo, ни вход. Непригодное
-    // значение просто становится None, а UI покажет заглушку.
+    // Unlike XsollaUserId, the constructor does NOT throw. sub is required and
+    // must be rejected when missing; picture is an optional claim, and garbage
+    // in it must not break userinfo parsing or sign-in. An unusable value
+    // simply becomes None, and the UI shows a placeholder.
     public readonly struct AvatarUrl : IEquatable<AvatarUrl>
     {
         public string Value { get; }
@@ -28,14 +29,14 @@ namespace LongLeap.XsollaId
         public static AvatarUrl TryParse(string raw) =>
             IsAcceptable(raw) ? new AvatarUrl(raw.Trim()) : None;
 
-        // Принимаем только абсолютный https. По убыванию строгости:
+        // Only absolute https is accepted. In order of severity:
         //
-        //   http на https-странице браузер режет как mixed content и внятно об
-        //     этом не сообщает — отказать сразу честнее;
-        //   data: и javascript: UnityWebRequest в WebGL всё равно не откроет, а
-        //     пускать в загрузчик произвольную схему из ответа сервера не стоит
-        //     и по соображениям безопасности;
-        //   относительный адрес не к чему приложить: базы у нас нет.
+        //   http on an https page is blocked by the browser as mixed content,
+        //     without a clear message — rejecting it upfront is more honest;
+        //   data: and javascript: would not be opened by UnityWebRequest in
+        //     WebGL anyway, and passing an arbitrary scheme from a server
+        //     response to the loader is a bad idea security-wise;
+        //   a relative url has nothing to resolve against: there is no base.
         public static bool IsAcceptable(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw))
@@ -49,8 +50,8 @@ namespace LongLeap.XsollaId
         public override bool Equals(object obj) => obj is AvatarUrl other && Equals(other);
         public override int GetHashCode() => Value?.GetHashCode(StringComparison.Ordinal) ?? 0;
 
-        // Адрес может содержать подписанный токен CDN — в лог его не льём,
-        // печатаем только факт наличия. Ровно как AccessToken и XsollaUserId.
+        // The url may contain a signed CDN token, so it is never logged — only
+        // its presence is printed. Same as AccessToken and XsollaUserId.
         public override string ToString() => IsValid ? "AvatarUrl(set)" : "AvatarUrl(none)";
 
         public static bool operator ==(AvatarUrl left, AvatarUrl right) => left.Equals(right);

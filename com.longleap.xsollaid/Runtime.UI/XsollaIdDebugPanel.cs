@@ -20,7 +20,7 @@ namespace LongLeap.XsollaId.UI
     //
     // Sign-in can only be tested in a game built for WebGL: in the editor there
     // is no popup window at all (IsSupported returns false), so the sequence is
-    // LongLeap / Build Manager, then python serve.py and http://127.0.0.1:8081/
+    // LongLeap / Build Manager, then a local dev server at http://127.0.0.1:8081/
     // (127.0.0.1 exactly -- localhost is a different origin and OriginGuard
     // will not let it through).
     //
@@ -34,7 +34,7 @@ namespace LongLeap.XsollaId.UI
         // there, otherwise IMGUI renders unreadably small on a large canvas.
         private const float DesignHeight = 720f;
 
-        // Instance fields, not static: the scene reloads on death, and a stale
+        // Instance fields, not static: the scene may be reloaded, and a stale
         // style left over from a previous load can point at a dead font.
         private GUIStyle _label;
         private GUIStyle _title;
@@ -44,7 +44,7 @@ namespace LongLeap.XsollaId.UI
         private string _lastResult = "not attempted yet";
 
         // Where to get the service. A delegate rather than the service itself:
-        // the panel spawns before the bootstrap has built anything, so a value
+        // the panel may spawn before the game has built the service, so a value
         // captured once would stay null for the whole session.
         private Func<IXsollaIdAuth> _provider;
 
@@ -52,7 +52,7 @@ namespace LongLeap.XsollaId.UI
         // of stacking another copy on top of it.
         //
         // Static, and that is safe here only because the object it points at is
-        // DontDestroyOnLoad: both survive the scene reload on death together, so
+        // DontDestroyOnLoad: both survive a scene reload together, so
         // they cannot disagree. OnDestroy clears it anyway.
         private static XsollaIdDebugPanel _instance;
 

@@ -2,12 +2,12 @@ using System;
 
 namespace LongLeap.XsollaId
 {
-    // Refresh token Xsolla ID. Живёт 720 часов (30 суток) и обменивается на
-    // новый access token без участия игрока — именно он позволяет не
-    // показывать окно входа при каждом запуске.
+    // Xsolla ID refresh token. Lives 720 hours (30 days) and is exchanged for a
+    // new access token without the player's involvement — this is what lets the
+    // game skip the sign-in window on every launch.
     //
-    // Секретнее access token'а: по нему выпускают новые токены весь срок
-    // жизни. ToString() значение не печатает никогда.
+    // More sensitive than the access token: it mints new tokens for its whole
+    // lifetime. ToString() never prints the value.
     public readonly struct RefreshToken : IEquatable<RefreshToken>
     {
         public string Value { get; }

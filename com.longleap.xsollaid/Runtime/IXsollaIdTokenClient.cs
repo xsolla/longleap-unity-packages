@@ -2,25 +2,25 @@ using System.Threading.Tasks;
 
 namespace LongLeap.XsollaId
 {
-    // Транспорт к токен-эндпоинтам. Реализация на UnityWebRequest живёт в
-    // сборке под XSOLLA_ID; здесь только контракт, чтобы вся машина состояний
-    // тестировалась без сети.
+    // Transport to the token endpoints. The UnityWebRequest implementation
+    // lives in the XSOLLA_ID assembly; only the contract is here, so the whole
+    // state machine can be tested without network.
     //
-    // Ни один метод не бросает: сбой возвращается кодом в результате.
+    // No method throws: failures are returned as a code in the result.
     public interface IXsollaIdTokenClient
     {
-        // Обмен одноразового кода на токены (authorization_code + PKCE).
+        // Exchange the one-time code for tokens (authorization_code + PKCE).
         Task<TokenResponse> ExchangeCodeAsync(string code, string codeVerifier, string redirectUri);
 
-        // Обновление по refresh token'у.
+        // Refresh using the refresh token.
         Task<TokenResponse> RefreshAsync(string refreshToken);
 
-        // Кто это. Нужен только ради имени в UI — без scope profile/email
-        // вернётся один sub.
+        // Who this is. Needed only for the name in the UI — without the
+        // profile/email scopes only sub comes back.
         Task<UserInfoResponse> GetUserInfoAsync(string accessToken);
 
-        // Отзыв токена. Best-effort: у Xsolla ID этот эндпоинт уже отдавал
-        // 405, поэтому выход из аккаунта не должен от него зависеть.
+        // Token revocation. Best-effort: this Xsolla ID endpoint has returned
+        // 405 before, so signing out must not depend on it.
         Task RevokeAsync(string accessToken);
     }
 
@@ -30,8 +30,8 @@ namespace LongLeap.XsollaId
         public RefreshToken Refresh { get; }
         public long ExpiresAtUnixMs { get; }
 
-        // Сырой id_token, если сервер его прислал. Разбирают снаружи; здесь
-        // держим строкой, чтобы не тянуть парсер JWT в контракт.
+        // Raw id_token, if the server sent one. Parsed elsewhere; kept as a
+        // string here so the contract does not pull in a JWT parser.
         public string RawIdToken { get; }
 
         public XsollaIdErrorCode? Error { get; }
@@ -62,24 +62,25 @@ namespace LongLeap.XsollaId
     {
         public XsollaUserId Subject { get; }
 
-        // username, preferred_username или email — что нашлось.
+        // username, preferred_username or email — whichever was found.
         public string DisplayName { get; }
 
-        // Клеймы username и name как есть, без выбора.
+        // The username and name claims as is, without picking.
         //
-        // Рядом с DisplayName это НЕ дублирование: тот выбран из четырёх клеймов
-        // по приоритету (XsollaIdTokenClient.PickDisplayName) и годится там, где
-        // место только под одну строку. А раскрытая карточка аккаунта показывает
-        // именно две разные величины, и подменять одну другой нельзя: у аккаунта
-        // без своего username сервер выдаёт сгенерированный id<цифры>, и он не
-        // имеет ничего общего с именем из профиля.
+        // Not a duplicate of DisplayName: that one is picked from four claims
+        // by priority (XsollaIdTokenClient.PickDisplayName) and suits places
+        // with room for a single line. The expanded account card shows two
+        // distinct values, and one cannot stand in for the other: for an
+        // account without its own username the server issues a generated
+        // id<digits>, which has nothing to do with the profile name.
         //
-        // Оба могут быть null: клейма может не быть в ответе вовсе.
+        // Both may be null: the claim may be absent from the response.
         public string UserName { get; }
         public string FullName { get; }
 
-        // Адрес картинки профиля. None — штатно: клейм picture необязателен, и
-        // отдаёт ли его конкретный инстанс Xsolla ID, заранее неизвестно.
+        // Profile picture url. None is normal: the picture claim is optional,
+        // and whether a given Xsolla ID instance returns it is not known in
+        // advance.
         public AvatarUrl Picture { get; }
 
         public XsollaIdErrorCode? Error { get; }
@@ -101,14 +102,14 @@ namespace LongLeap.XsollaId
             Message = message;
         }
 
-        // picture — параметр со значением по умолчанию, а не перегрузка: ровно
-        // как rawIdToken у TokenResponse.Ok выше. Пишем `= default`, а не
-        // `= AvatarUrl.None`: None это свойство, а значение по умолчанию обязано
-        // быть константой времени компиляции.
+        // picture is an optional parameter rather than an overload, just like
+        // rawIdToken in TokenResponse.Ok above. It is `= default` rather than
+        // `= AvatarUrl.None`: None is a property, and a default value must be a
+        // compile-time constant.
         //
-        // userName и fullName тоже в хвосте и тоже со значениями по умолчанию:
-        // вызывающих у Ok немного, но ни один из них не должен ломаться из-за
-        // двух полей, нужных одной раскрытой карточке.
+        // userName and fullName also go at the end with defaults: Ok has few
+        // callers, but none of them should break because of two fields needed
+        // only by the expanded card.
         public static UserInfoResponse Ok(
             XsollaUserId subject, string displayName, AvatarUrl picture = default,
             string userName = null, string fullName = null) =>

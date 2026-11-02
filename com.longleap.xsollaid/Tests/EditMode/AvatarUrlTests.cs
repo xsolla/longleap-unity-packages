@@ -19,8 +19,8 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public void TryParse_NormalisesUppercaseScheme()
         {
-            // Uri приводит схему к нижнему регистру сам — проверяем, что
-            // сравнение с UriSchemeHttps на это опирается, а не ломается.
+            // Uri lowercases the scheme itself; check that the comparison with
+            // UriSchemeHttps relies on that instead of breaking.
             Assert.IsTrue(AvatarUrl.TryParse("HTTPS://cdn.xsolla.com/a.png").IsValid);
         }
 
@@ -33,8 +33,8 @@ namespace LongLeap.XsollaId.Tests
             Assert.AreEqual(Valid, url.Value, "the stored value must be ready to hand to a web request");
         }
 
-        // Всё непригодное становится None и НЕ бросает: picture —
-        // необязательный клейм, и мусор в нём не должен ронять вход.
+        // Anything unusable becomes None and does NOT throw: picture is an
+        // optional claim, and garbage in it must not break sign-in.
         [TestCase(null)]
         [TestCase("")]
         [TestCase("   ")]
@@ -65,7 +65,7 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsTrue(AvatarUrl.TryParse(Valid) != AvatarUrl.None);
         }
 
-        // Адрес CDN может нести подписанный токен — в лог он попадать не должен.
+        // A CDN address may carry a signed token; it must never reach the log.
         [Test]
         public void ToString_DoesNotLeakTheUrl()
         {

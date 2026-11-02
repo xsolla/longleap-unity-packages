@@ -4,28 +4,29 @@ using Newtonsoft.Json.Linq;
 
 namespace LongLeap.XsollaId.Web
 {
-    // Загрузка /.well-known/openid-configuration с кэшем.
+    // Loads /.well-known/openid-configuration and caches it.
     //
-    // Пути эндпоинтов НЕ зашиты намеренно: у Xsolla ID они сейчас переезжают
-    // из /api/oauth2/* в корень (ADR принят к реализации, оба пути какое-то
-    // время живут параллельно, потом старый выключают). Зашить сегодняшний
-    // путь — значит сломаться на выключении.
+    // Endpoint paths are deliberately NOT hardcoded: Xsolla ID is moving them
+    // from /api/oauth2/* to the root (both paths live side by side for a while,
+    // then the old one is turned off). Hardcoding today's path would break on
+    // the switch-off.
     //
-    // Но и доверять документу слепо нельзя: он дважды расходился с
-    // реальностью в проде. На момент написания прод отдаёт authorize/token/
-    // userinfo под /api/oauth2/*, а revocation_endpoint и end_session_endpoint
-    // — в корне, то есть ровно те два, которые ломались. Отсюда два решения:
-    // отзыв токена best-effort с попыткой второго пути, а end_session не
-    // используется вообще.
+    // The document cannot be trusted blindly either: it has disagreed with
+    // reality in production. At the time of writing, production serves
+    // authorize/token/userinfo under /api/oauth2/*, while revocation_endpoint
+    // and end_session_endpoint point at the root — exactly the two that broke.
+    // Hence two decisions: token revocation is best-effort with a second-path
+    // retry, and end_session is not used at all.
     public sealed class OidcDiscovery : IOidcDiscovery
     {
         private readonly string _discoveryUrl;
         private readonly XsollaIdHttp _http;
 
-        // Кэшируем саму задачу: параллельные вызовы получают одну загрузку, а
-        // повторные — готовый результат. Прогрев на старте нужен, чтобы к
-        // моменту клика адрес уже был известен: сходить за ним между кликом и
-        // window.open нельзя — браузер сочтёт окно непрошеным.
+        // Cache the task itself: concurrent calls share one load, later calls
+        // get the finished result. Warming up at startup ensures the address is
+        // known by the time of the click: fetching it between the click and
+        // window.open is not an option — the browser would treat the window as
+        // unsolicited.
         private Task<OidcConfiguration> _inFlight;
 
         public OidcDiscovery(string discoveryUrl, XsollaIdHttp http = null)
@@ -39,7 +40,7 @@ namespace LongLeap.XsollaId.Web
 
         public Task<OidcConfiguration> GetAsync()
         {
-            // Провалившуюся попытку не кэшируем: сеть могла просто мигнуть.
+            // A failed attempt is not cached: the network may have just blinked.
             if (_inFlight != null && !IsFailedAttempt(_inFlight))
                 return _inFlight;
 
@@ -48,15 +49,16 @@ namespace LongLeap.XsollaId.Web
             return _inFlight;
         }
 
-        // Одного IsFaulted мало. LoadAsync и Parse гасят свои отказы внутри и
-        // возвращают null штатно, поэтому провал выглядит как успешно
-        // завершённая задача с пустым результатом. Без проверки на null один
-        // запрос, срезанный CORS'ом или просто моргнувшей сетью на прогреве,
-        // убивал вход до конца сессии: каждый следующий клик доставал из кэша
-        // тот же null и падал с NotConfigured, ни разу не сходив в сеть.
+        // IsFaulted alone is not enough. LoadAsync and Parse swallow their own
+        // failures and return null normally, so a failure looks like a
+        // successfully completed task with a null result. Without the null
+        // check, a single request cut off by CORS or a network blip during
+        // warm-up would kill sign-in for the rest of the session: every click
+        // would take the same null from the cache and fail with NotConfigured
+        // without ever hitting the network.
         //
-        // Result читаем только у успешно завершённой задачи — там он уже готов
-        // и не бросает.
+        // Result is read only on a successfully completed task — it is ready
+        // there and does not throw.
         private static bool IsFailedAttempt(Task<OidcConfiguration> attempt) =>
             attempt.IsFaulted ||
             attempt.IsCanceled ||
@@ -78,8 +80,8 @@ namespace LongLeap.XsollaId.Web
             return Parse(reply.Body, _discoveryUrl);
         }
 
-        // Разбор вынесен наружу и без сети — так он проверяется тестами на
-        // реальных ответах, включая заведомо кривые.
+        // Parsing is public and network-free so it can be tested against real
+        // responses, including deliberately malformed ones.
         public static OidcConfiguration Parse(string json, string expectedDiscoveryUrl = null)
         {
             if (string.IsNullOrWhiteSpace(json))
@@ -102,10 +104,10 @@ namespace LongLeap.XsollaId.Web
                     return null;
                 }
 
-                // Эндпоинты обязаны жить на том же хосте, что и сам документ.
-                // Подменённый (или просто неверно настроенный) discovery,
-                // указывающий на чужой хост, увёл бы код авторизации на
-                // сторону — это дешёвая проверка против дорогой ошибки.
+                // Endpoints must live on the same host as the document itself.
+                // A spoofed (or simply misconfigured) discovery pointing at a
+                // foreign host would send the authorization code elsewhere — a
+                // cheap check against an expensive mistake.
                 if (!SameHost(expectedDiscoveryUrl, config.AuthorizationEndpoint) ||
                     !SameHost(expectedDiscoveryUrl, config.TokenEndpoint))
                 {
@@ -123,7 +125,7 @@ namespace LongLeap.XsollaId.Web
             }
         }
 
-        // Пустой expected — проверять не с чем, пропускаем.
+        // Empty expected — nothing to compare against, let it through.
         private static bool SameHost(string expected, string candidate)
         {
             if (string.IsNullOrEmpty(expected))

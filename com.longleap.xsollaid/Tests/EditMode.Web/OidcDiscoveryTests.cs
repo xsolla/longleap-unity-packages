@@ -9,8 +9,8 @@ namespace LongLeap.XsollaId.Web.Tests
     {
         private const string DiscoveryUrl = "https://id-staging.xsolla.com/.well-known/openid-configuration";
 
-        // Документ в той форме, в какой его отдаёт stage: authorize/token/
-        // userinfo под /api/oauth2/*, revoke — в корне.
+        // The document as the stage environment serves it: authorize/token/userinfo
+        // under /api/oauth2/*, revoke at the root.
         private const string ValidDocument = @"{
             ""issuer"": ""https://id-staging.xsolla.com"",
             ""authorization_endpoint"": ""https://id-staging.xsolla.com/api/oauth2/auth"",
@@ -19,8 +19,8 @@ namespace LongLeap.XsollaId.Web.Tests
             ""revocation_endpoint"": ""https://id-staging.xsolla.com/oauth2/revoke""
         }";
 
-        // Очередь заготовленных ответов: тесты про повтор должны отдать сперва
-        // отказ, потом успех, и сосчитать походы в сеть.
+        // Queue of canned replies: the retry tests must return a failure first,
+        // then a success, and count the network calls.
         private sealed class FakeTransport
         {
             private readonly Queue<HttpReply> _replies = new Queue<HttpReply>();
@@ -48,7 +48,7 @@ namespace LongLeap.XsollaId.Web.Tests
         private static OidcDiscovery Create(FakeTransport transport) =>
             new OidcDiscovery(DiscoveryUrl, transport.AsHttp());
 
-        // ---- кэш ----
+        // ---- cache ----
 
         [Test]
         public async Task GetAsync_CachesSuccess()
@@ -63,10 +63,10 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreSame(first, second);
         }
 
-        // Регрессия. Прогрев на старте ловил CORS (или просто моргнувшую сеть),
-        // LoadAsync возвращал null штатно — задача завершалась успешно, и
-        // кэш отдавал этот null до конца сессии. Каждый следующий клик по
-        // «войти» падал с NotConfigured, ни разу не сходив в сеть.
+        // Regression. The startup warm-up hit CORS (or a network blip), LoadAsync
+        // returned null normally, so the task completed successfully and the cache
+        // kept serving that null for the rest of the session. Every later "sign in"
+        // click failed with NotConfigured without touching the network.
         [Test]
         public async Task GetAsync_RetriesAfterTransportFailure()
         {
@@ -97,8 +97,8 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreEqual(2, transport.Calls, "5xx is a failure too, not a usable answer");
         }
 
-        // Кривой документ так же не должен застревать в кэше: на той стороне
-        // эндпоинты переезжают, и следующий ответ может быть уже нормальным.
+        // A malformed document must not get stuck in the cache either: the
+        // endpoints are being moved server-side, and the next reply may be fine.
         [Test]
         public async Task GetAsync_RetriesAfterUnusableDocument()
         {
@@ -126,7 +126,7 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreEqual(1, transport.Calls, "parallel callers share one load");
         }
 
-        // ---- разбор ----
+        // ---- parsing ----
 
         [Test]
         public void Parse_ReadsEndpoints()
@@ -156,7 +156,7 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.IsNull(OidcDiscovery.Parse(null, DiscoveryUrl));
         }
 
-        // userinfo и revoke необязательны: без них вход всё равно работает.
+        // userinfo and revoke are optional: sign-in works without them.
         [Test]
         public void Parse_AcceptsDocumentWithoutOptionalEndpoints()
         {

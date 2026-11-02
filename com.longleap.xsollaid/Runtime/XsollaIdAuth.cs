@@ -5,24 +5,25 @@ using UnityEngine;
 
 namespace LongLeap.XsollaId
 {
-    // Машина состояний входа через Xsolla ID.
+    // Xsolla ID sign-in state machine.
     //
-    // Все внешние зависимости — швы, поэтому весь класс проверяется
-    // EditMode-тестами без браузера, без сети и без зарегистрированного
-    // clientId.
+    // Every external dependency is a seam, so the whole class is covered by
+    // EditMode tests without a browser, without network and without a
+    // registered clientId.
     //
-    // Наружу не бросает НИЧЕГО: любой сбой возвращается XsollaIdResult.Failure
-    // с кодом. Исключение, всплывшее в Task, который опрашивают из корутины
-    // бутстрапа, — это повисшая загрузка.
+    // Throws NOTHING outward: every failure is returned as
+    // XsollaIdResult.Failure with a code. An exception surfacing in a Task that
+    // a bootstrap coroutine polls means a hung loading screen.
     public sealed class XsollaIdAuth : IXsollaIdAuth
     {
-        // Тот же запас, что у FirebaseAnonymousAuthProvider: не отдаём токен,
-        // которому осталось меньше пяти минут, чтобы он не протух по дороге.
+        // Do not hand out a token with less than five minutes left, so it does
+        // not expire in flight. Same margin as the Firebase anonymous auth
+        // provider.
         private const long TokenRefreshMarginMs = 300_000;
 
-        // Пять минут, а не три: первый вход часто идёт через MFA, и игроку
-        // нужно время. Столько же отводит standalone-флоу Backpack Cat
-        // (Confluence 24612667695, §3.1) — тот же IdP, та же MFA.
+        // Five minutes rather than three: the first sign-in often goes through
+        // MFA, and the player needs time. Matches the timeout recommended by
+        // the Xsolla ID design doc for the same IdP and MFA flow.
         private static readonly TimeSpan PopupTimeout = TimeSpan.FromMinutes(5);
 
         private readonly XsollaIdConfig _config;
@@ -33,14 +34,14 @@ namespace LongLeap.XsollaId
         private readonly Func<long> _nowUnixMs;
         private readonly Func<string> _pageUrl;
 
-        // Обновление и восстановление сериализуем: два параллельных обновления
-        // сожгут refresh token дважды.
+        // Refresh and restore are serialized: two concurrent refreshes would
+        // burn the refresh token twice.
         private readonly SemaphoreSlim _refreshLock = new SemaphoreSlim(1, 1);
 
-        // Для входа семафор НЕ подходит: он бы не отменил второй вызов, а
-        // поставил его в очередь — и по двойному клику открылось бы второе
-        // окно уже после закрытия первого. Поэтому держим саму задачу и
-        // отдаём её повторно.
+        // A semaphore does NOT fit sign-in: it would queue the second call
+        // instead of rejecting it, and a double click would open a second
+        // window right after the first one closes. So the task itself is kept
+        // and handed out again.
         private Task<XsollaIdResult> _signInInFlight;
 
         public XsollaIdAuth(
@@ -69,9 +70,9 @@ namespace LongLeap.XsollaId
 
         public XsollaIdSession Current { get; private set; }
 
-        // По умолчанию НЕ Interactive: спросить игрока можно только там, где он
-        // сам нажал кнопку, и случайное чтение до первого входа не имеет права
-        // выглядеть как его жест.
+        // NOT Interactive by default: the player may only be asked where they
+        // pressed the button themselves, and an incidental read before the
+        // first sign-in must not look like their gesture.
         public XsollaIdSignInOrigin LastSignInOrigin { get; private set; } = XsollaIdSignInOrigin.Restored;
 
         public event Action<XsollaIdSession> SignedIn;
@@ -90,11 +91,11 @@ namespace LongLeap.XsollaId
 
             try
             {
-                // Discovery прогреваем ВСЕГДА, даже если восстанавливать
-                // нечего. Дальше SignInAsync возьмёт его из кэша, и ожидание
-                // уже завершённой задачи продолжится синхронно — жест игрока
-                // не потеряется и окно не заблокируют. Холодный кэш на клике —
-                // это заблокированный popup.
+                // ALWAYS warm up discovery, even if there is nothing to restore.
+                // SignInAsync will then take it from the cache, and awaiting an
+                // already completed task continues synchronously — the player's
+                // gesture is preserved and the popup is not blocked. A cold
+                // cache on click means a blocked popup.
                 _ = WarmDiscoveryAsync();
 
                 XsollaIdSession stored = _store.Load();
@@ -104,15 +105,15 @@ namespace LongLeap.XsollaId
 
                 if (!stored.IsExpired(_nowUnixMs(), TokenRefreshMarginMs))
                 {
-                    // Догоняем профиль ровно один раз — см. TopUpProfileAsync.
-                    // Ждать здесь можно: бутстрап зовёт RestoreAsync и
-                    // выбрасывает задачу, так что лишний round-trip ничего не
-                    // задерживает.
+                    // Top up the profile exactly once — see TopUpProfileAsync.
+                    // Awaiting here is fine: the bootstrap calls RestoreAsync
+                    // and discards the task, so the extra round-trip delays
+                    // nothing.
                     XsollaIdSession adopted = stored.ProfileFetched ? stored : await TopUpProfileAsync(stored);
 
-                    // Adopt получает УЖЕ дополненную сессию, поэтому SignedIn
-                    // сразу несёт картинку и второго события подписчикам не
-                    // нужно.
+                    // Adopt receives the ALREADY topped-up session, so SignedIn
+                    // carries the picture right away and subscribers need no
+                    // second event.
                     Adopt(adopted, XsollaIdSignInOrigin.Restored);
 
                     if (!ReferenceEquals(adopted, stored))
@@ -171,7 +172,7 @@ namespace LongLeap.XsollaId
             if (!IsAvailable)
                 return Task.FromResult(XsollaIdResult.Unavailable());
 
-            // Повторный клик по кнопке не должен открывать второе окно.
+            // A repeated click must not open a second window.
             if (_signInInFlight != null && !_signInInFlight.IsCompleted)
                 return _signInInFlight;
 
@@ -184,8 +185,8 @@ namespace LongLeap.XsollaId
         {
             XsollaIdSession session = Current;
 
-            // Локальную часть делаем ПЕРВОЙ и безусловно: даже если отзыв не
-            // пройдёт, игрок должен оказаться вышедшим.
+            // The local part goes FIRST and unconditionally: even if revocation
+            // fails, the player must end up signed out.
             Current = null;
             _store.Clear();
 
@@ -201,8 +202,8 @@ namespace LongLeap.XsollaId
             }
             catch (Exception ex)
             {
-                // Отзыв — best-effort: у Xsolla ID этот эндпоинт уже отдавал
-                // 405, и выход из аккаунта не должен от него зависеть.
+                // Revocation is best-effort: this Xsolla ID endpoint has
+                // returned 405 before, and signing out must not depend on it.
                 Debug.LogWarning($"{nameof(XsollaIdAuth)}: token revocation failed — {ex.Message}");
             }
         }
@@ -213,9 +214,10 @@ namespace LongLeap.XsollaId
             {
                 XsollaIdClientRegistration client = _config.Active;
 
-                // Проверяем ДО открытия окна: сервер сверяет redirect_uri
-                // посимвольно, и его отказ выглядит невнятно. Заодно ловим
-                // localhost вместо 127.0.0.1 — это разные origin'ы.
+                // Checked BEFORE opening the window: the server compares
+                // redirect_uri character by character, and its rejection is
+                // vague. This also catches localhost used instead of 127.0.0.1 —
+                // they are different origins.
                 if (!OriginGuard.IsAllowed(_pageUrl(), _config.AllowedGameOrigins, out string problem))
                     return Fail(XsollaIdErrorCode.NotConfigured, problem);
 
@@ -224,12 +226,12 @@ namespace LongLeap.XsollaId
                 if (oidc == null || !oidc.IsUsable)
                     return Fail(XsollaIdErrorCode.NotConfigured, "discovery did not return the authorize/token endpoints.");
 
-                // Ровно то, что сейчас уйдёт на сервер. В логе нужна сама
-                // строка, а не «адрес из конфига»: сверку redirect_uri сервер
-                // делает посимвольно, и расхождение в схеме, порте или
-                // завершающем слэше по ассету глазами не находится. Тот же
-                // адрес потом идёт в обмен кода — если он не совпадёт,
-                // отказ придёт уже там.
+                // Log exactly what is about to go to the server, not "the
+                // address from the config": the server compares redirect_uri
+                // character by character, and a mismatch in scheme, port or
+                // trailing slash is impossible to spot by looking at the asset.
+                // The same address is later used in the code exchange — if it
+                // does not match, the rejection comes from there.
                 Debug.Log($"{nameof(XsollaIdAuth)}: opening sign-in — page '{_pageUrl()}', " +
                     $"redirect_uri '{client.RedirectUri}', authorize endpoint '{oidc.AuthorizationEndpoint}'.");
 
@@ -243,8 +245,8 @@ namespace LongLeap.XsollaId
                 if (!browser.IsSuccess)
                     return new XsollaIdResult.Failure(browser.Error.Value, browser.Message);
 
-                // Сверяем state ДО обмена: расхождение — возможная CSRF, и
-                // тратить на неё одноразовый код нельзя.
+                // Compare state BEFORE the exchange: a mismatch may be CSRF, and
+                // the one-time code must not be spent on it.
                 if (!string.Equals(browser.State, state, StringComparison.Ordinal))
                     return Fail(XsollaIdErrorCode.InvalidState, "the state in the response did not match the one sent.");
 
@@ -270,11 +272,11 @@ namespace LongLeap.XsollaId
             }
         }
 
-        // Вызывается только под _refreshLock.
-        // origin передаётся насквозь, потому что обновление токена приходит из
-        // двух разных мест: из восстановления сессии на старте (там это переход
-        // «не вошёл → вошёл», и спрашивать игрока нельзя) и из явного
-        // RefreshAsync у уже вошедшего.
+        // Called only under _refreshLock.
+        // origin is passed through because a token refresh comes from two
+        // places: the session restore at startup (a "signed out → signed in"
+        // transition, where the player must not be asked anything) and an
+        // explicit RefreshAsync for an already signed-in player.
         private async Task<XsollaIdResult> RefreshLockedAsync(
             XsollaIdSession session, XsollaIdSignInOrigin origin)
         {
@@ -282,8 +284,9 @@ namespace LongLeap.XsollaId
 
             if (!tokens.IsSuccess)
             {
-                // Refresh token живёт 720 часов. Его смерть — штатный исход,
-                // а не сбой: чистим и молча уходим в гости.
+                // The refresh token lives 720 hours. Its expiry is a normal
+                // outcome, not a failure: clear it and quietly fall back to
+                // guest.
                 if (tokens.Error == XsollaIdErrorCode.SessionExpired)
                 {
                     _store.Clear();
@@ -301,15 +304,14 @@ namespace LongLeap.XsollaId
             return new XsollaIdResult.Success(refreshed);
         }
 
-        // Профиль тянем, только если для этой личности его ещё не тянули:
-        // userinfo — лишний round-trip, а при обновлении токена личность не
-        // меняется.
+        // The profile is fetched only if it has not been fetched for this
+        // identity yet: userinfo is an extra round-trip, and a token refresh
+        // does not change the identity.
         //
-        // Признаком раньше служило непустое имя. С картинкой это перестало
-        // работать: клейма picture может не быть вовсе, и условие «картинки нет
-        // → сходи ещё раз» означало бы лишний userinfo на КАЖДОЕ обновление
-        // токена, навсегда. Поэтому признак теперь отдельный и сохраняется
-        // вместе с сессией.
+        // A non-empty name cannot serve as the marker: the picture claim may be
+        // missing entirely, and "no picture → fetch again" would mean an extra
+        // userinfo on EVERY token refresh, forever. Hence a dedicated flag that
+        // is persisted with the session.
         private async Task<XsollaIdSession> BuildSessionAsync(TokenResponse tokens, XsollaIdSession previous)
         {
             XsollaUserId subject = previous?.Subject ?? XsollaUserId.None;
@@ -317,8 +319,9 @@ namespace LongLeap.XsollaId
             AvatarUrl picture = previous?.Picture ?? AvatarUrl.None;
             bool profileFetched = previous?.ProfileFetched ?? false;
 
-            // Переносим из прошлой сессии по той же причине, что имя и картинку:
-            // при обновлении токена userinfo не случается, а личность та же.
+            // Carried over from the previous session for the same reason as the
+            // name and picture: a token refresh does not call userinfo, and the
+            // identity is the same.
             string userName = previous?.UserName;
             string fullName = previous?.FullName;
 
@@ -334,15 +337,14 @@ namespace LongLeap.XsollaId
                     userName = info.UserName;
                     fullName = info.FullName;
 
-                    // Отмечаем ТОЛЬКО на успехе: отказ userinfo должен
-                    // повториться на следующем обновлении, а не запомниться как
-                    // «спрашивали».
+                    // Set ONLY on success: a failed userinfo must be retried on
+                    // the next refresh, not remembered as "already asked".
                     profileFetched = true;
                 }
                 else
                 {
-                    // Без userinfo вход всё равно состоялся — просто показать
-                    // будет нечего.
+                    // Sign-in still succeeded without userinfo — there is just
+                    // nothing to display.
                     Debug.LogWarning($"{nameof(XsollaIdAuth)}: userinfo unavailable — {info.Message}");
                 }
             }
@@ -356,22 +358,22 @@ namespace LongLeap.XsollaId
                 userName, fullName);
         }
 
-        // Догоняющий запрос профиля для сессии, поднятой из хранилища.
+        // Catch-up profile request for a session loaded from storage.
         //
-        // Нужен потому, что RestoreAsync принимает ещё живую сессию НЕ через
-        // BuildSessionAsync: у блоба, записанного до появления картинки, имя
-        // есть, а картинки нет, и обновления токена (где userinfo и так
-        // случается) можно не дождаться — access token живёт час, а вкладку
-        // игрок может не закрывать сутками.
+        // Needed because RestoreAsync adopts a still-valid session WITHOUT going
+        // through BuildSessionAsync: a blob written by an older version has a
+        // name but no picture, and waiting for a token refresh (where userinfo
+        // happens anyway) may take too long — the access token lives an hour,
+        // but the player may keep the tab open for days.
         //
-        // Ничего не бросает и восстановление не проваливает: без картинки
-        // сессия полностью рабочая, поэтому любой отказ — просто предупреждение.
+        // Never throws and never fails the restore: the session is fully usable
+        // without a picture, so any failure is just a warning.
         private async Task<XsollaIdSession> TopUpProfileAsync(XsollaIdSession session)
         {
-            // Страховка: спрашивать было бы нечем. Сейчас сюда не попасть —
-            // IsExpired считает отсутствие access token'а истечением, поэтому
-            // такая сессия уходит на обновление и в BuildSessionAsync. Но
-            // зависеть от чужого условия в другом файле незачем.
+            // Safety net: there would be nothing to ask with. Currently
+            // unreachable — IsExpired treats a missing access token as expired,
+            // so such a session goes to refresh and BuildSessionAsync. But there
+            // is no reason to depend on a condition in another file.
             if (!session.Access.IsValid)
                 return session;
 
@@ -392,8 +394,8 @@ namespace LongLeap.XsollaId
                 info.Picture,
                 profileFetched: true,
 
-                // Пустой клейм не затирает то, что уже лежало в сессии: у
-                // догоняющего запроса задача дополнить, а не обеднить.
+                // An empty claim does not overwrite what the session already
+                // has: a catch-up request is meant to add data, not lose it.
                 userName: string.IsNullOrEmpty(info.UserName) ? session.UserName : info.UserName,
                 fullName: string.IsNullOrEmpty(info.FullName) ? session.FullName : info.FullName);
         }
@@ -429,17 +431,17 @@ namespace LongLeap.XsollaId
 
             Current = session;
 
-            // ДО событий: подписчик SignedIn читает признак сразу в
-            // обработчике.
+            // BEFORE the events: a SignedIn subscriber reads the flag right in
+            // its handler.
             LastSignInOrigin = origin;
 
-            // SignedIn — только на переходе «не вошёл → вошёл»: на него
-            // подписчики полагаются именно в этом смысле.
+            // SignedIn fires only on the "signed out → signed in" transition:
+            // subscribers rely on exactly that meaning.
             //
-            // Но Current при обновлении токена подменяется НОВЫМ объектом, и
-            // молчать об этом нельзя: подписчик, запомнивший поля из полезной
-            // нагрузки SignedIn, тихо остался бы со старой картинкой и старым
-            // именем. Поэтому у смены сессии без смены игрока своё событие.
+            // But on a token refresh Current is replaced with a NEW object, and
+            // that cannot go unannounced: a subscriber that cached fields from
+            // the SignedIn payload would quietly keep the old picture and name.
+            // So a session change without a player change has its own event.
             if (wasSignedOut)
                 SignedIn?.Invoke(session);
             else

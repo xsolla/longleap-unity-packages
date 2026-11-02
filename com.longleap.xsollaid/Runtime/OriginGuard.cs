@@ -3,36 +3,37 @@ using System.Collections.Generic;
 
 namespace LongLeap.XsollaId
 {
-    // Проверка, что игра открыта на origin'е, с которого вход вообще может
-    // сработать.
+    // Checks that the game is served from an origin where sign-in can work at
+    // all.
     //
-    // Зачем: сервер сверяет redirect_uri посимвольно и при несовпадении
-    // отказывает — но увидим мы это уже ПОСЛЕ открытия окна и в невнятной
-    // формулировке. Дешевле проверить до и сказать прямо.
+    // Why: the server compares redirect_uri character by character and rejects
+    // a mismatch — but that only shows up AFTER the window opens, with a vague
+    // message. It is cheaper to check upfront and say it plainly.
     //
-    // Почему список, а не сравнение с redirect uri: вход теперь есть и в
-    // портальной сборке, где игру отдаёт GamePix со своего origin'а, а
-    // страница обратного вызова может лежать на нашем домене. То есть origin
-    // игры и origin redirect uri СОВПАДАТЬ НЕ ОБЯЗАНЫ, и требовать этого
-    // нельзя. Проверяем принадлежность к списку разрешённых.
+    // Why a list rather than a comparison with the redirect uri: sign-in also
+    // works in portal builds, where the portal (e.g. GamePix) serves the game
+    // from its own origin while the callback page may live on our domain. So
+    // the game origin and the redirect uri origin NEED NOT MATCH, and that
+    // cannot be required. Membership in the allowed list is checked instead.
     //
-    // Ловит два реальных случая:
-    //   1) serve.py печатает 127.0.0.1, а разработчик по привычке набирает
-    //      localhost — это РАЗНЫЕ origin'ы, и вход упадёт;
-    //   2) в конфиге прода остался чужой домен — узнаем на первом же клике,
-    //      а не из отчёта игрока.
+    // Catches two real cases:
+    //   1) the local dev server prints 127.0.0.1, but the developer types
+    //      localhost out of habit — these are DIFFERENT origins, and sign-in
+    //      fails;
+    //   2) the production config still lists a wrong domain — caught on the
+    //      first click, not from a player report.
     //
-    // Чистая функция без UnityEngine, чтобы проверялась тестами.
+    // A pure function without UnityEngine, so it can be unit-tested.
     public static class OriginGuard
     {
-        // Разрешён ли origin страницы.
+        // Whether the page origin is allowed.
         //
-        // pageUrl — полный адрес страницы (в игре Application.absoluteURL).
-        // Пустой pageUrl (редактор, standalone) проходит: origin'а там нет.
+        // pageUrl is the full page address (Application.absoluteURL in game).
+        // An empty pageUrl (editor, standalone) passes: there is no origin.
         //
-        // Пустой allowedOrigins тоже проходит: список не задан — значит
-        // ограничивать нечего, пусть решает сервер. Молча блокировать вход
-        // из-за незаполненного конфига хуже, чем пропустить.
+        // An empty allowedOrigins also passes: no list means nothing to
+        // restrict, let the server decide. Silently blocking sign-in because of
+        // an unfilled config is worse than letting it through.
         public static bool IsAllowed(
             string pageUrl, IReadOnlyList<string> allowedOrigins, out string problem)
         {
@@ -48,7 +49,7 @@ namespace LongLeap.XsollaId
 
             if (pageOrigin == null)
             {
-                // Разобрать не смогли — не мешаем.
+                // Could not parse it — do not get in the way.
                 return true;
             }
 
@@ -67,8 +68,8 @@ namespace LongLeap.XsollaId
                     return true;
             }
 
-            // Ни один не подошёл — но если разобрать не удалось ни одного,
-            // считаем, что списка нет.
+            // Nothing matched — but if none of the entries could be parsed,
+            // treat it as if there were no list.
             if (known.Count == 0)
                 return true;
 
@@ -79,9 +80,9 @@ namespace LongLeap.XsollaId
             return false;
         }
 
-        // scheme://host:port — то, что браузер считает origin'ом. Порт по
-        // умолчанию не дописываем: обе стороны приводим одинаково, так что
-        // сокращённая форма совпадёт сама с собой.
+        // scheme://host:port — what the browser considers the origin. The
+        // default port is omitted: both sides are normalized the same way, so
+        // the short form matches itself.
         public static string TryGetOrigin(string url)
         {
             if (string.IsNullOrEmpty(url))

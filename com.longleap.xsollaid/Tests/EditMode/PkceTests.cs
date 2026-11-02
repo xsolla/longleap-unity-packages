@@ -7,8 +7,8 @@ namespace LongLeap.XsollaId.Tests
     [TestFixture]
     public class PkceTests
     {
-        // Контрольный пример из RFC 7636, приложение B. Если он разойдётся —
-        // сервер отвергнет обмен кода, и понять почему будет очень трудно.
+        // Reference example from RFC 7636, Appendix B. If it diverges, the server
+        // rejects the code exchange, and finding out why is very hard.
         private const string RfcVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         private const string RfcChallenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
 
@@ -21,7 +21,7 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public void Base64UrlEncode_HasNoPaddingAndNoUrlUnsafeChars()
         {
-            // 10 байт дают base64 с двумя '=' на конце — хороший случай.
+            // 10 bytes give base64 with two trailing '=' - a good edge case.
             string encoded = Pkce.Base64UrlEncode(new byte[] { 251, 255, 190, 1, 2, 3, 4, 5, 6, 7 });
 
             Assert.IsFalse(encoded.Contains("="), "padding must be stripped");
@@ -32,7 +32,7 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public void Base64UrlEncode_ReplacesPlusAndSlashWithDashAndUnderscore()
         {
-            // 0xFB 0xFF 0xBE в обычном base64 даёт "+/++" — проверяем замену.
+            // 0xFB 0xFF 0xBE encode to "+/++" in plain base64 - checks the substitution.
             string encoded = Pkce.Base64UrlEncode(new byte[] { 0xFB, 0xFF, 0xBE });
 
             Assert.AreEqual(Convert.ToBase64String(new byte[] { 0xFB, 0xFF, 0xBE })
@@ -44,8 +44,8 @@ namespace LongLeap.XsollaId.Tests
         {
             string verifier = Pkce.CreateVerifier();
 
-            // 32 байта в base64url без padding — ровно 43 символа, что попадает
-            // в разрешённый RFC диапазон 43..128.
+            // 32 bytes in unpadded base64url are exactly 43 characters, within
+            // the 43..128 range allowed by the RFC.
             Assert.AreEqual(43, verifier.Length);
             Assert.IsFalse(verifier.Contains("="));
             Assert.IsFalse(verifier.Contains("+"));
@@ -67,7 +67,7 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public void CreateVerifier_TwoCallsDiffer()
         {
-            // Предсказуемый verifier обнуляет смысл PKCE.
+            // A predictable verifier defeats the purpose of PKCE.
             Assert.AreNotEqual(Pkce.CreateVerifier(), Pkce.CreateVerifier());
         }
 
