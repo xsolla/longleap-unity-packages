@@ -6,12 +6,14 @@ resulting services live. The steps themselves are game code.
 | Type | What it is |
 |---|---|
 | `ILoadingTask` | One startup step: `ExecuteAsync(LoadingContext)` and `OnError` (return `true` to skip the step and keep loading, `false` to stop). |
-| `LoadingPipeline` | Runs the tasks strictly one after another, logs each step with its time. A step may rely on everything registered before it. |
-| `LoadingContext` | What a step gets: the service container and the cancellation token. |
-| `ServiceContainer` / `IServiceContainer` | Services by contract type. Disposes `IDisposable` services in reverse registration order. |
-| `GameServices` | Static access to the container for scene objects. The entry point publishes it with `GameServices.Bind`. |
-| `OptionalAddressable` | Load an Addressable that may be missing: absent key → `null` and a warning, not an exception. |
-| `LoadSceneTask` | Load a scene under the current screen and activate it once ready. |
+| `LoadingTask` | Base for a step: write only `ExecuteAsync`. A failure is skipped; override `IsCritical => true` to stop loading instead. |
+| `LoadingPipeline` | Runs the tasks strictly one after another, logs each step with its time and a summary at the end, reports `ProgressChanged`. A step may rely on everything registered before it. |
+| `LoadingContext` | What a step gets: the service container, the cancellation token and `ReportProgress(0..1)`. |
+| `LoadingProgress` | Current step, its progress and the overall progress weighted by step. |
+| `ServiceContainer` / `IServiceContainer` | Services by contract type, `Registered` event. Disposes `IDisposable` services in reverse registration order, each instance once. |
+| `GameServices` | Static access to the container for scene objects; `WhenAvailable<T>` calls back once a service is registered. The entry point publishes it with `GameServices.Bind`. |
+| `OptionalAddressable` | Load an Addressable that may be missing: absent key → `null` and a warning, not an exception. Loaded assets are released when the container is disposed. |
+| `LoadSceneTask` | Load a scene under the current screen, report its progress and activate it once ready. Critical. |
 
 ## Using it
 
@@ -24,15 +26,55 @@ GameServices.Bind(services);
 
 var pipeline = new LoadingPipeline()
     .Add(new GameConfigTask())
-    .Add(new LoadSceneTask("Game"))
+    .Add(new LoadSceneTask("Game"), weight: 5f)   // weight: share of the progress bar
     .Add(new MainMenuTask());
 
+pipeline.ProgressChanged += progress => loadingBar.Value = progress.Value;
 await pipeline.RunAsync(services, cancellationToken);
 ```
 
 On shutdown dispose the container and call `GameServices.Unbind(services)`.
 
-Loading is frame-by-frame (`Task.Yield`), no threads, so it is WebGL-safe.
+A step:
+
+```csharp
+public sealed class AudioServiceTask : LoadingTask
+{
+    public override async Task ExecuteAsync(LoadingContext context)
+    {
+        var library = await OptionalAddressable.LoadAsync<AudioLibrary>(AudioLibrary.AddressableKey, context);
+        context.Services.Register<IAudioService>(new AudioService(library));
+    }
+}
+```
+
+Register under the contract callers ask for: `Register(audio)` without a type argument
+registers under the concrete type. When a lookup misses but a registered service implements
+the contract, the container says so in the log.
+
+A scene object that may wake up before loading reaches its service:
+
+```csharp
+private IDisposable _playerWait;
+
+private void Start() => _playerWait = GameServices.WhenAvailable<IPlayerService>(Bind);
+private void OnDestroy() => _playerWait?.Dispose();
+```
+
+The callback runs inside `Register`, i.e. inside the loading step; its exceptions are logged
+and do not fail the step.
+
+## Cancellation and errors
+
+Only a cancellation of the token passed to `RunAsync` stops loading as "cancelled". An
+`OperationCanceledException` from anything else (a request timeout inside a step) is an
+ordinary failure of that step and goes through `OnError`. If `OnError` itself throws, the
+step is treated as critical: both exceptions are logged and loading stops.
+
+The log ends with a summary: total time, time since application start, how many steps
+succeeded and which were skipped.
+
+Loading is frame-by-frame (`Awaitable`), no threads, so it is WebGL-safe.
 
 ## Not here
 

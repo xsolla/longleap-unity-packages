@@ -8,7 +8,14 @@ namespace LongLeap.Bootstrap
     /// </summary>
     public interface IServiceContainer
     {
-        /// <summary>Register an implementation under the contract <typeparamref name="TContract"/>.</summary>
+        /// <summary>A service was registered under this contract. Main thread.</summary>
+        event Action<Type> Registered;
+
+        /// <summary>
+        /// Register an implementation under the contract <typeparamref name="TContract"/>.
+        /// Without an explicit type argument the contract is the concrete type of the
+        /// argument: write <c>Register&lt;IFoo&gt;(foo)</c> when callers ask for the interface.
+        /// </summary>
         void Register<TContract>(TContract service) where TContract : class;
 
         /// <summary>Get a service. Throws if it is not registered.</summary>

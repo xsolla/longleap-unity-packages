@@ -8,16 +8,43 @@ using UnityEngine.ResourceManagement.ResourceLocations;
 
 namespace LongLeap.Bootstrap.Loading
 {
+    /// <summary>
+    /// Loads an Addressable that may not exist yet: a missing key or a failed load gives
+    /// null and a warning instead of an exception. A loaded asset stays in memory until
+    /// the service container is disposed.
+    /// </summary>
     public static class OptionalAddressable
     {
-        private sealed class Lease<T> : IDisposable where T : UnityEngine.Object
+        /// <summary>
+        /// Every asset loaded through this class, held until the container is disposed.
+        /// One per container: the container keeps one service per type, so a holder per
+        /// asset type would reject the second asset of the same type.
+        /// </summary>
+        private sealed class Leases : IDisposable
         {
-            private AsyncOperationHandle<T> _handle;
-            public Lease(AsyncOperationHandle<T> handle) => _handle = handle;
+            private readonly List<AsyncOperationHandle> _handles = new List<AsyncOperationHandle>();
+
+            public static Leases Of(IServiceContainer services)
+            {
+                if (!services.TryResolve(out Leases leases))
+                {
+                    leases = new Leases();
+                    services.Register(leases);
+                }
+
+                return leases;
+            }
+
+            public void Add(AsyncOperationHandle handle) => _handles.Add(handle);
+
             public void Dispose()
             {
-                if (_handle.IsValid()) Addressables.Release(_handle);
-                _handle = default;
+                for (int i = _handles.Count - 1; i >= 0; i--)
+                {
+                    if (_handles[i].IsValid()) Addressables.Release(_handles[i]);
+                }
+
+                _handles.Clear();
             }
         }
 
@@ -33,10 +60,7 @@ namespace LongLeap.Bootstrap.Loading
                 // an empty list for missing keys without reporting an InvalidKeyException.
                 locations = Addressables.LoadResourceLocationsAsync(key, typeof(T));
                 while (!locations.IsDone)
-                {
-                    context.ThrowIfCancelled();
-                    await Task.Yield();
-                }
+                    await Awaitable.NextFrameAsync(context.CancellationToken);
                 context.ThrowIfCancelled();
                 if (locations.Status != AsyncOperationStatus.Succeeded || locations.Result == null || locations.Result.Count == 0)
                 {
@@ -46,21 +70,18 @@ namespace LongLeap.Bootstrap.Loading
 
                 handle = Addressables.LoadAssetAsync<T>(locations.Result[0]);
                 while (!handle.IsDone)
-                {
-                    context.ThrowIfCancelled();
-                    await Task.Yield();
-                }
+                    await Awaitable.NextFrameAsync(context.CancellationToken);
                 context.ThrowIfCancelled();
                 if (handle.Status != AsyncOperationStatus.Succeeded || handle.Result == null)
                 {
                     Debug.LogWarning($"[Loading] optional asset '{key}' is unavailable; using the code-only fallback.");
                     return null;
                 }
-                context.Services.Register(new Lease<T>(handle));
+                Leases.Of(context.Services).Add(handle);
                 retained = true;
                 return handle.Result;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
             {
                 throw;
             }
