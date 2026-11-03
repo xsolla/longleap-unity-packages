@@ -6,7 +6,7 @@ using UnityEngine;
 namespace LongLeap.DailyQuests
 {
     /// <summary>
-    /// Разбор JSON с квестами. Формат:
+    /// Parses the quests JSON. Format:
     /// <code>
     /// {
     ///   "settings": { "dailyCount": 3, "resetHourUtc": 0 },
@@ -20,13 +20,15 @@ namespace LongLeap.DailyQuests
     ///   ]
     /// }
     /// </code>
-    /// Необязательные поля: <c>settings</c> целиком (и каждое поле в нём),
-    /// <c>weight</c> (1), <c>objectives[].id</c> («o0», «o1», …),
-    /// <c>objectives[].mode</c> («delta» | «absolute», по умолчанию delta).
+    /// Optional fields: <c>settings</c> as a whole (and every field in it:
+    /// <c>uniqueCategories</c>, <c>hardestLast</c>, <c>slotDifficulties</c> — selection
+    /// rules, see <see cref="DailyQuestSelector"/>), <c>weight</c> (1),
+    /// <c>categories</c> ([]), <c>difficulty</c> (0), <c>objectives[].id</c>
+    /// ("o0", "o1", …), <c>objectives[].mode</c> ("delta" | "absolute", delta by default).
     /// </summary>
     public static class DailyQuestJson
     {
-        /// <summary>Бросает <see cref="JsonException"/> на битом JSON.</summary>
+        /// <summary>Throws <see cref="JsonException"/> on malformed JSON.</summary>
         public static DailyQuestConfig Parse(string json)
         {
             if (string.IsNullOrWhiteSpace(json))
@@ -59,7 +61,10 @@ namespace LongLeap.DailyQuests
             {
                 Id = string.IsNullOrEmpty(q.id) ? QuestId.None : new QuestId(q.id),
                 Weight = q.weight ?? 1,
-                Categories = q.categories ?? Array.Empty<string>(),
+                Categories = q.categories?
+                    .Where(c => !string.IsNullOrWhiteSpace(c))
+                    .Select(c => c.Trim())
+                    .ToArray() ?? Array.Empty<string>(),
                 Difficulty = q.difficulty ?? 0,
                 Objectives = q.objectives?
                     .Select((o, i) => o == null ? null : MapObjective(q.id, o, i))
@@ -94,7 +99,7 @@ namespace LongLeap.DailyQuests
                 case "delta": return QuestProgressMode.Delta;
                 case "absolute": return QuestProgressMode.Absolute;
                 default:
-                    Debug.LogWarning($"DailyQuestJson: квест '{questId}' — неизвестный mode '{mode}', считаю как delta.");
+                    Debug.LogWarning($"DailyQuestJson: quest '{questId}' has unknown mode '{mode}', treating it as delta.");
                     return QuestProgressMode.Delta;
             }
         }

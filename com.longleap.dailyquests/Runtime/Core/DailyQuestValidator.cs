@@ -19,8 +19,8 @@ namespace LongLeap.DailyQuests
     }
 
     /// <summary>
-    /// Проверка конфига. Ошибка в квесте не роняет весь пул: сервис просто не
-    /// выдаёт такой квест (<see cref="IsPlayable"/>), а остальные работают.
+    /// Config validation. An error in one quest does not break the whole pool: the
+    /// service just never issues that quest (<see cref="IsPlayable"/>), the rest work.
     /// </summary>
     public static class DailyQuestValidator
     {
@@ -43,7 +43,7 @@ namespace LongLeap.DailyQuests
 
             var quests = config.Quests ?? Array.Empty<QuestDefinition>();
             var seen = new HashSet<QuestId>();
-            int pickable = 0;
+            var pickable = new List<QuestDefinition>();
 
             for (int i = 0; i < quests.Length; i++)
             {
@@ -54,23 +54,52 @@ namespace LongLeap.DailyQuests
                     continue;
                 }
 
-                if (!def.Id.IsNone && !seen.Add(def.Id))
+                bool first = def.Id.IsNone || seen.Add(def.Id);
+                if (!first)
                     errors.Add($"Duplicate quest ID '{def.Id}' at index {i} — only the first one is used.");
 
                 CollectQuestErrors(def, errors);
                 CollectQuestWarnings(def, warnings);
 
-                if (IsPlayable(def) && def.Weight > 0)
-                    pickable++;
+                if (first && IsPlayable(def) && def.Weight > 0)
+                    pickable.Add(def);
             }
 
-            if (settings.DailyCount > 0 && pickable < settings.DailyCount)
-                warnings.Add($"Only {pickable} pickable quest(s) for DailyCount {settings.DailyCount} — the daily set will be smaller.");
+            if (settings.DailyCount > 0 && pickable.Count < settings.DailyCount)
+                warnings.Add($"Only {pickable.Count} pickable quest(s) for DailyCount {settings.DailyCount} — the daily set will be smaller.");
+
+            CollectSelectionRuleWarnings(settings, pickable, warnings);
 
             return new DailyQuestValidationResult(errors.ToArray(), warnings.ToArray());
         }
 
-        /// <summary>Квест без ошибок — его можно выдавать игроку.</summary>
+        /// <summary>
+        /// Selection rules never drop quests — unsatisfiable ones are just relaxed
+        /// during the pick (<see cref="DailyQuestSelector"/>). So these are warnings only.
+        /// </summary>
+        private static void CollectSelectionRuleWarnings(
+            DailyQuestSettings settings, List<QuestDefinition> pickable, List<string> warnings)
+        {
+            if (!settings.HasSelectionRules || settings.DailyCount <= 0) return;
+
+            var slots = settings.SlotDifficulties ?? Array.Empty<int>();
+
+            if (slots.Length > settings.DailyCount)
+                warnings.Add($"SlotDifficulties has {slots.Length} slots for DailyCount {settings.DailyCount} — only the {settings.DailyCount} hardest are used.");
+
+            foreach (var difficulty in new HashSet<int>(slots))
+            {
+                if (!pickable.Exists(q => q.Difficulty == difficulty))
+                    warnings.Add($"SlotDifficulties wants difficulty {difficulty}, but no pickable quest has it.");
+            }
+
+            // Pool smaller than the set — already warned about above.
+            if (pickable.Count >= settings.DailyCount && !DailyQuestSelector.CanSatisfy(pickable, settings))
+                warnings.Add("Selection rules (uniqueCategories / hardestLast / slotDifficulties) cannot be met by the pool — " +
+                             "the set will be picked with relaxed rules: categories first, then difficulty.");
+        }
+
+        /// <summary>A quest without errors — it can be issued to the player.</summary>
         public static bool IsPlayable(QuestDefinition def)
         {
             if (def == null) return false;

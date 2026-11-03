@@ -5,14 +5,13 @@ namespace LongLeap.DailyQuests
     public interface IDailyQuestStateStore
     {
         /// <summary>
-        /// Сохранённое состояние. Сохранения ещё нет — пустое состояние
-        /// (<see cref="DailyQuestsState.Empty"/>). Сохранение есть, но не
-        /// читается — <see cref="DailyQuestsState.Unreadable"/>: сервис тогда
-        /// не выдаёт набор до следующего сброса. Само хранилище недоступно —
-        /// <c>null</c>: сервис выключается целиком. В обоих случаях начать с
-        /// нуля нельзя — забранную награду можно было бы забрать второй раз.
+        /// The saved state and how reading it went
+        /// (<see cref="DailyQuestStateLoadStatus"/>). No save — <c>Empty</c>;
+        /// cannot be read — <c>Unreadable</c>; the store did not answer — <c>Unavailable</c>.
+        /// The last two must never be turned into <c>Empty</c>: a claimed reward could
+        /// be claimed a second time.
         /// </summary>
-        Task<DailyQuestsState> LoadAsync();
+        Task<DailyQuestStateLoadResult> LoadAsync();
 
         Task SaveAsync(DailyQuestsState state);
     }

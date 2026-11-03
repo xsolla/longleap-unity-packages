@@ -2,13 +2,13 @@ namespace LongLeap.DailyQuests
 {
     public enum QuestState
     {
-        /// <summary>Цели ещё не набраны.</summary>
+        /// <summary>Objectives are not met yet.</summary>
         InProgress = 0,
 
-        /// <summary>Цели набраны, награда ждёт, пока игрок её заберёт.</summary>
+        /// <summary>Objectives are met, the reward is waiting for the player to claim it.</summary>
         Completed = 1,
 
-        /// <summary>Награда забрана.</summary>
+        /// <summary>The reward has been claimed.</summary>
         Claimed = 2
     }
 }

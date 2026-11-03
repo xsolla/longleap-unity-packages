@@ -1,8 +1,8 @@
 namespace LongLeap.DailyQuests
 {
     /// <summary>
-    /// Что получит игрок, забрав квест. Ключ пакет не толкует: что такое
-    /// «soft» (валюта, предмет, опыт), решает игра в
+    /// What the player gets for claiming the quest. The package does not interpret the key:
+    /// what "soft" is (currency, item, experience) is decided by the game in
     /// <see cref="IDailyQuestGameBridge.ApplyRewards"/>.
     /// </summary>
     public sealed class QuestReward

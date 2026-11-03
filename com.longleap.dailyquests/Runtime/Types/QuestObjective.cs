@@ -1,6 +1,6 @@
 namespace LongLeap.DailyQuests
 {
-    /// <summary>Одна измеримая цель квеста: стат и сколько по нему набрать.</summary>
+    /// <summary>One measurable goal of a quest: a stat and how much of it to reach.</summary>
     public sealed class QuestObjective
     {
         public QuestObjectiveId Id { get; init; }

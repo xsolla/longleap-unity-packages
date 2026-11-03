@@ -5,8 +5,8 @@ using UnityEngine;
 namespace LongLeap.DailyQuests
 {
     /// <summary>
-    /// Квесты из готовой строки JSON: remote config, TextAsset, тесты.
-    /// Битый JSON — пустой пул и ошибка в лог, а не исключение в загрузке.
+    /// Quests from a ready JSON string: remote config, TextAsset, tests.
+    /// Malformed JSON gives an empty pool and an error in the log, not an exception during loading.
     /// </summary>
     public sealed class JsonDailyQuestProvider : IDailyQuestProvider
     {
@@ -27,7 +27,7 @@ namespace LongLeap.DailyQuests
             }
             catch (Exception e)
             {
-                Debug.LogError($"DailyQuests: не удалось разобрать JSON ({source}): {e.Message}");
+                Debug.LogError($"DailyQuests: failed to parse JSON ({source}): {e.Message}");
                 return new DailyQuestConfig();
             }
         }

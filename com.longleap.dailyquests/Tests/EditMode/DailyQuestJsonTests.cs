@@ -41,6 +41,27 @@ namespace LongLeap.DailyQuests.Tests
         }
 
         [Test]
+        public void Parse_SelectionRules_MapsSettingsAndQuestFields()
+        {
+            var config = DailyQuestJson.Parse(@"{
+                ""settings"": { ""uniqueCategories"": true, ""hardestLast"": true, ""slotDifficulties"": [1, 2, 3] },
+                ""quests"": [{
+                    ""id"": ""q"", ""categories"": [""distance"", "" "", "" height ""], ""difficulty"": 2,
+                    ""objectives"": [{ ""statPath"": ""grind"", ""statTarget"": 1 }]
+                }]
+            }");
+
+            Assert.IsTrue(config.Settings.UniqueCategories);
+            Assert.IsTrue(config.Settings.HardestLast);
+            CollectionAssert.AreEqual(new[] { 1, 2, 3 }, config.Settings.SlotDifficulties);
+            Assert.IsTrue(config.Settings.HasSelectionRules);
+
+            var quest = config.Quests.Single();
+            CollectionAssert.AreEqual(new[] { "distance", "height" }, quest.Categories, "empty ones are dropped, whitespace is trimmed");
+            Assert.AreEqual(2, quest.Difficulty);
+        }
+
+        [Test]
         public void Parse_OptionalFieldsMissing_UsesDefaults()
         {
             var config = DailyQuestJson.Parse(@"{
@@ -52,12 +73,15 @@ namespace LongLeap.DailyQuests.Tests
 
             Assert.AreEqual(DailyQuestSettings.DefaultDailyCount, config.Settings.DailyCount);
             Assert.AreEqual(0, config.Settings.ResetHourUtc);
+            Assert.IsFalse(config.Settings.HasSelectionRules);
 
             var quest = config.Quests.Single();
             Assert.AreEqual(1, quest.Weight);
             CollectionAssert.AreEqual(new[] { "o0", "o1" }, quest.Objectives.Select(o => o.Id.Value).ToArray());
             Assert.AreEqual(QuestProgressMode.Delta, quest.Objectives[0].Mode);
             Assert.IsEmpty(quest.Rewards);
+            Assert.IsEmpty(quest.Categories);
+            Assert.AreEqual(0, quest.Difficulty);
         }
 
         [Test]
@@ -70,7 +94,7 @@ namespace LongLeap.DailyQuests.Tests
         [Test]
         public async Task JsonProvider_BrokenJson_ReturnsEmptyConfigAndLogs()
         {
-            LogAssert.Expect(LogType.Error, new Regex("не удалось разобрать JSON"));
+            LogAssert.Expect(LogType.Error, new Regex("failed to parse JSON"));
 
             var config = await new JsonDailyQuestProvider("{ not json").LoadAsync();
 
@@ -91,15 +115,15 @@ namespace LongLeap.DailyQuests.Tests
                         Baselines = new[] { new ObjectiveBaseline { ObjectiveId = "o0", Value = 7, IsCompleted = true } }
                     }
                 },
-                Withheld = true,
-                IsUnreadable = true
+                Withheld = true
             };
 
-            var parsed = JsonDailyQuestStateStore.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(state));
+            var result = JsonDailyQuestStateStore.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(state));
 
+            Assert.AreEqual(DailyQuestStateLoadStatus.Loaded, result.Status);
+            var parsed = result.State;
             Assert.AreEqual(42, parsed.PeriodStartUtcTicks);
             Assert.IsTrue(parsed.Withheld);
-            Assert.IsFalse(parsed.IsUnreadable, "пометка хранилища не сохраняется");
             Assert.AreEqual("q", parsed.Active[0].QuestId);
             Assert.IsTrue(parsed.Active[0].IsCompleted);
             Assert.AreEqual(7, parsed.Active[0].Baselines[0].Value);
@@ -111,8 +135,8 @@ namespace LongLeap.DailyQuests.Tests
         {
             var parsed = JsonDailyQuestStateStore.Parse("");
 
-            Assert.IsFalse(parsed.IsUnreadable);
-            Assert.AreEqual(0, parsed.PeriodStartUtcTicks);
+            Assert.AreEqual(DailyQuestStateLoadStatus.Empty, parsed.Status);
+            Assert.IsNull(parsed.State);
         }
 
         [Test]
@@ -120,7 +144,7 @@ namespace LongLeap.DailyQuests.Tests
         {
             var parsed = JsonDailyQuestStateStore.Parse("{ broken");
 
-            Assert.IsTrue(parsed.IsUnreadable);
+            Assert.AreEqual(DailyQuestStateLoadStatus.Unreadable, parsed.Status);
         }
 
         [Test]
@@ -128,8 +152,16 @@ namespace LongLeap.DailyQuests.Tests
         {
             var parsed = JsonDailyQuestStateStore.Parse(@"{ ""Version"": 999, ""PeriodStartUtcTicks"": 5 }");
 
-            Assert.IsTrue(parsed.IsUnreadable);
-            Assert.AreEqual(0, parsed.PeriodStartUtcTicks);
+            Assert.AreEqual(DailyQuestStateLoadStatus.Unreadable, parsed.Status);
+            Assert.IsNull(parsed.State);
+        }
+
+        [Test]
+        public void StateLoadResult_Default_IsUnavailable()
+        {
+            Assert.AreEqual(DailyQuestStateLoadStatus.Unavailable, default(DailyQuestStateLoadResult).Status,
+                "an unfilled result must not turn quests on");
+            Assert.AreEqual(DailyQuestStateLoadStatus.Empty, DailyQuestStateLoadResult.Loaded(null).Status);
         }
     }
 }

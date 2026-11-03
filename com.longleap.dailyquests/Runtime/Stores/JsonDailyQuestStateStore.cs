@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace LongLeap.DailyQuests
 {
-    /// <summary>Состояние квестов одной JSON-строкой в <see cref="IPersistentStorage"/>.</summary>
+    /// <summary>Quest state as a single JSON string in <see cref="IPersistentStorage"/>.</summary>
     public sealed class JsonDailyQuestStateStore : IDailyQuestStateStore
     {
         public const string DefaultStorageKey = "daily_quests_state";
@@ -20,7 +20,7 @@ namespace LongLeap.DailyQuests
             _storageKey = storageKey ?? DefaultStorageKey;
         }
 
-        public async Task<DailyQuestsState> LoadAsync()
+        public async Task<DailyQuestStateLoadResult> LoadAsync()
         {
             string json;
             try
@@ -29,8 +29,8 @@ namespace LongLeap.DailyQuests
             }
             catch (Exception e)
             {
-                Debug.LogError($"JsonDailyQuestStateStore: хранилище не ответило — {e.Message}");
-                return null;
+                Debug.LogError($"JsonDailyQuestStateStore: storage did not answer — {e.Message}");
+                return DailyQuestStateLoadResult.Unavailable();
             }
 
             return Parse(json);
@@ -40,35 +40,35 @@ namespace LongLeap.DailyQuests
             _storage.SaveAsync(_storageKey, JsonConvert.SerializeObject(state));
 
         /// <summary>
-        /// Разбор сохранения. Пусто — чистое состояние: сейва ещё не было.
-        /// Битое или версия новее нашей — <see cref="DailyQuestsState.Unreadable"/>:
-        /// что сегодня уже забрано, неизвестно, и сервис не выдаёт набор до
-        /// следующего сброса.
+        /// Parses a save. Empty — <see cref="DailyQuestStateLoadStatus.Empty"/>:
+        /// there was no save yet. Corrupted or newer than our version —
+        /// <see cref="DailyQuestStateLoadStatus.Unreadable"/>: what has already been claimed
+        /// today is unknown, and the service issues no set until the next reset.
         /// </summary>
-        public static DailyQuestsState Parse(string json)
+        public static DailyQuestStateLoadResult Parse(string json)
         {
             if (string.IsNullOrEmpty(json))
-                return DailyQuestsState.Empty();
+                return DailyQuestStateLoadResult.Empty();
 
             try
             {
                 var state = JsonConvert.DeserializeObject<DailyQuestsState>(json);
                 if (state == null)
-                    return DailyQuestsState.Empty();
+                    return DailyQuestStateLoadResult.Empty();
 
                 if (state.Version > DailyQuestsState.CurrentVersion)
                 {
-                    Debug.LogWarning($"JsonDailyQuestStateStore: сохранение версии {state.Version}, а мы умеем {DailyQuestsState.CurrentVersion}.");
-                    return DailyQuestsState.Unreadable();
+                    Debug.LogWarning($"JsonDailyQuestStateStore: save version {state.Version} is newer than supported {DailyQuestsState.CurrentVersion}.");
+                    return DailyQuestStateLoadResult.Unreadable();
                 }
 
                 state.Active ??= Array.Empty<ActiveQuestState>();
-                return state;
+                return DailyQuestStateLoadResult.Loaded(state);
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"JsonDailyQuestStateStore: сохранение не читается ({e.Message}).");
-                return DailyQuestsState.Unreadable();
+                Debug.LogWarning($"JsonDailyQuestStateStore: save cannot be read ({e.Message}).");
+                return DailyQuestStateLoadResult.Unreadable();
             }
         }
     }

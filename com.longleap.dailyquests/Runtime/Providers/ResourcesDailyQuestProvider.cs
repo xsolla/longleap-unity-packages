@@ -5,22 +5,22 @@ using UnityEngine;
 namespace LongLeap.DailyQuests
 {
     /// <summary>
-    /// Квесты из TextAsset внутри билда: по умолчанию
+    /// Quests from a TextAsset inside the build: by default
     /// <c>Resources/DailyQuests/daily_quests.json</c>.
     ///
-    /// Файл лежит внутри билда, а не рядом с ним, как было со StreamingAssets:
-    /// ни одного HTTP-запроса. Порталы (GamePix и др.) перепаковывают билд и
-    /// отдают его со своего CDN, где относительный путь StreamingAssets/... ведёт
-    /// в никуда — сервер отвечал HTML-заглушкой, и пул квестов оставался пустым.
+    /// The file lives inside the build rather than next to it, as it did with StreamingAssets:
+    /// not a single HTTP request. Portals (GamePix and others) repackage the build and
+    /// serve it from their CDN, where the relative path StreamingAssets/... leads
+    /// nowhere — the server answered with an HTML stub and the quest pool stayed empty.
     ///
-    /// Файл читается один раз: первый <see cref="LoadAsync"/> читает его,
-    /// следующие отдают ту же задачу. Чтение синхронное, и
-    /// <see cref="Resources.Load"/> можно звать только с главного потока —
-    /// поэтому первый вызов лучше сделать заранее, в начале загрузки.
+    /// The file is read once: the first <see cref="LoadAsync"/> reads it,
+    /// later calls return the same task. The read is synchronous, and
+    /// <see cref="Resources.Load"/> may only be called from the main thread —
+    /// so it is best to make the first call early, at the start of loading.
     /// </summary>
     public sealed class ResourcesDailyQuestProvider : IDailyQuestProvider
     {
-        /// <summary>Путь внутри Resources, без расширения.</summary>
+        /// <summary>Path inside Resources, without extension.</summary>
         public const string DefaultPath = "DailyQuests/daily_quests";
 
         private readonly string _path;
@@ -28,7 +28,7 @@ namespace LongLeap.DailyQuests
 
         public ResourcesDailyQuestProvider() : this(DefaultPath) { }
 
-        /// <param name="path">Путь внутри Resources, без расширения: «DailyQuests/daily_quests».</param>
+        /// <param name="path">Path inside Resources, without extension: "DailyQuests/daily_quests".</param>
         public ResourcesDailyQuestProvider(string path)
         {
             _path = path ?? throw new ArgumentNullException(nameof(path));
@@ -40,10 +40,10 @@ namespace LongLeap.DailyQuests
         {
             var asset = Resources.Load<TextAsset>(_path);
 
-            // Файла нет — почти всегда поломка сборки, а не «квестов нет».
+            // No file — almost always a broken build, not "there are no quests".
             if (asset == null)
             {
-                Debug.LogError($"ResourcesDailyQuestProvider: 'Resources/{_path}' не найден — квестов нет.");
+                Debug.LogError($"ResourcesDailyQuestProvider: 'Resources/{_path}' not found — no quests.");
                 return new DailyQuestConfig();
             }
 

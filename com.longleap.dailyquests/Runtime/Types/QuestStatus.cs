@@ -1,8 +1,6 @@
-using System.Linq;
-
 namespace LongLeap.DailyQuests
 {
-    /// <summary>Снимок одного активного квеста — то, что рисует UI.</summary>
+    /// <summary>Snapshot of one active quest — what the UI draws.</summary>
     public sealed class QuestStatus
     {
         public QuestDefinition Definition { get; init; }
@@ -14,8 +12,8 @@ namespace LongLeap.DailyQuests
         public bool CanClaim => State == QuestState.Completed;
 
         /// <summary>
-        /// Прогресс квеста одной полоской — сумма по целям. Для квеста из одной
-        /// цели это ровно её прогресс.
+        /// Quest progress as a single bar — the sum over objectives. For a
+        /// single-objective quest this is exactly its progress.
         /// </summary>
         public QuestProgress TotalProgress
         {
@@ -24,9 +22,15 @@ namespace LongLeap.DailyQuests
                 if (ObjectiveProgresses == null || ObjectiveProgresses.Length == 0)
                     return new QuestProgress(0, 0);
 
-                return new QuestProgress(
-                    ObjectiveProgresses.Sum(o => o.Progress.Current),
-                    ObjectiveProgresses.Sum(o => o.Progress.Target));
+                // A loop rather than LINQ: the UI reads this on every redraw.
+                int current = 0, target = 0;
+                foreach (var objective in ObjectiveProgresses)
+                {
+                    current += objective.Progress.Current;
+                    target += objective.Progress.Target;
+                }
+
+                return new QuestProgress(current, target);
             }
         }
     }

@@ -80,6 +80,74 @@ namespace LongLeap.DailyQuests.Tests
             Assert.IsTrue(result.Warnings.Any(w => w.Contains("DailyCount")));
         }
 
+        // --- selection rules ----------------------------------------------------
+
+        private static QuestDefinition Ranked(string id, int difficulty, string category) =>
+            new QuestDefinition
+            {
+                Id = new QuestId(id),
+                Difficulty = difficulty,
+                Categories = new[] { category },
+                Objectives = new[] { new QuestObjective { Id = new QuestObjectiveId("o0"), StatPath = "grind", StatTarget = 10 } },
+                Rewards = new[] { new QuestReward { Key = new QuestRewardKey("soft"), Amount = 1 } }
+            };
+
+        private static DailyQuestValidationResult ValidateRules(DailyQuestSettings settings, params QuestDefinition[] quests) =>
+            DailyQuestValidator.Validate(new DailyQuestConfig { Settings = settings, Quests = quests });
+
+        [Test]
+        public void SatisfiableRules_NoRuleWarnings()
+        {
+            var result = ValidateRules(
+                new DailyQuestSettings { DailyCount = 3, UniqueCategories = true, HardestLast = true, SlotDifficulties = new[] { 1, 2, 3 } },
+                Ranked("a", 1, "a"), Ranked("b", 2, "b"), Ranked("c", 3, "c"));
+
+            Assert.IsTrue(result.IsValid);
+            Assert.IsEmpty(result.Warnings);
+        }
+
+        [Test]
+        public void SlotDifficultyMissingFromPool_IsWarning()
+        {
+            var result = ValidateRules(
+                new DailyQuestSettings { DailyCount = 2, SlotDifficulties = new[] { 1, 5 } },
+                Ranked("a", 1, "a"), Ranked("b", 2, "b"));
+
+            Assert.IsTrue(result.Warnings.Any(w => w.Contains("difficulty 5")));
+        }
+
+        [Test]
+        public void MoreSlotsThanDailyCount_IsWarning()
+        {
+            var result = ValidateRules(
+                new DailyQuestSettings { DailyCount = 2, SlotDifficulties = new[] { 1, 2, 3 } },
+                Ranked("a", 1, "a"), Ranked("b", 2, "b"), Ranked("c", 3, "c"));
+
+            Assert.IsTrue(result.Warnings.Any(w => w.Contains("hardest are used")));
+        }
+
+        [Test]
+        public void UnsatisfiableRules_IsWarning()
+        {
+            // All in one category — three quests without shared categories cannot be built.
+            var result = ValidateRules(
+                new DailyQuestSettings { DailyCount = 3, UniqueCategories = true },
+                Ranked("a", 1, "x"), Ranked("b", 2, "x"), Ranked("c", 3, "x"));
+
+            Assert.IsTrue(result.IsValid, "rules do not make quests unplayable");
+            Assert.IsTrue(result.Warnings.Any(w => w.Contains("relaxed rules")));
+        }
+
+        [Test]
+        public void DuplicateQuest_DoesNotCountTwiceAsPickable()
+        {
+            var result = ValidateRules(new DailyQuestSettings { DailyCount = 2 }, Quest("a"), Quest("a"));
+
+            Assert.IsTrue(result.Warnings.Any(w => w.Contains("Only 1 pickable")));
+        }
+
+        // --- selection --------------------------------------------------------
+
         [Test]
         public void Selector_SameSeed_SameResult()
         {

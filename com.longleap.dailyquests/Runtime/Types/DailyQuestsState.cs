@@ -3,9 +3,9 @@ using System;
 namespace LongLeap.DailyQuests
 {
     /// <summary>
-    /// Сохраняемое состояние. Сам прогресс не пишется — он выводится из статов.
-    /// Хранится только то, из чего его вывести (точка отсчёта), и то, чего из
-    /// статов не восстановить (выполнен, забран).
+    /// Persisted state. Progress itself is not written — it is derived from stats.
+    /// Only what it is derived from (the baseline) is stored, plus what cannot
+    /// be recovered from stats (completed, claimed).
     /// </summary>
     [Serializable]
     public sealed class DailyQuestsState
@@ -14,27 +14,19 @@ namespace LongLeap.DailyQuests
 
         public int Version = CurrentVersion;
 
-        /// <summary>Начало периода, на который выдан текущий набор (UTC ticks). 0 — набора ещё не было.</summary>
+        /// <summary>Start of the period the current set was issued for (UTC ticks). 0 — no set yet.</summary>
         public long PeriodStartUtcTicks;
 
         /// <summary>
-        /// На этот период набор намеренно не выдаётся (сейв был нечитаем — см.
-        /// <see cref="IsUnreadable"/>): не добирать его до следующего сброса.
+        /// No set is issued for this period on purpose (the save was unreadable — see
+        /// <see cref="DailyQuestStateLoadStatus.Unreadable"/>): do not refill it until
+        /// the next reset.
         /// </summary>
         public bool Withheld;
 
         public ActiveQuestState[] Active = Array.Empty<ActiveQuestState>();
 
-        /// <summary>
-        /// Сейв есть, но прочитать его не вышло (битый или от более новой
-        /// версии). Не сохраняется — это пометка от хранилища для сервиса.
-        /// </summary>
-        [NonSerialized]
-        public bool IsUnreadable;
-
         public static DailyQuestsState Empty() => new DailyQuestsState();
-
-        public static DailyQuestsState Unreadable() => new DailyQuestsState { IsUnreadable = true };
     }
 
     [Serializable]
@@ -43,8 +35,8 @@ namespace LongLeap.DailyQuests
         public string QuestId;
 
         /// <summary>
-        /// Цели были набраны. Защёлка: после выполнения квест остаётся
-        /// выполненным, даже если стат потом уменьшится (Absolute-режим).
+        /// The objectives were met. A latch: once completed the quest stays
+        /// completed even if the stat drops later (Absolute mode).
         /// </summary>
         public bool IsCompleted;
 
@@ -53,7 +45,7 @@ namespace LongLeap.DailyQuests
         public ObjectiveBaseline[] Baselines = Array.Empty<ObjectiveBaseline>();
     }
 
-    /// <summary>Значение стата в момент выдачи квеста — от него считается Delta.</summary>
+    /// <summary>Stat value at the moment the quest was issued — Delta counts from it.</summary>
     [Serializable]
     public sealed class ObjectiveBaseline
     {
@@ -61,8 +53,8 @@ namespace LongLeap.DailyQuests
         public long Value;
 
         /// <summary>
-        /// Цель набрана. Защёлка на каждую цель отдельно: «10k за заезд + 30
-        /// грайндов» засчитается, даже если грайнды добраны в другом заезде.
+        /// The objective is met. A latch per objective: "10k in a run + 30
+        /// grinds" counts even if the grinds were finished in another run.
         /// </summary>
         public bool IsCompleted;
     }

@@ -9,7 +9,7 @@ namespace LongLeap.DailyQuests
         public QuestId(string value)
         {
             if (value != null && value.Length == 0)
-                throw new ArgumentException("QuestId: значение не может быть пустым.", nameof(value));
+                throw new ArgumentException("QuestId: value cannot be empty.", nameof(value));
             _value = value;
         }
 
