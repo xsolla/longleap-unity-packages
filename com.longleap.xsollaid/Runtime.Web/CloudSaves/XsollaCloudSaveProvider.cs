@@ -26,8 +26,8 @@ namespace LongLeap.XsollaId.Web
     // The player is identified by xsollaId (sub) without a token — same as rewards.
     public sealed class XsollaCloudSaveProvider : ICloudSaveProvider, ICloudSaveBatchProvider
     {
-        // Default for when the caller passes no path; the game config holds the
-        // configured one (_savesPath).
+        // Default for when the caller passes no path; whoever wires the provider
+        // passes the configured one.
         public const string DefaultSavesPath = "/saves";
 
         // A batch can weigh megabytes; the default 10 s are not meant for it.

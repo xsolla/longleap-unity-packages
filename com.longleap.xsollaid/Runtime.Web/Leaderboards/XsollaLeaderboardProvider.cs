@@ -27,8 +27,8 @@ namespace LongLeap.XsollaId.Web
     // ignored: it is always this account (see XsollaAccountAuthProvider).
     public sealed class XsollaLeaderboardProvider : ILeaderboardProvider
     {
-        // Default for when the caller passes no path; the game config holds the
-        // configured one (_leaderboardsPath).
+        // Default for when the caller passes no path; whoever wires the provider
+        // passes the configured one.
         public const string DefaultLeaderboardsPath = "/leaderboards";
 
         private readonly string _baseUrl;

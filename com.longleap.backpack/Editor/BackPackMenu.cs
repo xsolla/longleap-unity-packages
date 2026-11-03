@@ -1,18 +1,14 @@
 using LongLeap.Core.Editor;
 using UnityEditor;
 
-namespace BloodRedSnow.BackPack.Editor
+namespace LongLeap.Backpack.Editor
 {
-    // Меню выбора среды BackPack.
+    // The BackPack environment menu.
     //
-    // Это то меню, которое BackPackConfigSO обещал в своём комментарии
-    // («Переключать удобнее из меню BackPack/Required/Environment»), но
-    // которого до сих пор не существовало: среду правили руками в инспекторе.
-    //
-    // Три пункта с галочкой, а не один чекбокс — по той же причине, что у
-    // среды Xsolla ID: так видно, куда именно уходят события, и не приходится
-    // догадываться, что значит снятая галочка. Local отдельно от Development
-    // намеренно: это РАЗНЫЕ сервера, см. BackPackEnvironment.
+    // Three checked items rather than one checkbox — for the same reason as the
+    // Xsolla ID environment: it shows exactly where events go, with no guessing
+    // what an unchecked box means. Local is separate from Development on purpose:
+    // they are DIFFERENT servers, see BackPackEnvironment.
     public static class BackPackMenu
     {
         private const string LocalMenuPath = "BackPack/Required/Environment/Local";

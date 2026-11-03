@@ -2,18 +2,18 @@ using System.Collections.Generic;
 using LongLeap.Core.Editor;
 using UnityEditor;
 
-namespace BloodRedSnow.BackPack.Editor
+namespace LongLeap.Backpack.Editor
 {
-    // Среда BackPack в окне Build Manager и в меню.
+    // The BackPack environment in the Build Manager window and in the menu.
     //
-    // Эта сборка НЕ ссылается на Darkslide.BackPack: к полю обращаемся через
-    // SerializedObject по строковому имени, как это делает XsollaIdMenu. Так
-    // описатель не зависит от рантайм-сборки, а перестановка членов
-    // BackPackEnvironment не переключит сервер молча — имена членов читаются
-    // из enumNames и сверяются по имени.
+    // This assembly does NOT reference LongLeap.Backpack: the field is accessed
+    // through SerializedObject by its string name, as XsollaIdMenu does. This way
+    // the descriptor does not depend on the runtime assembly, and reordering the
+    // BackPackEnvironment members does not silently switch the server — member
+    // names are read from enumNames and matched by name.
     //
-    // Почему среда живёт в ассете, а не в дефайне, объяснено в самом
-    // BackPackConfigSO: адрес сервера — это данные.
+    // Why the environment lives in the asset rather than in a define is explained
+    // in BackPackConfigSO itself: the server address is data.
     internal sealed class BackPackOptions : IProjectOptionSectionProvider, IProjectWarningProvider
     {
         public const string EnvironmentId = "backpack.environment";
@@ -39,8 +39,8 @@ namespace BloodRedSnow.BackPack.Editor
                         ConfigAssetPath,
                         EnvironmentProperty,
                         "Environment",
-                        "Какой из трёх наборов настроек уедет в сборку: куда отправлять " +
-                        "события ачивок и от имени какой игры.",
+                        "Which of the three settings sets goes into the build: where achievement " +
+                        "events are sent and on behalf of which game.",
                         required: true,
                         order: 100,
                         choices: new[]
@@ -48,17 +48,17 @@ namespace BloodRedSnow.BackPack.Editor
                             new ProjectOptionChoice(
                                 LocalName,
                                 "Local",
-                                "Сервер, поднятый на машине разработчика. Из сборки на площадке " +
-                                "недоступен — это адрес для проверки в редакторе и локальной сборки."),
+                                "A server running on the developer's machine. Unreachable from a build " +
+                                "on a platform — this address is for testing in the Editor and local builds."),
                             new ProjectOptionChoice(
                                 DevelopmentName,
                                 "Development",
-                                "Общий стенд, по которому проверяют сборку. Только https: наружу " +
-                                "открыт лишь Cloudflare."),
+                                "The shared staging server builds are tested against. https only: only " +
+                                "Cloudflare is exposed."),
                             new ProjectOptionChoice(
                                 ProductionName,
                                 "Production",
-                                "Боевой сервер. Тот же домен, что у стенда, без -dev."),
+                                "The production server. Same domain as staging, without -dev."),
                         },
                         onApplied: WarnIfIncomplete),
                 },
@@ -66,7 +66,7 @@ namespace BloodRedSnow.BackPack.Editor
                 {
                     new ProjectOptionAction(
                         "Select Config Asset",
-                        $"Выделить {ConfigAssetPath} в проекте.",
+                        $"Select {ConfigAssetPath} in the project; if it is missing, offer to create it there.",
                         100,
                         SelectConfigAsset),
                 });
@@ -82,8 +82,8 @@ namespace BloodRedSnow.BackPack.Editor
             if (environment == null)
                 yield break;
 
-            // Портальная сборка живёт в чужом iframe, откуда 127.0.0.1 — это
-            // машина ИГРОКА, а не разработчика. События просто не дойдут.
+            // A portal build lives in someone else's iframe, where 127.0.0.1 is the
+            // PLAYER's machine, not the developer's. Events simply will not arrive.
             if (environment == LocalName && pendingState.IsDefineOn("GAMEPIX"))
             {
                 yield return new ProjectWarning(
@@ -97,15 +97,26 @@ namespace BloodRedSnow.BackPack.Editor
 
             var config = LoadConfig();
 
+            // Without the asset BackPackTask registers NullBackPackService: the game
+            // works, but no events are sent and there is no backpack. Not a build
+            // error, but not something to learn from a running game's log either.
             if (config == null)
+            {
+                yield return new ProjectWarning(
+                    ProjectWarningSeverity.Warning,
+                    $"BackPack config not found at {ConfigAssetPath}, so BackPack is off in this " +
+                    "build: no events are sent and the backpack window shows an error.",
+                    fixLabel: "Create Config Asset",
+                    fix: SelectConfigAsset);
                 yield break;
+            }
 
             string prefix = FieldPrefix(environment);
             string baseUrl = GetString(config, prefix + "._baseUrl");
             string gameId = GetString(config, prefix + "._gameId");
 
-            // Пустой адрес — это штатный выключатель, так написано в
-            // BackPackConfigSO. Поэтому info, а не ошибка.
+            // An empty address is the regular off switch, as BackPackConfigSO says.
+            // Hence info rather than an error.
             if (string.IsNullOrEmpty(baseUrl?.Trim()))
             {
                 yield return new ProjectWarning(
@@ -125,8 +136,8 @@ namespace BloodRedSnow.BackPack.Editor
             }
         }
 
-        // Аналог XsollaIdMenu.WarnIfIncomplete: сказать в момент переключения,
-        // а не когда ачивки молча перестанут сохраняться.
+        // Counterpart of XsollaIdMenu.WarnIfIncomplete: speak up at the moment of
+        // switching, not when achievements silently stop being saved.
         private static void WarnIfIncomplete(string environment, IProjectWriteContext context)
         {
             SerializedObject config = context.GetSerializedObject(ConfigAssetPath);
@@ -177,20 +188,82 @@ namespace BloodRedSnow.BackPack.Editor
         private static string GetString(SerializedObject config, string path) =>
             config?.FindProperty(path)?.stringValue;
 
+        // Select the config, or offer to create it when it is missing.
+        //
+        // Created here and at exactly ConfigAssetPath: Assets / Create puts the
+        // asset into the selected folder, while the runtime looks for it only at
+        // Resources/Backend/BackPackConfig. A config created "elsewhere" would
+        // simply go unseen by the game — silently.
         public static void SelectConfigAsset()
         {
             var config = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(ConfigAssetPath);
 
             if (config == null)
             {
-                UnityEngine.Debug.LogError(
-                    $"BackPack: config not found at {ConfigAssetPath}. " +
-                    "Create it via Assets / Create / Blood Red Snow / BackPack Config.");
-                return;
+                if (!EditorUtility.DisplayDialog(
+                        "BackPack config not found",
+                        $"There is no BackPack config at\n{ConfigAssetPath}\n\n" +
+                        "Create it there with the default endpoints?",
+                        "Create",
+                        "Cancel"))
+                {
+                    UnityEngine.Debug.LogError(
+                        $"BackPack: config not found at {ConfigAssetPath}. Create it with BackPack / " +
+                        "Select Config Asset, or via Assets / Create / LongLeap Services / BackPack Config " +
+                        $"and move it to exactly {ConfigAssetPath} — the game loads it only from there.");
+                    return;
+                }
+
+                config = CreateConfigAsset();
+
+                if (config == null)
+                    return;
             }
 
             Selection.activeObject = config;
             EditorGUIUtility.PingObject(config);
+        }
+
+        // The type is looked up by name rather than through a LongLeap.Backpack
+        // reference — for the same reason the fields are read via SerializedObject
+        // (see above).
+        private const string ConfigTypeName = "LongLeap.Backpack.BackPackConfigSO, LongLeap.Backpack";
+
+        private static UnityEngine.Object CreateConfigAsset()
+        {
+            var type = System.Type.GetType(ConfigTypeName);
+
+            if (type == null)
+            {
+                UnityEngine.Debug.LogError(
+                    $"BackPack: type {ConfigTypeName} not found — is the LongLeap.Backpack assembly compiled?");
+                return null;
+            }
+
+            EnsureFolder(System.IO.Path.GetDirectoryName(ConfigAssetPath)?.Replace('\\', '/'));
+
+            var asset = UnityEngine.ScriptableObject.CreateInstance(type);
+            AssetDatabase.CreateAsset(asset, ConfigAssetPath);
+            AssetDatabase.SaveAssets();
+
+            UnityEngine.Debug.Log(
+                $"BackPack: created {ConfigAssetPath} with default endpoints. Check the game ID and " +
+                "select the environment (BackPack / Required / Environment).", asset);
+
+            return asset;
+        }
+
+        // AssetDatabase.CreateFolder creates one level at a time — walk the whole path.
+        private static void EnsureFolder(string folder)
+        {
+            if (string.IsNullOrEmpty(folder) || AssetDatabase.IsValidFolder(folder))
+                return;
+
+            int slash = folder.LastIndexOf('/');
+            string parent = folder.Substring(0, slash);
+
+            EnsureFolder(parent);
+            AssetDatabase.CreateFolder(parent, folder.Substring(slash + 1));
         }
     }
 }

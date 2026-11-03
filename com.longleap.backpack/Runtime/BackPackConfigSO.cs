@@ -3,16 +3,16 @@ using UnityEngine;
 
 namespace LongLeap.Backpack
 {
-    // Какой из трёх наборов настроек берётся в этой сборке.
+    // Which of the three settings sets this build uses.
     //
-    // Среда живёт в АССЕТЕ, а не в дефайне: адрес сервера — данные, и лежать
-    // они должны там же, где остальные данные, иначе «куда сейчас уходят
-    // события» пришлось бы читать в Player Settings.
+    // The environment lives in the ASSET, not in a define: the server address is
+    // data, and it belongs with the rest of the data — otherwise "where do events
+    // go right now" would have to be read from Player Settings.
     //
-    // Local отдельно от Development намеренно: это РАЗНЫЕ сервера, а не одна
-    // среда с двумя адресами. Local — процесс на машине разработчика, его
-    // видно только с неё; Development — общий стенд, по которому проверяют
-    // сборку, и от прода он отличается только доменом.
+    // Local is separate from Development on purpose: they are DIFFERENT servers,
+    // not one environment with two addresses. Local is a process on the
+    // developer's machine, visible only from it; Development is the shared staging
+    // server builds are tested against, and it differs from production only by domain.
     public enum BackPackEnvironment
     {
         Local,
@@ -20,113 +20,91 @@ namespace LongLeap.Backpack
         Production
     }
 
-    // Один набор настроек: куда стучаться и от имени какой игры.
+    // One settings set: where to send requests and on behalf of which game.
     //
-    // Отдельный класс, а не три тройки полей в ассете (_localBaseUrl,
-    // _devBaseUrl, …): нормализация адреса и пути одна и та же, и написана
-    // здесь один раз. Заодно среду нельзя «переключить наполовину» — набор
-    // берётся целиком.
+    // A separate class rather than three triples of fields in the asset
+    // (_localBaseUrl, _devBaseUrl, …): address and path normalization is the same
+    // and written here once. It also makes it impossible to "half-switch" the
+    // environment — the set is taken whole.
     [Serializable]
     public sealed class BackPackEndpoint
     {
         public const string DefaultEventsPath = "/events";
         public const string DefaultRewardsPath = "/rewards";
         public const string DefaultItemsPath = "/backpack/items";
-        public const string DefaultSavesPath = "/saves";
-        public const string DefaultLeaderboardsPath = "/leaderboards";
 
-        [Tooltip("Адрес BackPack-сервера — схема, хост и порт, без пути. " +
-            "Пустая строка это выключатель: события никуда не уходят, а ачивки " +
-            "сохраняются как раньше, только локально.")]
+        [Tooltip("BackPack server address — scheme, host and port, no path. " +
+            "An empty string is the off switch: no events are sent, and achievements " +
+            "are saved as before, locally only.")]
         [SerializeField] private string _baseUrl;
 
-        [Tooltip("Путь ручки, принимающей события. Ведущий слеш дописывается сам, " +
-            "пустое поле означает путь по умолчанию — на пустой путь запрос ушёл бы " +
-            "в корень сервера и тихо не дошёл бы до нужной ручки.")]
+        [Tooltip("Path of the endpoint that accepts events. The leading slash is added " +
+            "automatically; an empty field means the default path — with an empty path the " +
+            "request would go to the server root and silently miss the endpoint.")]
         [SerializeField] private string _eventsPath = DefaultEventsPath;
 
-        [Tooltip("Путь ручки, отдающей содержимое рюкзака игрока: " +
-            "GET {baseUrl}{rewardsPath}?xsollaId=…&gameId=…. Ведущий слеш дописывается " +
-            "сам, пустое поле — путь по умолчанию.")]
+        [Tooltip("Path of the endpoint that returns the player's backpack: " +
+            "GET {baseUrl}{rewardsPath}?xsollaId=…&gameId=…. The leading slash is added " +
+            "automatically; an empty field means the default path.")]
         [SerializeField] private string _rewardsPath = DefaultRewardsPath;
 
-        [Tooltip("Путь ручки, удаляющей предметы из рюкзака (так предмет и тратится " +
-            "при активации): DELETE {baseUrl}{itemsPath}?xsollaId=…&sku=…. Ведущий слеш " +
-            "дописывается сам, пустое поле — путь по умолчанию.")]
+        [Tooltip("Path of the endpoint that deletes backpack items (this is how an item is " +
+            "spent on activation): DELETE {baseUrl}{itemsPath}?xsollaId=…&sku=…. The leading " +
+            "slash is added automatically; an empty field means the default path.")]
         [SerializeField] private string _itemsPath = DefaultItemsPath;
 
-        [Tooltip("Путь ручек облачных сейвов: GET/PUT/DELETE {baseUrl}{savesPath}[/{key}]" +
-            "?gameId=…&xsollaId=…. Сервер тот же, gameId должен быть в " +
-            "CloudSaves:AllowedGameIds. Ведущий слеш дописывается сам, пустое поле — " +
-            "путь по умолчанию.")]
-        [SerializeField] private string _savesPath = DefaultSavesPath;
-
-        [Tooltip("Путь ручек лидербордов: GET {baseUrl}{leaderboardsPath}/{boardId}?gameId=… " +
-            "и POST {baseUrl}{leaderboardsPath}/{boardId}/scores. Доски игры должны быть " +
-            "описаны в Leaderboards:Games на сервере. Ведущий слеш дописывается сам, " +
-            "пустое поле — путь по умолчанию.")]
-        [SerializeField] private string _leaderboardsPath = DefaultLeaderboardsPath;
-
-        [Tooltip("Идентификатор игры на стороне сервера — поле gameId в теле запроса. " +
-            "Не совпадёт с зарегистрированным — сервер откажет, и ачивки перестанут " +
-            "сохраняться вовсе (сохраняем только принятые).")]
+        [Tooltip("Game id on the server side — the gameId field of the request body. " +
+            "If it does not match a registered one, the server refuses, and achievements " +
+            "stop being saved at all (only accepted ones are saved).")]
         [SerializeField] private string _gameId;
 
-        // Пустой конструктор нужен сериализации: поля ассета Unity заполняет
-        // из YAML, но сам объект создаёт вызовом без аргументов.
+        // The parameterless constructor is needed by serialization: Unity fills the
+        // asset's fields from YAML, but creates the object itself with no arguments.
         public BackPackEndpoint()
         {
         }
 
-        // Второй — для значений по умолчанию у нового ассета и для тестов.
+        // The second one is for a new asset's defaults and for tests.
         public BackPackEndpoint(
             string baseUrl,
             string gameId,
             string eventsPath = DefaultEventsPath,
             string rewardsPath = DefaultRewardsPath,
-            string itemsPath = DefaultItemsPath,
-            string savesPath = DefaultSavesPath,
-            string leaderboardsPath = DefaultLeaderboardsPath)
+            string itemsPath = DefaultItemsPath)
         {
             _baseUrl = baseUrl;
             _gameId = gameId;
             _eventsPath = eventsPath;
             _rewardsPath = rewardsPath;
             _itemsPath = itemsPath;
-            _savesPath = savesPath;
-            _leaderboardsPath = leaderboardsPath;
         }
 
-        // Пробелы срезаем: адрес и id почти всегда приезжают копированием, и
-        // случайный пробел на конце превратил бы адрес в битый, а причину
-        // пришлось бы искать глазами в инспекторе.
+        // Whitespace is trimmed: the address and id almost always arrive by
+        // copy-paste, and a stray trailing space would break the address, with the
+        // cause to be hunted down by eye in the inspector.
         //
-        // Пустое значение отдаём наружу как есть — это штатный выключатель, а
-        // не повод подставить умолчание: подставленный адрес превратил бы
-        // «отправку выключили» в «стучимся неизвестно куда».
+        // An empty value is returned as is — it is the regular off switch, not a
+        // reason to substitute a default: a substituted address would turn "sending
+        // is off" into "sending somewhere unknown".
         public string BaseUrl => _baseUrl?.Trim();
 
         public string GameId => _gameId?.Trim();
 
-        // Пути, наоборот, нормализуем: пустой путь и путь без ведущего слеша —
-        // не выключатель, а опечатка, и оба дали бы запрос не туда.
+        // Paths, on the contrary, are normalized: an empty path or one without a
+        // leading slash is not a switch but a typo, and both would send the request
+        // to the wrong place.
         public string EventsPath => NormalizePath(_eventsPath, DefaultEventsPath);
 
         public string RewardsPath => NormalizePath(_rewardsPath, DefaultRewardsPath);
 
         public string ItemsPath => NormalizePath(_itemsPath, DefaultItemsPath);
 
-        public string SavesPath => NormalizePath(_savesPath, DefaultSavesPath);
-
-        public string LeaderboardsPath => NormalizePath(_leaderboardsPath, DefaultLeaderboardsPath);
-
-        // Заполнено ли настолько, чтобы вообще отправлять.
+        // Whether it is filled in enough to send anything at all.
         public bool IsConfigured => !string.IsNullOrEmpty(BaseUrl) && !string.IsNullOrEmpty(GameId);
 
         public override string ToString() =>
             $"baseUrl={(string.IsNullOrEmpty(BaseUrl) ? "none" : BaseUrl)}, " +
             $"eventsPath={EventsPath}, rewardsPath={RewardsPath}, itemsPath={ItemsPath}, " +
-            $"savesPath={SavesPath}, leaderboardsPath={LeaderboardsPath}, " +
             $"gameId={(string.IsNullOrEmpty(GameId) ? "none" : GameId)}";
 
         private static string NormalizePath(string value, string fallback)
@@ -140,91 +118,83 @@ namespace LongLeap.Backpack
         }
     }
 
-    // Настройки BackPack-сервера: куда отправлять события ачивок и от имени
-    // какой игры.
+    // BackPack server settings: where to send achievement events and on behalf of
+    // which game.
     //
-    // Лежит в Assets/Resources/Backend/ рядом с FirebaseConfig и
-    // XsollaIdConfig и грузится тем же Resources.Load. Не ссылкой в
-    // инспекторе намеренно: ссылку пришлось бы прописывать в сцене, и
-    // забытая (или потерянная при мерже сцены) она тихо выключала бы
-    // отправку — а адрес сервера, в отличие от префаба, к сцене никак не
-    // привязан.
+    // Lives in Assets/Resources/Backend/ next to FirebaseConfig and XsollaIdConfig
+    // and is loaded with the same Resources.Load. Deliberately not an inspector
+    // reference: the reference would have to be set in the scene, and a forgotten
+    // one (or one lost in a scene merge) would silently switch sending off — while
+    // the server address, unlike a prefab, has nothing to do with the scene.
     //
-    // Наборов настроек здесь ТРИ (local, dev, prod), активен один — см.
-    // BackPackEnvironment. Переключать удобнее из меню BackPack/Required/
-    // Environment: оно же и предупредит, если у выбранной среды пусто.
+    // There are THREE settings sets here (local, dev, prod), one is active — see
+    // BackPackEnvironment. Switching is easiest from the BackPack/Required/
+    // Environment menu: it also warns when the chosen environment is empty.
     //
-    // Секретов здесь нет и быть не может: WebGL-бандл читается кем угодно,
-    // так что и адрес, и gameId всё равно открыты. Право на награду
-    // доказывает не эта строка, а xsollaID вошедшего игрока.
-    [CreateAssetMenu(menuName = "Blood Red Snow/BackPack Config")]
+    // There are no secrets here and there cannot be: anyone can read a WebGL
+    // bundle, so the address and gameId are public anyway. The right to a reward
+    // is proven not by this string but by the signed-in player's xsollaID.
+    [CreateAssetMenu(menuName = "LongLeap Services/BackPack Config")]
     public sealed class BackPackConfigSO : ScriptableObject
     {
-        // Единый путь для всех мест, которым нужен этот конфиг во время игры.
+        // The single path for every place that needs this config at runtime.
         public const string ResourcePath = "Backend/BackPackConfig";
 
-        // Значения по умолчанию живут ЗДЕСЬ, и только здесь. Раньше это были
-        // константы BackPackService — то есть сервис знал адрес сервера,
-        // хотя настройка его не касается: его дело отправить и разобрать
-        // ответ.
+        // Defaults live HERE and only here. They used to be BackPackService
+        // constants — that is, the service knew the server address, even though
+        // configuration is none of its business: its job is to send and parse.
         //
-        // Действуют только на СОЗДАНИЕ ассета: у существующего поля приезжают
-        // из YAML и об этих строках ничего не знают.
+        // They apply only when the asset is CREATED: an existing asset's fields come
+        // from YAML and know nothing about these strings.
         public const string DefaultEventsPath = BackPackEndpoint.DefaultEventsPath;
 
         public const string DefaultRewardsPath = BackPackEndpoint.DefaultRewardsPath;
 
         public const string DefaultItemsPath = BackPackEndpoint.DefaultItemsPath;
 
-        public const string DefaultSavesPath = BackPackEndpoint.DefaultSavesPath;
-
-        public const string DefaultLeaderboardsPath = BackPackEndpoint.DefaultLeaderboardsPath;
-
         public const string DefaultLocalBaseUrl = "http://127.0.0.1:5066";
 
-        // Стенд и прод — по ДОМЕНУ и только по https. Оба имени ведут на один
-        // адрес (54.195.18.127), но ходить по нему напрямую нельзя: наружу
-        // открыты только 80 и 443 на Cloudflare, а он выбирает сервис по
-        // имени хоста и держит сертификат. По IP запрос либо не дойдёт, либо
-        // упрётся в ошибку TLS.
+        // Staging and production — by DOMAIN and https only. Both names lead to the
+        // same server, but it must not be reached by IP: only 80 and 443 are open,
+        // on Cloudflare, which picks the service by host name and holds the
+        // certificate. By IP the request either does not arrive or hits a TLS error.
         public const string DefaultDevelopmentBaseUrl = "https://api-dev-blood.longtalegames.net";
         public const string DefaultProductionBaseUrl = "https://api-blood.longtalegames.net";
 
         public const string DefaultGameId = "game_01";
 
         [Header("Environment")]
-        [Tooltip("Какой набор настроек уедет в сборку. Переключается из меню " +
-            "BackPack / Required / Environment.")]
+        [Tooltip("Which settings set goes into the build. Switched from the " +
+            "BackPack / Required / Environment menu.")]
         [SerializeField] private BackPackEnvironment _environment = BackPackEnvironment.Local;
 
         [Header("Local")]
-        [Tooltip("Сервер, поднятый на машине разработчика. Из сборки на площадке " +
-            "недоступен — это адрес для проверки в редакторе и локальной сборки.")]
+        [Tooltip("A server running on the developer's machine. Unreachable from a build " +
+            "on a platform — this address is for testing in the Editor and local builds.")]
         [SerializeField] private BackPackEndpoint _local =
             new BackPackEndpoint(DefaultLocalBaseUrl, DefaultGameId);
 
         [Header("Development")]
-        [Tooltip("Общий стенд. Только https: наружу открыт лишь Cloudflare.")]
+        [Tooltip("The shared staging server. https only: only Cloudflare is exposed.")]
         [SerializeField] private BackPackEndpoint _development =
             new BackPackEndpoint(DefaultDevelopmentBaseUrl, DefaultGameId);
 
         [Header("Production")]
-        [Tooltip("Боевой сервер. Тот же домен, что у стенда, без -dev.")]
+        [Tooltip("The production server. Same domain as staging, without -dev.")]
         [SerializeField] private BackPackEndpoint _production =
             new BackPackEndpoint(DefaultProductionBaseUrl, DefaultGameId);
 
         public BackPackEnvironment Environment => _environment;
 
-        // Все три отдаём наружу — их читают проверки ассета: неактивная
-        // сегодня среда становится активной одним пунктом меню, и пустой она
-        // к тому времени быть не должна.
+        // All three are exposed — asset checks read them: an environment inactive
+        // today becomes active with one menu item, and it must not be empty by then.
         public BackPackEndpoint Local => _local ?? new BackPackEndpoint();
 
         public BackPackEndpoint Development => _development ?? new BackPackEndpoint();
 
         public BackPackEndpoint Production => _production ?? new BackPackEndpoint();
 
-        // Набор, который реально уедет в сборку.
+        // The set that actually goes into the build.
         public BackPackEndpoint Active
         {
             get
@@ -238,8 +208,8 @@ namespace LongLeap.Backpack
             }
         }
 
-        // Дальше — то же, чем пользовался GameBootstrapper до появления сред:
-        // ему по-прежнему незачем знать, что наборов три.
+        // Below — the active environment's values: whoever builds the service
+        // (BackPackTask) has no need to know there are three sets.
         public string BaseUrl => Active.BaseUrl;
 
         public string GameId => Active.GameId;
@@ -250,13 +220,10 @@ namespace LongLeap.Backpack
 
         public string ItemsPath => Active.ItemsPath;
 
-        public string SavesPath => Active.SavesPath;
-
-        public string LeaderboardsPath => Active.LeaderboardsPath;
-
-        // Заполнено ли настолько, чтобы вообще отправлять. Отдельно от
-        // BackPackService.IsAvailable: тот отвечает про собранный сервис, а
-        // это вопрос к ассету — на него отвечает тест, не поднимая сервис.
+        // Whether it is filled in enough to send anything at all. Separate from
+        // BackPackService.IsAvailable: that one is about the built service, while
+        // this is a question to the asset — a test answers it without building the
+        // service.
         public bool IsConfigured => Active.IsConfigured;
 
         public override string ToString() => $"BackPackConfig({_environment}: {Active})";

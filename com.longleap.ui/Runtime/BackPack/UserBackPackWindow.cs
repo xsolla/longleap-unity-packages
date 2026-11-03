@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using LongLeap.Backpack;
 using LongLeap.XsollaId;
@@ -13,7 +14,7 @@ namespace LongLeap.UI
     /// <summary>
     /// Рюкзак игрока: показывает, что у игрока есть на сервере, — перед заездом.
     ///
-    /// Содержимое приходит с BackPack-сервера (<see cref="BackPackService.GetRewardsAsync"/>,
+    /// Содержимое приходит с BackPack-сервера (<see cref="IBackPackService.GetRewardsAsync"/>,
     /// GET {baseUrl}/rewards?xsollaId=…&amp;gameId=…) и перечитывается на каждом
     /// открытии: рюкзак меняется и вне игры (награды за ачивки выдаёт сервер).
     /// Сервис приносит загрузка игры, как и всем остальным окнам, —
@@ -140,8 +141,11 @@ namespace LongLeap.UI
 
         private readonly RemoteSpriteCache _icons = new RemoteSpriteCache();
 
-        /// <summary>Приносит загрузка игры — окно само про контейнер сервисов не знает.</summary>
-        private BackPackService _backPack;
+        /// <summary>
+        /// Приносит загрузка игры — окно само про контейнер сервисов не знает. До того
+        /// (и если не принесли) — <see cref="NullBackPackService"/>: выключенный BackPack.
+        /// </summary>
+        private IBackPackService _backPack = NullBackPackService.Instance;
 
         /// <summary>Вход через Xsolla ID. Приносит загрузка, как и <see cref="_backPack"/>.</summary>
         private IXsollaIdAuth _auth;
@@ -180,6 +184,12 @@ namespace LongLeap.UI
         /// </summary>
         private int _loadVersion;
 
+        /// <summary>
+        /// Отмена идущей загрузки списка: новая загрузка, закрытие и уничтожение окна
+        /// обрывают запрос, а не ждут ответа, который всё равно выбросят.
+        /// </summary>
+        private CancellationTokenSource _loadCancellation;
+
         private bool _warnedNoService;
 
         /// <summary>Выбранные на заезд предметы — активируются в <see cref="ActivateSelectedAsync"/>.</summary>
@@ -189,12 +199,12 @@ namespace LongLeap.UI
         public event Action<BackPackRewardItem> ItemActivated;
 
         /// <summary>
-        /// Отдать окну сервис BackPack-сервера. Зовёт загрузка; без него окно
-        /// покажет ошибку вместо списка, а «Продолжить» работает как обычно.
+        /// Отдать окну сервис BackPack-сервера. Зовёт загрузка; без него (или с
+        /// выключенным) окно покажет ошибку вместо списка, а «Продолжить» работает как обычно.
         /// </summary>
-        public void BindBackPack(BackPackService backPack)
+        public void BindBackPack(IBackPackService backPack)
         {
-            _backPack = backPack;
+            _backPack = backPack ?? NullBackPackService.Instance;
 
             if (IsOpen)
                 Forget(ReloadAsync());
@@ -254,12 +264,10 @@ namespace LongLeap.UI
         /// <summary>
         /// Есть ли связь с BackPack-сервером. Зовёт тот, кто собирается открыть
         /// окно: без связи рюкзак показать нечем, и игрока лучше сразу пустить
-        /// дальше. Сервиса нет вовсе — связи тоже нет.
+        /// дальше. BackPack выключен — связи тоже нет.
         /// </summary>
-        public Task<BackPackConnectionResult> CheckConnectionAsync() =>
-            _backPack != null
-                ? _backPack.CheckConnectionAsync()
-                : Task.FromResult(BackPackConnectionResult.Failed("no_backpack_service"));
+        public Task<BackPackConnectionResult> CheckConnectionAsync(CancellationToken cancellationToken = default) =>
+            _backPack.CheckConnectionAsync(cancellationToken);
 
         /// <summary>
         /// Отдать окну каталог товаров (их id — ключи наград предметов) и способ узнать,
@@ -301,11 +309,11 @@ namespace LongLeap.UI
             _selected.Clear();
             RefreshItemStates();
 
-            if (_catalog == null || _isRunActive == null || _backPack == null)
+            if (_catalog == null || _isRunActive == null || !_backPack.IsAvailable)
             {
                 Debug.LogError(
                     $"[BackPack] {items.Length} выбранных предметов не активировать: окну не принесли " +
-                    "каталог товаров, заезд (BindRewards) или BackPackService. Предметы остаются в рюкзаке.", this);
+                    "каталог товаров, заезд (BindRewards) или BackPack выключен. Предметы остаются в рюкзаке.", this);
                 return 0;
             }
 
@@ -331,6 +339,8 @@ namespace LongLeap.UI
                     continue;
                 }
 
+                // Без отмены: оборванный DELETE мог уже удалить предмет на сервере,
+                // и тогда игрок остался бы и без предмета, и без товара.
                 var deleted = await _backPack.DeleteItemAsync(item.Id);
 
                 if (this == null) return activated;
@@ -379,6 +389,12 @@ namespace LongLeap.UI
             Forget(ReloadAsync());
         }
 
+        public override Task CloseAsync()
+        {
+            CancelLoad();
+            return base.CloseAsync();
+        }
+
         /// <summary>«Назад» ведёт туда, откуда пришли (см. <see cref="Prepare"/>), а не сразу в меню.</summary>
         public override async Task BackAsync()
         {
@@ -423,6 +439,7 @@ namespace LongLeap.UI
             if (_openBackPackButton != null)
                 _openBackPackButton.onClick.RemoveListener(OnOpenBackPack);
 
+            CancelLoad();
             UnsubscribeAuth();
             _icons.Clear();
         }
@@ -436,17 +453,21 @@ namespace LongLeap.UI
         {
             var version = ++_loadVersion;
 
+            CancelLoad();
+
             ClearItems();
             RefreshSignInButton();
 
-            if (_backPack == null)
+            // Выключенный BackPack — не повод звать гостя входить: и после входа
+            // показать будет нечего.
+            if (!_backPack.IsAvailable)
             {
                 if (!_warnedNoService)
                 {
                     _warnedNoService = true;
                     Debug.LogWarning(
-                        "[BackPack] рюкзаку не принесли BackPackService (BackPackTask не отработал) — " +
-                        "показать нечего.", this);
+                        $"[BackPack] рюкзак выключен ({_backPack}): конфиг не заполнен или BackPackTask " +
+                        "не отработал — показать нечего.", this);
                 }
 
                 ShowPanel(signedIn: true);
@@ -470,7 +491,19 @@ namespace LongLeap.UI
             ShowPanel(signedIn: true);
             ShowStatus(_loadingText);
 
-            var reply = await _backPack.GetRewardsAsync();
+            _loadCancellation = new CancellationTokenSource();
+
+            BackPackRewardsReply reply;
+
+            try
+            {
+                reply = await _backPack.GetRewardsAsync(_loadCancellation.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // Загрузку оборвали намеренно (новая загрузка, закрытие) — сказать нечего.
+                return;
+            }
 
             // Пока шёл запрос, окно закрыли, переоткрыли или уничтожили — этот ответ уже никому не нужен.
             if (this == null || version != _loadVersion || !IsOpen) return;
@@ -491,6 +524,15 @@ namespace LongLeap.UI
             RefreshItemRewards();
             RefreshItemStates();
             ShowStatus(_itemViews.Count == 0 ? _emptyText : null);
+        }
+
+        private void CancelLoad()
+        {
+            if (_loadCancellation == null) return;
+
+            _loadCancellation.Cancel();
+            _loadCancellation.Dispose();
+            _loadCancellation = null;
         }
 
         private void BuildItems(IReadOnlyList<BackPackRewardItem> items)
@@ -950,7 +992,7 @@ namespace LongLeap.UI
 
             _signInError = SignInErrorText(failure.Code);
 
-            if (IsOpen && (_backPack == null || !_backPack.HasXsollaId))
+            if (IsOpen && !_backPack.HasXsollaId)
                 ShowSignInMessage(GuestStatus());
         }
 

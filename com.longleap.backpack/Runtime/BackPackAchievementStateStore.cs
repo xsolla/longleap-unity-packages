@@ -5,26 +5,26 @@ using UnityEngine;
 
 namespace LongLeap.Backpack
 {
-    // Обёртка над хранилищем ачивок: сначала событие на BackPack-сервер, и
-    // только при удачном ответе — запись в хранилище.
+    // A wrapper over the achievement store: first the event goes to the BackPack
+    // server, and only on a successful answer is the unlock written to the store.
     //
-    // Почему обёртка, а не мост IAchievementGameBridge: мост зовут для
-    // уведомлений, он ничего не может отменить — AchievementSystem пишет в
-    // хранилище своим PersistUnlockAsync независимо от него. Точка, где
-    // «сохранить» ещё можно НЕ сделать, ровно одна — MarkUnlockedAsync.
+    // Why a wrapper and not the IAchievementGameBridge: the bridge is called for
+    // notifications and cannot cancel anything — AchievementSystem writes to the
+    // store in its PersistUnlockAsync regardless of it. There is exactly one point
+    // where "save" can still NOT happen — MarkUnlockedAsync.
     //
-    // Что происходит при отказе сервера: в памяти ачивка на эту сессию
-    // остаётся открытой (AchievementSystem помечает её до обращения к
-    // хранилищу — переиграть это нельзя, не переписав систему), но на диск и в
-    // облако не уходит. В следующем запуске она снова закрыта, статы дадут ей
-    // открыться заново, и событие уйдёт повторно — с тем же eventId, поэтому
-    // награду сервер не выдаст дважды (BackPackService.StableEventId).
+    // What happens when the server refuses: in memory the achievement stays
+    // unlocked for this session (AchievementSystem marks it before calling the
+    // store — that cannot be undone without rewriting the system), but it does not
+    // reach disk or the cloud. On the next launch it is locked again, stats unlock
+    // it once more, and the event is re-sent — with the same eventId, so the server
+    // does not grant the reward twice (BackPackService.StableEventId).
     public sealed class BackPackAchievementStateStore : IAchievementStateStore
     {
         private readonly IAchievementStateStore _inner;
-        private readonly BackPackService _backPack;
+        private readonly IBackPackService _backPack;
 
-        public BackPackAchievementStateStore(IAchievementStateStore inner, BackPackService backPack)
+        public BackPackAchievementStateStore(IAchievementStateStore inner, IBackPackService backPack)
         {
             _inner = inner ?? throw new ArgumentNullException(nameof(inner));
             _backPack = backPack;
@@ -35,15 +35,15 @@ namespace LongLeap.Backpack
 
         public async Task MarkUnlockedAsync(AchievementId id, long timestamp)
         {
-            // Гостю сохраняем как раньше, без сервера.
+            // A guest's unlocks are saved as before, without the server.
             //
-            // Это НЕ уступка ради простоты: xsollaID до входа не существует
-            // вовсе. Требуй мы удачного ответа и здесь, игрок без аккаунта
-            // терял бы вообще все ачивки при перезапуске, а условия открытия
-            // героев висели бы невыполненными. Награду он всё равно не
-            // получает: события без xsollaID нет, значит сервер о ней не
-            // знает, и после входа она не выдастся — если это нужно, событие
-            // придётся досылать отдельно при SignedIn.
+            // This is NOT a shortcut: before sign-in the xsollaID does not exist at
+            // all. If we required a successful answer here too, a player without an
+            // account would lose every achievement on restart, and hero unlock
+            // conditions would stay unmet. The guest gets no reward anyway: there is
+            // no event without an xsollaID, so the server does not know about it and
+            // will not grant it after sign-in — if that is needed, the event has to
+            // be re-sent separately on SignedIn.
             if (_backPack == null || !_backPack.IsAvailable || !_backPack.HasXsollaId)
             {
                 await _inner.MarkUnlockedAsync(id, timestamp);
@@ -54,23 +54,23 @@ namespace LongLeap.Backpack
 
             if (!reply.Success)
             {
-                // Warning, а не Error: отказ сервера — рабочая ситуация
-                // (сервера нет на месте, клиент ему незнаком), и ачивка
-                // вернётся сюда в следующей сессии.
+                // Warning rather than Error: a refusal is a normal situation (the
+                // server is down, the client is unknown to it), and the achievement
+                // comes back here next session.
                 Debug.LogWarning(
-                    $"BackPack: событие '{id.Value}' не принято ({reply.Error}) — ачивка не сохранена, попробуем в следующий раз.");
+                    $"BackPack: event '{id.Value}' was not accepted ({reply.Error}) — the achievement is not saved, will retry next session.");
                 return;
             }
 
             if (reply.RewardGranted)
-                Debug.Log($"BackPack: за '{id.Value}' выдана награда '{reply.RewardId ?? "?"}'.");
+                Debug.Log($"BackPack: reward '{reply.RewardId ?? "?"}' granted for '{id.Value}'.");
 
             await _inner.MarkUnlockedAsync(id, timestamp);
         }
 
-        // Сброс — только локальный. Сервер о нём не знает намеренно: выданные
-        // награды отзывать нельзя, а eventId остаётся тем же, поэтому после
-        // сброса повторные события просто отработают как дубли.
+        // The reset is local only. The server deliberately does not know about it:
+        // granted rewards cannot be revoked, and the eventId stays the same, so after
+        // a reset repeated events are simply handled as duplicates.
         public Task DeleteAllAsync() => _inner.DeleteAllAsync();
     }
 }

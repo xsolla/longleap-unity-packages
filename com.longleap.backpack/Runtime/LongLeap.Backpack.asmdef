@@ -3,7 +3,6 @@
     "rootNamespace": "LongLeap.Backpack",
     "references": [
         "LongLeap.Core",
-        "LongLeap.Stats",
         "LongLeap.Achievements"
     ],
     "includePlatforms": [],

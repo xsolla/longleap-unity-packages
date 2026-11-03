@@ -3,40 +3,39 @@ using UnityEngine;
 namespace LongLeap.Backpack
 {
     /// <summary>
-    /// От чьего имени уходят события на BackPack-сервер.
+    /// Whose behalf events are sent to the BackPack server on.
     ///
-    /// Отдельный держатель, а не поле сервиса: xsollaID появляется не при старте,
-    /// а когда игрок войдёт (или когда тихо восстановится сессия), и меняется при
-    /// выходе-входе. <see cref="BackPackService"/> спрашивает его на каждой
-    /// отправке через делегат, поэтому достаточно записать сюда — переподнимать
-    /// сервис не нужно.
+    /// A separate holder rather than a service field: the xsollaID does not exist
+    /// at startup — it appears when the player signs in (or a session is silently
+    /// restored) and changes on sign-out/sign-in. <see cref="BackPackService"/>
+    /// asks for it on every request through a delegate, so writing it here is
+    /// enough — the service does not need to be rebuilt.
     ///
-    /// В Darkslide входа пока нет вовсе, поэтому здесь null: события не уходят,
-    /// а ачивки сохраняются локально (см. BackPackAchievementStateStore). Когда
-    /// вход появится, ему остаётся присвоить сюда id после успешной авторизации
-    /// и обнулить при выходе.
+    /// Until the player signs in this is null: no events are sent and achievements
+    /// are saved locally (see BackPackAchievementStateStore). Sign-in sets the id
+    /// after successful authorization and clears it on sign-out.
     /// </summary>
     public static class BackPackIdentity
     {
-        /// <summary>Идентификатор вошедшего игрока или null, пока входа не было.</summary>
+        /// <summary>The signed-in player's id, or null until sign-in.</summary>
         public static string XsollaId { get; private set; }
 
-        /// <summary>Есть ли, от чьего имени отправлять.</summary>
+        /// <summary>Whether there is someone to send on behalf of.</summary>
         public static bool HasXsollaId => !string.IsNullOrEmpty(XsollaId);
 
-        /// <summary>Игрок вошёл.</summary>
+        /// <summary>The player signed in.</summary>
         public static void SetXsollaId(string xsollaId)
         {
             XsollaId = string.IsNullOrEmpty(xsollaId) ? null : xsollaId;
         }
 
-        /// <summary>Игрок вышел: дальше события снова никуда не уходят.</summary>
+        /// <summary>The player signed out: events go nowhere again.</summary>
         public static void Clear()
         {
             XsollaId = null;
         }
 
-        /// <summary>Сбрасывает статику при отключённом Domain Reload.</summary>
+        /// <summary>Resets the static when Domain Reload is disabled.</summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
