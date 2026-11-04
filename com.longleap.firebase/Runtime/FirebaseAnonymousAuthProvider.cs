@@ -9,6 +9,15 @@ using UnityEngine.Networking;
 
 namespace LongLeap.Firebase
 {
+    /// <summary>
+    /// Anonymous Firebase Authentication over the Identity Toolkit REST API.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="LoginAsync"/> returns the cached ID token while it is more than 5 minutes
+    /// from expiry, otherwise refreshes it, and as a last resort signs up a new anonymous
+    /// user. Tokens are cached in <see cref="PlayerPrefs"/> under <c>longleap_auth</c>.
+    /// Concurrent calls are serialised.
+    /// </remarks>
     public sealed class FirebaseAnonymousAuthProvider : IAuthProvider
     {
         private readonly string _apiKey;
@@ -23,6 +32,7 @@ namespace LongLeap.Firebase
         private const long TokenRefreshMarginMs = 300000;
         private const string AuthCacheKey = "longleap_auth";
 
+        /// <param name="apiKey">Firebase Web API key.</param>
         public FirebaseAnonymousAuthProvider(string apiKey)
         {
             _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
@@ -30,6 +40,11 @@ namespace LongLeap.Firebase
             LoadCachedAuth();
         }
 
+        /// <param name="apiKey">Firebase Web API key.</param>
+        /// <param name="httpHandler">
+        /// Replaces the network call (for tests). Receives method, URL and body; returns the
+        /// response body, or <c>null</c> on failure.
+        /// </param>
         public FirebaseAnonymousAuthProvider(string apiKey, Func<string, string, string, Task<string>> httpHandler)
         {
             _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
@@ -58,7 +73,7 @@ namespace LongLeap.Firebase
                 if (signedUp)
                     return new AuthResult.Success(new IdToken(_idToken), new UserId(_uid));
 
-                return new AuthResult.Failure("Не удалось выполнить анонимную регистрацию в Firebase");
+                return new AuthResult.Failure("Firebase anonymous sign-up failed");
             }
             finally
             {

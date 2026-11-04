@@ -2,11 +2,27 @@
   "name": "com.longleap.firebase",
   "version": "0.1.0",
   "displayName": "LongLeap Firebase Backend",
-  "description": "Firebase backend implementations for auth, cloud saves, leaderboards, and remote config.",
+  "description": "Firebase backends over REST (no Firebase SDK, WebGL-friendly): anonymous auth, Realtime Database cloud saves with guest and account scopes, leaderboards, and Remote Config with A/B experiment info.",
   "unity": "6000.0",
-  "keywords": ["firebase", "auth", "backend", "longleap"],
+  "keywords": [
+    "firebase",
+    "auth",
+    "cloud saves",
+    "leaderboards",
+    "remote-config",
+    "backend",
+    "longleap"
+  ],
+  "author": {
+    "name": "LongLeap"
+  },
+  "license": "SEE LICENSE IN LICENSE.md",
+  "documentationUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.firebase/README.md",
+  "changelogUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.firebase/CHANGELOG.md",
+  "licensesUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.firebase/LICENSE.md",
   "dependencies": {
     "com.longleap.core": "0.1.0",
+    "com.longleap.remoteconfig": "1.0.0",
     "com.unity.nuget.newtonsoft-json": "3.0.2"
   }
 }

@@ -78,8 +78,8 @@ namespace LongLeap.Firebase.Tests
             var backend = new FirebaseRemoteConfigBackend(config, _prefs, handler);
             var result = await backend.FetchAsync();
 
-            Assert.IsTrue(result.IsSuccess, "FetchAsync должен вернуть успешный результат");
-            Assert.AreEqual(2, callLog.Count, "Должно быть 2 HTTP-вызова: регистрация FID, RC fetch");
+            Assert.IsTrue(result.IsSuccess, "FetchAsync should succeed");
+            Assert.AreEqual(2, callLog.Count, "Expected 2 HTTP calls: FID registration, RC fetch");
 
             Assert.IsTrue(callLog[0].url.Contains("/installations"));
 
@@ -92,7 +92,7 @@ namespace LongLeap.Firebase.Tests
             Assert.AreEqual("exp_test", result.Experiments[0].ExperimentId);
             Assert.AreEqual(1, result.Experiments[0].VariantIndex);
 
-            Assert.IsTrue(_prefs.HasKey(FidPrefsKey), "FID данные должны быть сохранены");
+            Assert.IsTrue(_prefs.HasKey(FidPrefsKey), "FID data should be saved");
         }
 
         [Test]
@@ -115,9 +115,9 @@ namespace LongLeap.Firebase.Tests
             var backend = new FirebaseRemoteConfigBackend(config, _prefs, handler);
             var result = await backend.FetchAsync();
 
-            Assert.IsTrue(result.IsSuccess, "FetchAsync должен вернуть успешный результат");
-            Assert.AreEqual(1, callLog.Count, "Должен быть ровно 1 HTTP-вызов (только RC fetch)");
-            Assert.IsTrue(callLog[0].Contains(":fetch"), "Единственный вызов должен быть RC fetch");
+            Assert.IsTrue(result.IsSuccess, "FetchAsync should succeed");
+            Assert.AreEqual(1, callLog.Count, "Expected exactly 1 HTTP call (RC fetch only)");
+            Assert.IsTrue(callLog[0].Contains(":fetch"), "The only call should be the RC fetch");
             Assert.AreEqual("v1", result.Parameters["p1"]);
         }
 
@@ -144,7 +144,7 @@ namespace LongLeap.Firebase.Tests
             var backend = new FirebaseRemoteConfigBackend(config, _prefs, handler);
             var result = await backend.FetchAsync();
 
-            Assert.IsFalse(result.IsSuccess, "Сетевая ошибка должна вернуть IsSuccess=false");
+            Assert.IsFalse(result.IsSuccess, "A network error should return IsSuccess=false");
         }
 
         [Test]

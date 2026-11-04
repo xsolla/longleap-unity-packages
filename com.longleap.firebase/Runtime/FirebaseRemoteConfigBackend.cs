@@ -11,6 +11,14 @@ using UnityEngine.Networking;
 
 namespace LongLeap.Firebase
 {
+    /// <summary>
+    /// Fetches Firebase Remote Config parameters and A/B experiment assignments over REST.
+    /// </summary>
+    /// <remarks>
+    /// On first use registers a Firebase Installation ID (FID) and stores it in
+    /// <see cref="IPlayerPrefs"/> under <c>rc_fid_data</c>; later fetches reuse it. Parameter
+    /// caching is not done here; it belongs to <c>com.longleap.remoteconfig</c>.
+    /// </remarks>
     public sealed class FirebaseRemoteConfigBackend : IRemoteConfigProvider
     {
         private readonly FirebaseConfigSO _config;
@@ -19,20 +27,30 @@ namespace LongLeap.Firebase
 
         private const string FidPrefsKey = "rc_fid_data";
 
+        /// <param name="config">Must have <see cref="FirebaseConfigSO.GoogleAppId"/>, <see cref="FirebaseConfigSO.ProjectNumber"/> and <see cref="FirebaseConfigSO.ApiKey"/> set.</param>
+        /// <param name="playerPrefs">Stores the FID between launches.</param>
+        /// <exception cref="ArgumentException"><see cref="FirebaseConfigSO.GoogleAppId"/> is empty.</exception>
         public FirebaseRemoteConfigBackend(FirebaseConfigSO config, IPlayerPrefs playerPrefs)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
             if (string.IsNullOrEmpty(config.GoogleAppId))
-                throw new ArgumentException("GoogleAppId не может быть пустым", nameof(config));
+                throw new ArgumentException("GoogleAppId cannot be empty", nameof(config));
             _playerPrefs = playerPrefs ?? throw new ArgumentNullException(nameof(playerPrefs));
             _httpHandler = SendUnityWebRequestAsync;
         }
 
+        /// <param name="config">Must have <see cref="FirebaseConfigSO.GoogleAppId"/>, <see cref="FirebaseConfigSO.ProjectNumber"/> and <see cref="FirebaseConfigSO.ApiKey"/> set.</param>
+        /// <param name="playerPrefs">Stores the FID between launches.</param>
+        /// <param name="httpHandler">
+        /// Replaces the network call (for tests). Receives method, URL and body; returns the
+        /// response body, or <c>null</c> on failure.
+        /// </param>
+        /// <exception cref="ArgumentException"><see cref="FirebaseConfigSO.GoogleAppId"/> is empty.</exception>
         public FirebaseRemoteConfigBackend(FirebaseConfigSO config, IPlayerPrefs playerPrefs, Func<string, string, string, Task<string>> httpHandler)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
             if (string.IsNullOrEmpty(config.GoogleAppId))
-                throw new ArgumentException("GoogleAppId не может быть пустым", nameof(config));
+                throw new ArgumentException("GoogleAppId cannot be empty", nameof(config));
             _playerPrefs = playerPrefs ?? throw new ArgumentNullException(nameof(playerPrefs));
             _httpHandler = httpHandler ?? throw new ArgumentNullException(nameof(httpHandler));
         }
@@ -58,7 +76,7 @@ namespace LongLeap.Firebase
             }
             catch (Exception ex)
             {
-                Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: ошибка FetchAsync — {ex.Message}");
+                Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: FetchAsync failed — {ex.Message}");
                 return Failed();
             }
         }
@@ -75,7 +93,7 @@ namespace LongLeap.Firebase
             }
             catch (Exception ex)
             {
-                Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: ошибка десериализации FID данных — {ex.Message}");
+                Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: failed to deserialize the cached FID data — {ex.Message}");
                 return null;
             }
         }
@@ -105,7 +123,7 @@ namespace LongLeap.Firebase
                 var response = await _httpHandler("POST", url, bodyJson);
                 if (response == null)
                 {
-                    Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: не удалось зарегистрировать FID");
+                    Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: failed to register the FID");
                     return null;
                 }
 
@@ -113,7 +131,7 @@ namespace LongLeap.Firebase
                 var name = (string)j["name"];
                 if (string.IsNullOrEmpty(name))
                 {
-                    Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: ответ регистрации FID не содержит 'name'");
+                    Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: the FID registration response has no 'name'");
                     return null;
                 }
 
@@ -125,7 +143,7 @@ namespace LongLeap.Firebase
             }
             catch (Exception ex)
             {
-                Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: ошибка регистрации FID — {ex.Message}");
+                Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: FID registration failed — {ex.Message}");
                 return null;
             }
         }
@@ -181,7 +199,7 @@ namespace LongLeap.Firebase
             }
             catch (Exception ex)
             {
-                Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: ошибка парсинга ответа — {ex.Message}");
+                Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: failed to parse the response — {ex.Message}");
                 return Failed();
             }
         }

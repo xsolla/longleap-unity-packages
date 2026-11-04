@@ -15,16 +15,22 @@ Null-object backends for every service-provider seam. Each method returns a vali
 The key invariant: **null backends are never a silent fallback**. The game checks a condition and chooses explicitly:
 
 ```csharp
-IAuthProvider auth = firebaseConfig != null
-    ? new FirebaseAuthProvider(firebaseConfig)
+bool useFirebase = firebaseConfig != null;
+
+IAuthProvider auth = useFirebase
+    ? new FirebaseAnonymousAuthProvider(firebaseConfig.ApiKey)
     : new NullAuthProvider();
 
-ICloudSaveProvider cloudSave = firebaseConfig != null
-    ? new FirebaseCloudSaveProvider(firebaseConfig)
+FirebaseHttpClient http = useFirebase
+    ? new FirebaseHttpClient(firebaseConfig.DatabaseUrl, auth)
+    : null;
+
+ICloudSaveProvider cloudSave = useFirebase
+    ? new FirebaseCloudSaveProvider(http, auth, playerPrefs)
     : new NullCloudSaveProvider();
 
-ILeaderboardProvider leaderboard = firebaseConfig != null
-    ? new FirebaseLeaderboardProvider(firebaseConfig)
+ILeaderboardProvider leaderboard = useFirebase
+    ? new FirebaseLeaderboardProvider(http)
     : new NullLeaderboardProvider();
 ```
 

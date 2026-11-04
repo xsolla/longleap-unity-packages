@@ -110,15 +110,9 @@ Consequences worth knowing before you add anything:
 
 | Package | What it is | Depends on | Gate |
 |---|---|---|---|
-| `com.longleap.firebase` | Production: anonymous auth, cloud saves, leaderboards, remote config. REST only, no Firebase SDK. | core, remoteconfig ⚠ | — |
+| `com.longleap.firebase` | Production: anonymous auth, cloud saves, leaderboards, remote config. REST only, no Firebase SDK. | core, remoteconfig | — |
 | `com.longleap.null` | Always-succeeds stubs for every service. Testing and offline mode. | core, remoteconfig | — |
 | `com.longleap.gamepix` | GamePix portal: interstitial + rewarded ads, portal host info, HTML5 packaging. | core | `GAMEPIX` + the GamePix plugin at `Assets/Plugins/GamePix` |
-
-⚠ `LongLeap.Firebase.asmdef` references `LongLeap.RemoteConfig`, but
-`com.longleap.firebase/package.json` declares only `com.longleap.core`. It
-compiles because both packages happen to be in the manifest — remove
-`com.longleap.remoteconfig` from a project and Firebase breaks with no warning
-from the Package Manager.
 
 **Platform**
 
@@ -383,7 +377,7 @@ share one shape:
 **Versions.** Everything is `0.1.0` except `com.longleap.remoteconfig` at
 `1.0.0`. Nothing is enforced by a registry (these are embedded packages), so a
 `package.json` dependency list can drift from what the `.asmdef` actually
-references without anything failing — as `firebase` already has. Treat the
+references without anything failing. Treat the
 `.asmdef` as the truth and fix the manifest to match.
 
 ---

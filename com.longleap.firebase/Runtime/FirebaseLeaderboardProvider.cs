@@ -9,11 +9,22 @@ using UnityEngine;
 
 namespace LongLeap.Firebase
 {
+    /// <summary>
+    /// Leaderboards stored in Firebase Realtime Database over REST.
+    /// </summary>
+    /// <remarks>
+    /// Entries live at <c>leaderboards/{boardId}/{uid}</c> with <c>score</c>, <c>negScore</c>,
+    /// <c>displayName</c> and a server <c>timestamp</c>. Queries order by <c>negScore</c>, so
+    /// the database rules must declare <c>".indexOn": "negScore"</c> for each board.
+    /// A submit is written only if it beats the player's stored score. After
+    /// <see cref="Dispose"/> every call returns an empty or failed result.
+    /// </remarks>
     public sealed class FirebaseLeaderboardProvider : ILeaderboardProvider
     {
         private readonly FirebaseHttpClient _http;
         private bool _disposed;
 
+        /// <param name="http">RTDB client used for all reads and writes.</param>
         public FirebaseLeaderboardProvider(FirebaseHttpClient http)
         {
             _http = http ?? throw new ArgumentNullException(nameof(http));

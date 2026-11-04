@@ -9,21 +9,31 @@ using UnityEngine;
 
 namespace LongLeap.Firebase
 {
+    /// <summary>
+    /// Cloud saves stored in Firebase Realtime Database over REST.
+    /// </summary>
+    /// <remarks>
+    /// Guest saves live at <c>cloud_saves/{uid}/{key}</c>, where <c>uid</c> is the anonymous
+    /// Firebase uid. After <see cref="UseAccount"/> all operations go to
+    /// <c>xsolla_saves/{accountId}/{key}</c> instead. Every request is signed with the
+    /// anonymous Firebase ID token, in both scopes.
+    /// </remarks>
     public sealed class FirebaseCloudSaveProvider : ICloudSaveProvider, IAccountCloudSaveScope
     {
         private const string RootPath = "cloud_saves";
 
-        // Сейвы аккаунта лежат ОТДЕЛЬНОЙ ветвью, а не под cloud_saves: гостевой
-        // сейв обязан пережить и вход, и выход, а значит его путь трогать нельзя.
+        // Account saves live in a SEPARATE branch, not under cloud_saves: the guest
+        // save must survive both sign-in and sign-out, so its path must not change.
         private const string AccountRootPath = "xsolla_saves";
 
-        // Выбранная область, чтобы она пережила перезагрузку сцены и запуск игры
-        // заново.
+        // The selected scope, persisted so it survives a scene reload and a game
+        // restart.
         //
-        // Читаем её ЗДЕСЬ, а не ждём восстановления сессии Xsolla: восстановление
-        // запускают без ожидания, и к моменту CloudSaveService.InitializeAsync
-        // сессии может ещё не быть. Дождавшись её, первую загрузку мы бы сделали
-        // из гостевой ветви, а игрок увидел бы чужой прогресс.
+        // It is read HERE instead of waiting for the Xsolla session restore: the
+        // restore is started without being awaited, and by the time
+        // CloudSaveService.InitializeAsync runs the session may not exist yet. Had
+        // we waited for it, the first load would come from the guest branch and the
+        // player would see someone else's progress.
         private const string ScopePrefsKey = "longleap_cloudsave_scope";
 
         private readonly FirebaseHttpClient _http;
@@ -32,6 +42,12 @@ namespace LongLeap.Firebase
         private string _uid;
         private string _accountId;
 
+        /// <param name="http">RTDB client used for all reads and writes.</param>
+        /// <param name="auth">Resolves the anonymous uid for the guest branch.</param>
+        /// <param name="playerPrefs">
+        /// Persists the selected scope across launches. Optional: when <c>null</c> the
+        /// provider always starts in guest scope.
+        /// </param>
         public FirebaseCloudSaveProvider(FirebaseHttpClient http, IAuthProvider auth, IPlayerPrefs playerPrefs = null)
         {
             _http = http ?? throw new System.ArgumentNullException(nameof(http));
@@ -54,9 +70,9 @@ namespace LongLeap.Firebase
                 throw new System.ArgumentException(
                     $"{nameof(FirebaseCloudSaveProvider)}: accountId cannot be empty — use UseGuest.", nameof(accountId));
 
-            // Идентификатор аккаунта становится сегментом пути RTDB, поэтому к
-            // нему те же требования, что к ключу сейва. Пропустив мусор, мы
-            // писали бы в ветвь, которую потом не прочитать.
+            // The account id becomes an RTDB path segment, so it has the same
+            // requirements as a save key. Letting garbage through would write to a
+            // branch that could never be read back.
             if (!IsValidAccountId(accountId))
                 throw new System.ArgumentException(
                     $"{nameof(FirebaseCloudSaveProvider)}: accountId contains forbidden characters (. $ # [ ] /).", nameof(accountId));
@@ -96,8 +112,8 @@ namespace LongLeap.Firebase
 
                 foreach (var kvp in json)
                 {
-                    // Только строки, как в LoadAllAsync: всё остальное записано
-                    // не нами.
+                    // Strings only, same as LoadAllAsync: anything else was not
+                    // written by this provider.
                     if (kvp.Value.Type != JTokenType.String)
                         continue;
 
@@ -126,12 +142,12 @@ namespace LongLeap.Firebase
 
         private static readonly char[] ForbiddenPathChars = { '.', '$', '#', '[', ']', '/' };
 
-        // Единственное место, где решается, в чью ветвь идёт запрос. Все методы
-        // ниже зовут только его — иначе одна забытая строка увела бы часть
-        // операций в чужой сейв.
+        // The single place that decides whose branch a request goes to. Every
+        // method below goes through it; otherwise one forgotten line would send
+        // part of the operations to someone else's save.
         //
-        // Аккаунтная ветвь uid не требует, но анонимный токен всё равно нужен:
-        // им подписан любой запрос к RTDB.
+        // The account branch does not need the uid, but the anonymous token is
+        // still required: every RTDB request is signed with it.
         private async Task<string> ResolveBasePathAsync()
         {
             if (IsAccountScoped)
@@ -162,7 +178,7 @@ namespace LongLeap.Firebase
             string basePath = await ResolveBasePathAsync();
             if (basePath == null)
                 throw new System.InvalidOperationException(
-                    $"{nameof(FirebaseCloudSaveProvider)}: не удалось получить uid для SetStringAsync ключа '{key.Value}'");
+                    $"{nameof(FirebaseCloudSaveProvider)}: failed to resolve the uid for SetStringAsync, key '{key.Value}'");
             await _http.PutAsync($"{basePath}/{key.Value}", JsonConvert.SerializeObject(value));
         }
 
@@ -193,7 +209,7 @@ namespace LongLeap.Firebase
             string basePath = await ResolveBasePathAsync();
             if (basePath == null)
                 throw new System.InvalidOperationException(
-                    $"{nameof(FirebaseCloudSaveProvider)}: не удалось получить uid для DeleteKeyAsync ключа '{key.Value}'");
+                    $"{nameof(FirebaseCloudSaveProvider)}: failed to resolve the uid for DeleteKeyAsync, key '{key.Value}'");
             await _http.DeleteAsync($"{basePath}/{key.Value}");
         }
 
@@ -228,7 +244,7 @@ namespace LongLeap.Firebase
             string basePath = await ResolveBasePathAsync();
             if (basePath == null)
                 throw new System.InvalidOperationException(
-                    $"{nameof(FirebaseCloudSaveProvider)}: не удалось получить uid для DeleteAllAsync");
+                    $"{nameof(FirebaseCloudSaveProvider)}: failed to resolve the uid for DeleteAllAsync");
             await _http.DeleteAsync(basePath);
         }
     }
