@@ -108,7 +108,7 @@ namespace LongLeap.DailyQuests.Tests
                 {
                     new QuestObjective { Id = new QuestObjectiveId("o0"), StatPath = stat, StatTarget = target, Mode = mode }
                 },
-                Rewards = new[] { new QuestReward { Key = new QuestRewardKey("soft"), Amount = soft } }
+                Rewards = new[] { new QuestReward { Key = new RewardKey("soft"), Amount = soft } }
             };
 
         /// <summary>"Score 100 points in a run + 3 grinds".</summary>
@@ -121,7 +121,7 @@ namespace LongLeap.DailyQuests.Tests
                     new QuestObjective { Id = new QuestObjectiveId("score"), StatPath = "run_score", StatTarget = 100, Mode = QuestProgressMode.Absolute },
                     new QuestObjective { Id = new QuestObjectiveId("grind"), StatPath = "grind", StatTarget = 3 }
                 },
-                Rewards = new[] { new QuestReward { Key = new QuestRewardKey("soft"), Amount = 1 } }
+                Rewards = new[] { new QuestReward { Key = new RewardKey("soft"), Amount = 1 } }
             };
 
         private static DailyQuestConfig Config(int dailyCount, params QuestDefinition[] quests) =>
@@ -744,7 +744,7 @@ namespace LongLeap.DailyQuests.Tests
                 Difficulty = difficulty,
                 Categories = new[] { category },
                 Objectives = new[] { new QuestObjective { Id = new QuestObjectiveId("o0"), StatPath = "grind", StatTarget = 10 } },
-                Rewards = new[] { new QuestReward { Key = new QuestRewardKey("soft"), Amount = 1 } }
+                Rewards = new[] { new QuestReward { Key = new RewardKey("soft"), Amount = 1 } }
             };
 
         private static DailyQuestConfig RankedConfig(params QuestDefinition[] quests) =>

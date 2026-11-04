@@ -9,7 +9,7 @@ namespace LongLeap.DailyRewards
         public RewardId(string value)
         {
             if (value != null && value.Length == 0)
-                throw new ArgumentException("RewardId: значение не может быть пустым.", nameof(value));
+                throw new ArgumentException("RewardId: value cannot be empty.", nameof(value));
             _value = value;
         }
 

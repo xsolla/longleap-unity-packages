@@ -91,8 +91,8 @@ Consequences worth knowing before you add anything:
 | Package | What it is |
 |---|---|
 | `com.longleap.core` | All contracts and domain types, plus the `CloudSaveService` and `LeaderboardService` implementations and the Unity storage implementations (`UnityPlayerPrefsAdapter`, `PlayerPrefsPersistentStorage`, `FilePersistentStorage`). Everything depends on this. |
-| `com.longleap.notifications` | Priority-queued popup notifications. Fully standalone; game code supplies the view. |
 | `com.longleap.localization` | `Loc` static facade over Unity.Localization, `LocKey` newtype, `LocalizedText` component. |
+| `com.longleap.tools` | `DeviceInfo` — the one place that decides the device profile (desktop / mobile / web desktop / web mobile); `RuntimeUi` — code-built UI bricks for the settings and UI windows, styled by a per-game `RuntimeUiTheme` asset; `WebGlPagePostprocessor` — WebGL `index.html` page mode (fixed / free aspect), rotate-device overlay in the browser's language, mobile pixel ratio, stored in `ProjectSettings/LongLeapWebGlPage.asset`. |
 
 **Features**
 
@@ -102,7 +102,7 @@ Consequences worth knowing before you add anything:
 | `com.longleap.achievements` | Goals with objectives; progress derived from stat subscriptions, unlocks fire notifications. | core, stats |
 | `com.longleap.dailyrewards` | Streaks, cycles (`Once`/`Loop`), grace period, UTC reset window, calendar view-model. | core |
 | `com.longleap.dailyquests` | JSON-defined quest pool, weighted daily set per UTC reset window, progress derived from stats (delta since issue), rewards claimed by the player. | core, stats |
-| `com.longleap.settings` | Typed settings (bool / int / float / enum) with auto-generated UI and per-group cloud persistence. | core, localization |
+| `com.longleap.settings` | Typed settings (bool / int / float / enum) with auto-generated UI and per-group cloud persistence. | core, localization, tools |
 | `com.longleap.analytics` | GA4 Measurement Protocol analytics: validated events, batching with retry/backoff and a bounded queue, sessions and engagement time, consent switch, user ID/properties, A/B experiment tagging. Pluggable backends and HTTP transports; `AnalyticsFlushDriver` hooks it to the player loop. | core |
 | `com.longleap.remoteconfig` | Typed remote parameters via Firebase Remote Config REST (no Firebase SDK), PlayerPrefs cache, A/B experiment info. | core |
 
@@ -132,7 +132,7 @@ built by the game; these only carry the plumbing and the screens.
 | Package | What it is | Depends on |
 |---|---|---|
 | `com.longleap.bootstrap` | Sequential loading pipeline of `ILoadingTask` steps, `ServiceContainer`, `GameServices` access point, optional Addressables loading, `LoadSceneTask`. | — (Addressables) |
-| `com.longleap.ui` | Window system (catalog of Addressable window prefabs with preload/unload rules) and windows for settings, achievements, daily rewards, daily quests, backpack, notifications. Each feature module compiles only when its feature package is installed. Logic only — prefabs stay in the game. | — (uGUI, Input System, Addressables); feature modules: the matching feature packages |
+| `com.longleap.ui` | Window system (catalog of Addressable window prefabs with preload/unload rules) and windows for settings, achievements, daily rewards, daily quests, backpack. Includes the priority-queued notification system (formerly `com.longleap.notifications`). Each feature module compiles only when its feature package is installed. Logic only — prefabs stay in the game. | tools (uGUI, Input System, Addressables); feature modules: the matching feature packages |
 
 **Tooling**
 
@@ -367,7 +367,8 @@ share one shape:
 |---|---|---|
 | `UserId`, `IdToken` | core | `None` sentinel + `IsValid` |
 | `BoardId` | core | `None` sentinel, regex-validated |
-| `RewardKey`, `RewardId` | dailyrewards | `None` sentinel |
+| `RewardKey` | core | `None` sentinel; throws on `""` |
+| `RewardId` | dailyrewards | `None` sentinel |
 | `CloudSaveKey` | core | **throws** on `. $ # [ ] /` |
 | `StatPath` | stats | **throws**; `IsNone` for `default` |
 | `EventName` | analytics | `None` sentinel + `IsValid`; logs an error, service drops the event |

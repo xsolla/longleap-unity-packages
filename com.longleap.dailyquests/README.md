@@ -74,7 +74,7 @@
 | `DailyQuestStateLoadResult` | Результат загрузки: `Loaded` (+ `State`), `Empty`, `Unreadable`, `Unavailable` |
 | `IDailyQuestGameBridge` | `OnQuestsRotated`, `OnQuestCompleted`, `ApplyRewards` — игра начисляет награду здесь. Обязателен |
 | `QuestStatus` | Снимок квеста для UI: `Definition`, `State` (`InProgress`/`Completed`/`Claimed`), `ObjectiveProgresses`, `TotalProgress`, `CanClaim` |
-| `QuestId`, `QuestObjectiveId`, `QuestRewardKey` | Newtype-ы с `None` |
+| `QuestId`, `QuestObjectiveId` | Newtype-ы с `None`. Ключ награды — общий `LongLeap.Core.RewardKey` |
 | `DailyQuestJson` | Разбор JSON → `DailyQuestConfig` |
 | `DailyQuestValidator` | Проверка конфига |
 | `DailyQuestSelector` | Взвешенный детерминированный выбор набора по правилам |

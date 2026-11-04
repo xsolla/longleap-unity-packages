@@ -62,12 +62,12 @@ namespace LongLeap.UI
 
             if (notificationView == null)
             {
-                Debug.LogError("NotificationBootstrapper: notificationView не назначен.", this);
+                Debug.LogError("NotificationBootstrapper: notificationView is not assigned.", this);
                 return;
             }
 
             _service = new NotificationService();
-            _service.OnShowRequest += notificationView.OnShowRequest;
+            notificationView.Bind(_service);
 
             IsReady = true;
             _activeService = _service;
@@ -75,13 +75,14 @@ namespace LongLeap.UI
             while (PendingNotifications.Count > 0)
                 _service.Show(PendingNotifications.Dequeue());
 
-            Debug.Log("NotificationBootstrapper: готово.");
+            Debug.Log("NotificationBootstrapper: ready.");
         }
 
         private void OnDestroy()
         {
-            if (_service != null && notificationView != null)
-                _service.OnShowRequest -= notificationView.OnShowRequest;
+            // If the view is destroyed first it has already unbound itself.
+            if (notificationView != null)
+                notificationView.Unbind();
 
             if (ReferenceEquals(_activeService, _service))
                 _activeService = null;

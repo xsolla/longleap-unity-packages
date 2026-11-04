@@ -1,60 +1,67 @@
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace LongLeap.Tools
 {
     /// <summary>
-    /// Глобальный ответ на вопрос «что это за устройство»: ПК, мобильное, веб на ПК
-    /// или веб на мобильном. Определение живёт только здесь — остальной код спрашивает
-    /// <see cref="Profile"/> / <see cref="IsMobile"/> / <see cref="IsWeb"/> и не
-    /// проверяет <c>Application.isMobilePlatform</c>, тачскрин или <c>UNITY_WEBGL</c> сам.
+    /// The single answer to "what device is this": desktop, mobile, web on desktop or web
+    /// on mobile. Detection lives here only — the rest of the code asks
+    /// <see cref="Profile"/> / <see cref="IsMobile"/> / <see cref="IsWeb"/> and never checks
+    /// <c>Application.isMobilePlatform</c>, the touchscreen or <c>UNITY_WEBGL</c> itself.
     ///
-    /// Две оси:
+    /// Two axes:
     /// <list type="bullet">
-    /// <item><b>Среда</b> — нативная сборка или браузер (<see cref="IsWeb"/>).</item>
-    /// <item><b>Управление</b> — пальцами или клавиатурой (<see cref="IsMobile"/>).</item>
+    /// <item><b>Environment</b> — native build or browser (<see cref="IsWeb"/>).</item>
+    /// <item><b>Controls</b> — touch or keyboard (<see cref="IsMobile"/>).</item>
     /// </list>
     ///
-    /// Мобильным устройство считается, если это мобильная платформа или телефон/планшет
-    /// по типу устройства, а иначе — если есть тачскрин. В браузере Input System создаёт
-    /// Keyboard всегда, даже на телефоне, поэтому там «нет клавиатуры» — не признак:
-    /// есть тачскрин — считаем устройство мобильным. На ноутбуке с тачскрином в браузере
-    /// это даст WebMobile — осознанный компромисс.
+    /// A device is mobile if it is a mobile platform or a phone/tablet by device type.
+    /// Beyond that, in the browser the primary pointer decides — the same media query
+    /// <c>(hover: none) and (pointer: coarse)</c> the orientation overlay in index.html uses:
+    /// a touchscreen laptop (primary pointer is a touchpad or mouse) stays WebDesktop, while an
+    /// iPad with a desktop user agent becomes WebMobile. If the browser does not answer, the web
+    /// fallback is the touchscreen (Keyboard always exists there, even on a phone). In a native
+    /// build, mobile means a touchscreen without a keyboard.
     ///
-    /// Значение не кэшируется: тачскрин и клавиатура могут появиться после старта, а
-    /// вычисление дешёвое. Профиль, нужный надолго (выбор конфига окна), читай один раз.
-    /// Игровая схема управления «чем нажали последним» (подсказки в мире) — другой вопрос,
-    /// её определяет игровой ввод.
+    /// The value is not cached: a touchscreen or keyboard may appear after startup, and the
+    /// check is cheap. Read a long-lived profile (choosing a window config) once.
+    /// The in-game control scheme ("whatever was pressed last", world prompts) is a different
+    /// question, answered by the game's input code.
     ///
-    /// Для проверки другого профиля: <see cref="Override"/> из кода или меню редактора
+    /// To test another profile: <see cref="Override"/> from code or the editor menu
     /// <c>Tools/Device Profile</c>.
     /// </summary>
     public static class DeviceInfo
     {
-        /// <summary>Ключ EditorPrefs для выбора из меню редактора. -1 — определять по устройству.</summary>
-        public const string EditorOverrideKey = "LongLeap.Tools.DeviceProfileOverride";
+        /// <summary>
+        /// Prefix of the EditorPrefs key for the editor menu choice; the key is this prefix plus
+        /// <c>PlayerSettings.productGUID</c>, so the choice does not leak between projects.
+        /// </summary>
+        public const string EditorOverrideKeyPrefix = "LongLeap.Tools.DeviceProfileOverride";
 
         /// <summary>
-        /// Принудительный профиль из кода — для тестов и отладочных меню. null — не задан.
-        /// Сильнее выбора в меню редактора. Сбрасывается при входе в Play Mode
-        /// (см. <see cref="ResetStatics"/>).
+        /// Profile forced from code — for tests and debug menus. null — not set.
+        /// Takes precedence over the editor menu choice. Reset on entering Play Mode
+        /// (see <see cref="ResetStatics"/>).
         /// </summary>
         public static DeviceProfile? Override { get; set; }
 
-        /// <summary>Профиль, по которому игра выбирает конфиги и раскладку.</summary>
-        public static DeviceProfile Profile => Override ?? EditorOverride() ?? Detect();
+        /// <summary>The profile the game uses to choose configs and layout.</summary>
+        public static DeviceProfile Profile => Override ?? EditorOverride ?? Detect();
 
+        /// <summary>Running in a browser (WebGL), on desktop or mobile.</summary>
         public static bool IsWeb => Profile is DeviceProfile.WebDesktop or DeviceProfile.WebMobile;
 
-        /// <summary>Управление пальцами: мобильное устройство, нативное или в браузере.</summary>
+        /// <summary>Touch controls: a mobile device, native or in the browser.</summary>
         public static bool IsMobile => Profile is DeviceProfile.Mobile or DeviceProfile.WebMobile;
 
-        /// <summary>Управление клавиатурой и мышью, нативное или в браузере.</summary>
+        /// <summary>Keyboard and mouse controls, native or in the browser.</summary>
         public static bool IsDesktop => !IsMobile;
 
         /// <summary>
-        /// Определить профиль по самому устройству, без <see cref="Override"/> и меню
-        /// редактора. Нужен меню редактора, чтобы показать «Auto».
+        /// Detect the profile from the device itself, ignoring <see cref="Override"/> and the
+        /// editor menu. The editor menu uses it to show what "Auto" resolves to.
         /// </summary>
         public static DeviceProfile Detect()
         {
@@ -72,29 +79,82 @@ namespace LongLeap.Tools
             if (Application.isMobilePlatform || SystemInfo.deviceType == DeviceType.Handheld)
                 return true;
 
-            if (Touchscreen.current == null)
-                return false;
-
-            // Браузер: Keyboard есть всегда, тачскрин — единственный признак.
             if (web)
-                return true;
+            {
+                int coarse = BrowserPrimaryPointerCoarse();
+                if (coarse >= 0)
+                    return coarse == 1;
 
-            return Keyboard.current == null;
+                // The browser did not answer: Keyboard always exists, the touchscreen is the only signal.
+                return Touchscreen.current != null;
+            }
+
+            return Touchscreen.current != null && Keyboard.current == null;
         }
 
-        private static DeviceProfile? EditorOverride()
-        {
-#if UNITY_EDITOR
-            int value = UnityEditor.EditorPrefs.GetInt(EditorOverrideKey, -1);
-
-            if (System.Enum.IsDefined(typeof(DeviceProfile), value))
-                return (DeviceProfile)value;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [DllImport("__Internal")]
+        private static extern int LongLeapToolsPrimaryPointerCoarse();
 #endif
-            return null;
+
+        // 1 — primary pointer is a finger without hover, 0 — mouse or touchpad, -1 — the browser did not answer.
+        private static int BrowserPrimaryPointerCoarse()
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return LongLeapToolsPrimaryPointerCoarse();
+#else
+            return -1;
+#endif
         }
 
-        // Статика переживает вход в Play Mode без перезагрузки домена: без сброса
-        // второй запуск из редактора начинал бы с профилем от прошлого.
+#if UNITY_EDITOR
+        private static DeviceProfile? _editorOverride;
+        private static bool _editorOverrideLoaded;
+
+        /// <summary>
+        /// Editor only: the choice in the <c>Tools/Device Profile</c> menu, null — Auto. Stored in
+        /// EditorPrefs (per developer and per project) and read once per domain.
+        /// </summary>
+        public static DeviceProfile? EditorOverride
+        {
+            get
+            {
+                if (!_editorOverrideLoaded)
+                {
+                    _editorOverrideLoaded = true;
+                    int value = UnityEditor.EditorPrefs.GetInt(EditorOverrideKey, -1);
+                    _editorOverride = System.Enum.IsDefined(typeof(DeviceProfile), value)
+                        ? (DeviceProfile?)value
+                        : null;
+                }
+
+                return _editorOverride;
+            }
+            set
+            {
+                _editorOverride = value;
+                _editorOverrideLoaded = true;
+                UnityEditor.EditorPrefs.SetInt(EditorOverrideKey, value.HasValue ? (int)value.Value : -1);
+            }
+        }
+
+        private static string EditorOverrideKey =>
+            EditorOverrideKeyPrefix + "." + UnityEditor.PlayerSettings.productGUID;
+
+        // A forgotten menu override is easy to miss: windows are built "wrong" for no visible reason.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void WarnAboutEditorOverride()
+        {
+            if (EditorOverride is { } forced)
+                Debug.LogWarning($"DeviceInfo: profile is forced to {forced} by Tools/Device Profile. " +
+                                 "Pick \"Auto\" there to detect the device.");
+        }
+#else
+        private static DeviceProfile? EditorOverride => null;
+#endif
+
+        // Statics survive entering Play Mode without a domain reload: without this reset the
+        // second run from the editor would start with the previous run's profile.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics() => Override = null;
     }

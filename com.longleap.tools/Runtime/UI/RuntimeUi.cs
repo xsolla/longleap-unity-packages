@@ -5,57 +5,111 @@ using UnityEngine.UI;
 namespace LongLeap.Tools.UI
 {
     /// <summary>
-    /// Кирпичи UI, собираемого в рантайме: текст, фон, ползунок, кнопка. Ими собирает
-    /// себя панель настроек (<c>LongLeap.Settings.UI.SettingsPanel</c>, в префабе окна
-    /// только пустой Root) и дорисовывают свои части окна пакета UI — поэтому новая
-    /// строка добавляется кодом, а не сборкой иерархии руками.
+    /// Building blocks for UI assembled at runtime: text, background, slider, button. The
+    /// settings panel builds itself with them (<c>LongLeap.Settings.UI.SettingsPanel</c>; the
+    /// window prefab holds only an empty Root), and the UI package windows draw their extra
+    /// parts with them — so a new row is added in code, not by assembling a hierarchy by hand.
     ///
-    /// Один класс на все пакеты: раньше у настроек и у UI были свои копии, и вид
-    /// окон расходился при правке только одной. Цвета и размеры собраны здесь:
-    /// менять вид — значит править эти константы, а не искать числа по всем файлам.
+    /// One class for every package: settings and UI used to have their own copies, and the
+    /// windows drifted apart whenever only one was edited. Colors, sizes and the default font
+    /// come from the game's theme (<see cref="Theme"/>, a <see cref="RuntimeUiTheme"/> asset):
+    /// changing the look means editing the theme, not hunting for numbers across files.
     /// </summary>
     public static class RuntimeUi
     {
         // =========================================================
-        // ПАЛИТРА И РАЗМЕРЫ
+        // THEME
         // =========================================================
 
-        /// <summary>Розовый из главного меню — заголовки и активные элементы.</summary>
-        public static readonly Color Accent = new Color(0.698f, 0.302f, 0.576f, 1f);
+        private const int DefaultUiLayer = 5;
 
-        public static readonly Color Text = new Color(0.94f, 0.94f, 0.96f, 1f);
+        private static RuntimeUiTheme _theme;
+        private static bool _warnedNoFont;
 
-        public static readonly Color TextDim = new Color(0.68f, 0.68f, 0.74f, 1f);
+        /// <summary>
+        /// Window theme. Without an explicit value — the game's <c>Resources/RuntimeUiTheme</c>
+        /// asset, and if there is none — the <see cref="RuntimeUiTheme"/> defaults. Set it before
+        /// windows are built if the theme is not in Resources; null — look in Resources again.
+        /// </summary>
+        public static RuntimeUiTheme Theme
+        {
+            get
+            {
+                if (_theme == null)
+                    _theme = LoadTheme();
 
-        /// <summary>Затемнение под окном: закрывает меню и ловит клики мимо панели.</summary>
-        public static readonly Color Backdrop = new Color(0f, 0f, 0f, 0.78f);
+                return _theme;
+            }
+            set => _theme = value;
+        }
 
-        public static readonly Color PanelBackground = new Color(0.06f, 0.06f, 0.08f, 0.97f);
+        /// <summary>Headers and active elements.</summary>
+        public static Color Accent => Theme.Accent;
 
-        public static readonly Color RowBackground = new Color(1f, 1f, 1f, 0.04f);
+        /// <summary>Main text.</summary>
+        public static Color Text => Theme.Text;
 
-        public static readonly Color SliderTrack = new Color(1f, 1f, 1f, 0.16f);
+        /// <summary>Secondary text: hints, values.</summary>
+        public static Color TextDim => Theme.TextDim;
 
-        /// <summary>Кнопка клавиши, пока она ждёт нажатия.</summary>
-        public static readonly Color Listening = new Color(0.85f, 0.62f, 0.18f, 1f);
+        /// <summary>Dimming under a window: covers the menu and catches clicks outside the panel.</summary>
+        public static Color Backdrop => Theme.Backdrop;
 
-        public const float RowHeight = 46f;
+        /// <summary>Window panel background.</summary>
+        public static Color PanelBackground => Theme.PanelBackground;
 
-        public const float RowSpacing = 6f;
+        /// <summary>Settings row background.</summary>
+        public static Color RowBackground => Theme.RowBackground;
 
-        public const int LabelFontSize = 24;
+        /// <summary>Slider track.</summary>
+        public static Color SliderTrack => Theme.SliderTrack;
 
-        public const int ValueFontSize = 22;
+        /// <summary>Key binding button while it waits for a key press.</summary>
+        public static Color Listening => Theme.Listening;
+
+        /// <summary>Height of a settings row.</summary>
+        public static float RowHeight => Theme.RowHeight;
+
+        /// <summary>Vertical gap between rows.</summary>
+        public static float RowSpacing => Theme.RowSpacing;
+
+        /// <summary>Font size of row labels.</summary>
+        public static int LabelFontSize => Theme.LabelFontSize;
+
+        /// <summary>Font size of values and button captions.</summary>
+        public static int ValueFontSize => Theme.ValueFontSize;
+
+        private static RuntimeUiTheme LoadTheme()
+        {
+            var theme = Resources.Load<RuntimeUiTheme>(RuntimeUiTheme.ResourcesName);
+            if (theme != null)
+                return theme;
+
+            theme = ScriptableObject.CreateInstance<RuntimeUiTheme>();
+            theme.name = RuntimeUiTheme.ResourcesName + " (default)";
+            theme.hideFlags = HideFlags.HideAndDontSave;
+
+            return theme;
+        }
+
+        // Statics survive entering Play Mode without a domain reload: a theme set in the
+        // previous run must not leak into the next one.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            _theme = null;
+            _warnedNoFont = false;
+        }
 
         // =========================================================
-        // СБОРКА
+        // BUILDING
         // =========================================================
 
-        /// <summary>Пустой объект с RectTransform — узел иерархии UI.</summary>
+        /// <summary>Empty object with a RectTransform — a node of the UI hierarchy.</summary>
         public static RectTransform CreateRect(string name, Transform parent)
         {
             var host = new GameObject(name, typeof(RectTransform));
-            host.layer = parent != null ? parent.gameObject.layer : 5;
+            host.layer = parent != null ? parent.gameObject.layer : UiLayer();
 
             var rect = (RectTransform)host.transform;
             rect.SetParent(parent, false);
@@ -64,7 +118,7 @@ namespace LongLeap.Tools.UI
             return rect;
         }
 
-        /// <summary>Растянуть на весь родительский прямоугольник.</summary>
+        /// <summary>Stretch over the whole parent rectangle.</summary>
         public static RectTransform Stretch(this RectTransform rect)
         {
             rect.anchorMin = Vector2.zero;
@@ -77,8 +131,8 @@ namespace LongLeap.Tools.UI
         }
 
         /// <summary>
-        /// Картинка-заливка. Клики она ловит, только если попросили: фон строки
-        /// не должен перехватывать нажатия у ползунка и кнопок.
+        /// Solid fill image. It catches clicks only when asked to: a row background must not
+        /// steal presses from the slider and buttons.
         /// </summary>
         public static Image CreateImage(string name, Transform parent, Color color, bool raycastTarget = false)
         {
@@ -90,6 +144,10 @@ namespace LongLeap.Tools.UI
             return image;
         }
 
+        /// <summary>
+        /// Single-line text that ends with an ellipsis when it does not fit.
+        /// <paramref name="font"/> null — the theme font (<see cref="RuntimeUiTheme.Font"/>).
+        /// </summary>
         public static TextMeshProUGUI CreateText(
             string name,
             Transform parent,
@@ -102,15 +160,28 @@ namespace LongLeap.Tools.UI
             var rect = CreateRect(name, parent);
             var text = rect.gameObject.AddComponent<TextMeshProUGUI>();
 
-            // Без шрифта TMP не может построить текст: он лезет в материал
-            // шрифта и роняет пересчёт раскладки всего окна (NullReference в
-            // MaterialReference). Стандартного шрифта в проекте нет — TMP
-            // Essentials не импортированы, — поэтому такой текст просто
-            // выключаем: окно остаётся рабочим, но без подписи.
+            if (font == null)
+                font = Theme.Font;
+
+            // Without a font TMP cannot build the text: it reaches into the font material and
+            // breaks the layout rebuild of the whole window (NullReference in MaterialReference).
+            // The project may have no default font — TMP Essentials are not imported — so such
+            // text is disabled: the window keeps working, just without the caption. Warn once.
             if (font != null)
+            {
                 text.font = font;
+            }
             else
+            {
                 text.enabled = false;
+
+                if (!_warnedNoFont)
+                {
+                    _warnedNoFont = true;
+                    Debug.LogWarning($"RuntimeUi: no font for text \"{name}\" — such texts are hidden. " +
+                                     $"Pass a font or set Font in the {nameof(RuntimeUiTheme)} asset.");
+                }
+            }
 
             text.text = content;
             text.fontSize = fontSize;
@@ -124,8 +195,8 @@ namespace LongLeap.Tools.UI
         }
 
         /// <summary>
-        /// Вертикальная колонка: заголовки, секции и строки складываются сверху вниз.
-        /// Высоту детей задают они сами (LayoutElement), ширину — колонка.
+        /// Vertical column: headers, sections and rows stack top to bottom.
+        /// Children set their own height (LayoutElement); the column sets their width.
         /// </summary>
         public static VerticalLayoutGroup AddColumn(
             RectTransform rect, float spacing, RectOffset padding = null)
@@ -142,7 +213,7 @@ namespace LongLeap.Tools.UI
             return layout;
         }
 
-        /// <summary>Строка настройки: подпись слева, управление справа.</summary>
+        /// <summary>Settings row: label on the left, control on the right.</summary>
         public static HorizontalLayoutGroup AddRow(RectTransform rect, float spacing)
         {
             var layout = rect.gameObject.AddComponent<HorizontalLayoutGroup>();
@@ -158,8 +229,8 @@ namespace LongLeap.Tools.UI
         }
 
         /// <summary>
-        /// Размер элемента внутри раскладки. Ширина меньше нуля означает
-        /// «не задано»: элемент тянется за flexibleWidth.
+        /// Size of an element inside a layout. A width below zero means "not set": the element
+        /// stretches by flexibleWidth.
         /// </summary>
         public static LayoutElement SetSize(
             GameObject host,
@@ -181,9 +252,8 @@ namespace LongLeap.Tools.UI
         }
 
         /// <summary>
-        /// Ползунок 0..1 со стандартной внутренней иерархией: фон, заливка и
-        /// ручка. Раскладка родителя управляет только самим ползунком — его
-        /// внутренности держатся на якорях.
+        /// 0..1 slider with the standard inner hierarchy: background, fill and handle. The
+        /// parent layout controls only the slider itself — its insides hold on anchors.
         /// </summary>
         public static Slider CreateSlider(string name, Transform parent, Color fillColor)
         {
@@ -222,7 +292,7 @@ namespace LongLeap.Tools.UI
             return slider;
         }
 
-        /// <summary>Кнопка с подписью: назад, сброс, клавиша в строке управления.</summary>
+        /// <summary>Button with a caption: back, reset, a key in a controls row.</summary>
         public static Button CreateButton(
             string name,
             Transform parent,
@@ -237,8 +307,8 @@ namespace LongLeap.Tools.UI
             button.transition = Selectable.Transition.ColorTint;
 
             var colors = button.colors;
-            colors.highlightedColor = new Color(1f, 1f, 1f, 1f);
-            colors.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
+            colors.highlightedColor = Theme.ButtonHighlighted;
+            colors.pressedColor = Theme.ButtonPressed;
             colors.selectedColor = colors.highlightedColor;
             button.colors = colors;
 
@@ -250,7 +320,7 @@ namespace LongLeap.Tools.UI
             return button;
         }
 
-        /// <summary>Горизонтальная полоса заданной высоты по центру родителя.</summary>
+        /// <summary>Horizontal bar of the given height, centered in the parent.</summary>
         private static void Bar(RectTransform rect, float height)
         {
             rect.anchorMin = new Vector2(0f, 0.5f);
@@ -258,6 +328,13 @@ namespace LongLeap.Tools.UI
             rect.pivot = new Vector2(0.5f, 0.5f);
             rect.anchoredPosition = Vector2.zero;
             rect.sizeDelta = new Vector2(0f, height);
+        }
+
+        // The "UI" layer, or Unity's default index 5 if the project renamed it.
+        private static int UiLayer()
+        {
+            int layer = LayerMask.NameToLayer("UI");
+            return layer >= 0 ? layer : DefaultUiLayer;
         }
     }
 }

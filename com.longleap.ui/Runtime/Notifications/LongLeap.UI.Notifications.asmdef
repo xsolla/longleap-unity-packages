@@ -13,14 +13,6 @@
   "overrideReferences": false,
   "precompiledReferences": [],
   "autoReferenced": true,
-  "defineConstraints": [
-    "LONGLEAP_NOTIFICATIONS"
-  ],
-  "versionDefines": [
-    {
-      "name": "com.longleap.notifications",
-      "expression": "0.0.0",
-      "define": "LONGLEAP_NOTIFICATIONS"
-    }
-  ]
+  "defineConstraints": [],
+  "versionDefines": []
 }

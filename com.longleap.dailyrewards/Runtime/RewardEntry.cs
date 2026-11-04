@@ -1,3 +1,5 @@
+using LongLeap.Core;
+
 namespace LongLeap.DailyRewards
 {
     public sealed class RewardEntry

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
+using LongLeap.Core;
 
 namespace LongLeap.DailyQuests.Tests
 {
@@ -13,7 +14,7 @@ namespace LongLeap.DailyQuests.Tests
                 Id = new QuestId(id),
                 Weight = weight,
                 Objectives = new[] { new QuestObjective { Id = new QuestObjectiveId("o0"), StatPath = stat, StatTarget = target } },
-                Rewards = new[] { new QuestReward { Key = new QuestRewardKey("soft"), Amount = amount } }
+                Rewards = new[] { new QuestReward { Key = new RewardKey("soft"), Amount = amount } }
             };
 
         private static DailyQuestValidationResult Validate(params QuestDefinition[] quests) =>
@@ -89,7 +90,7 @@ namespace LongLeap.DailyQuests.Tests
                 Difficulty = difficulty,
                 Categories = new[] { category },
                 Objectives = new[] { new QuestObjective { Id = new QuestObjectiveId("o0"), StatPath = "grind", StatTarget = 10 } },
-                Rewards = new[] { new QuestReward { Key = new QuestRewardKey("soft"), Amount = 1 } }
+                Rewards = new[] { new QuestReward { Key = new RewardKey("soft"), Amount = 1 } }
             };
 
         private static DailyQuestValidationResult ValidateRules(DailyQuestSettings settings, params QuestDefinition[] quests) =>

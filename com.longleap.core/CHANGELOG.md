@@ -19,3 +19,18 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `LongLeap.Core.Ads.NoAdsProvider`. Use `LongLeap.Null.NullAdsProvider` from
   `com.longleap.nullproviders` instead (same behaviour). Release together with
   `com.longleap.nullproviders` 0.1.0.
+
+## [0.2.0] - 2026-11-04
+
+### Added
+
+- `RewardKey` (`Rewards/RewardKey.cs`): reward key newtype shared by daily rewards
+  and daily quests (replaces `LongLeap.DailyRewards.RewardKey` and
+  `LongLeap.DailyQuests.QuestRewardKey`). The game decides what a key means.
+- `ResetSchedule` (`Time/ResetSchedule.cs`): daily reset period math (period start,
+  next reset, time until reset) for a UTC reset hour; moved from daily quests
+  (where it was internal) so daily rewards can share it.
+
+## [0.1.0]
+
+First release. Earlier history is not recorded here.

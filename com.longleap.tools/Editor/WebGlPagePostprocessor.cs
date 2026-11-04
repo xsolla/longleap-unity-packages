@@ -1,42 +1,62 @@
-using System;
-using System.Globalization;
 using System.IO;
-using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEngine;
 
-// Класс не зависит от игры: живёт в пакете com.longleap.tools и работает в любом проекте.
-// Режим страницы выбирается в меню Tools/WebGL Page Mode и применяется к следующему WebGL билду:
-//   Fixed Aspect — пропорции берутся из размеров canvas в готовом index.html (WebGL Resolution в Player Settings),
-//                  по бокам/сверху-снизу остаются поля;
-//   Free Aspect  — canvas занимает всё окно браузера, любые пропорции.
-// Ориентация игры выбирается там же, в Tools/WebGL Page Mode/Orientation:
-//   Auto      — из WebGL Resolution в Player Settings: ширина < высоты — портретная, иначе альбомная;
-//   Landscape / Portrait — явно.
-// На сенсорных устройствах в неправильной ориентации игра закрывается заглушкой «поверните устройство».
-// На ПК заглушки нет: окно браузера крутить нельзя, игра просто показывается с полями.
 namespace LongLeap.Tools.Editor
 {
+    /// <summary>
+    /// Adjusts <c>index.html</c> after every WebGL build. Game-agnostic: lives in
+    /// com.longleap.tools and works in any project.
+    ///
+    /// <para>Page mode — menu <c>Tools/WebGL Page Mode</c>, applied to the next WebGL build:</para>
+    /// <list type="bullet">
+    /// <item><b>Fixed Aspect</b> — the aspect ratio comes from the canvas size in the built index.html
+    /// (WebGL Resolution in Player Settings); margins remain at the sides or top/bottom.</item>
+    /// <item><b>Free Aspect</b> — the canvas fills the whole browser window, any aspect ratio.</item>
+    /// </list>
+    ///
+    /// <para>Orientation — <c>Tools/WebGL Page Mode/Orientation</c>:</para>
+    /// <list type="bullet">
+    /// <item><b>Auto</b> — from WebGL Resolution in Player Settings: width &lt; height is portrait, otherwise landscape.</item>
+    /// <item><b>Landscape</b> / <b>Portrait</b> — explicit.</item>
+    /// </list>
+    /// On touch devices held in the wrong orientation the game is covered by a "rotate your device"
+    /// overlay. Desktops get no overlay: a browser window cannot be rotated, so the game is just
+    /// shown with margins.
+    ///
+    /// <para><c>Tools/WebGL Page Mode/Mobile Pixel Ratio 1</c> uncomments
+    /// <c>config.devicePixelRatio = 1</c> in the template (faster on phones, but blurrier).</para>
+    ///
+    /// <para>All three settings live in <c>ProjectSettings/LongLeapWebGlPage.asset</c>
+    /// (<see cref="WebGlPageSettings"/>) and are committed. The index.html edits themselves are in
+    /// <see cref="WebGlPageHtml"/> (pure functions, covered by tests); this class only handles the
+    /// file, the settings and the log.</para>
+    /// </summary>
     public static class WebGlPagePostprocessor
     {
+        /// <summary>How the game canvas is laid out on the page.</summary>
         public enum PageMode
         {
+            /// <summary>Keep the Player Settings aspect ratio, fit into the window with margins.</summary>
             FixedAspect = 0,
+
+            /// <summary>Stretch the canvas over the whole browser window.</summary>
             FreeAspect = 1,
         }
 
+        /// <summary>The orientation the game is designed for.</summary>
         public enum PageOrientation
         {
+            /// <summary>Derive from WebGL Resolution in Player Settings.</summary>
             Auto = 0,
+
+            /// <summary>Wider than tall.</summary>
             Landscape = 1,
+
+            /// <summary>Taller than wide.</summary>
             Portrait = 2,
         }
-
-        private const string AspectPageMarker = "data-webgl-aspect-fit";
-        private const string FreePageMarker = "data-webgl-free-aspect";
-        private const string OrientationMarker = "data-webgl-orientation-lock";
-        private const string MobileDpiMarker = "// config.devicePixelRatio = 1;";
 
         private const string MenuRoot = "Tools/WebGL Page Mode/";
         private const string FixedMenuPath = MenuRoot + "Fixed Aspect (Player Settings size)";
@@ -45,26 +65,30 @@ namespace LongLeap.Tools.Editor
         private const string AutoOrientationMenuPath = OrientationMenuRoot + "Auto (Player Settings resolution)";
         private const string LandscapeMenuPath = OrientationMenuRoot + "Landscape";
         private const string PortraitMenuPath = OrientationMenuRoot + "Portrait";
-        private const string ModePrefKey = "WebGlPagePostprocessor.Mode";
-        private const string OrientationPrefKey = "WebGlPagePostprocessor.Orientation";
+        private const string MobileDpiMenuPath = MenuRoot + "Mobile Pixel Ratio 1 (faster, lower resolution)";
 
-        // Настройки хранятся в EditorPrefs (локально у каждого разработчика, в репозиторий не попадают).
-        private static string PrefKey => ModePrefKey + "." + PlayerSettings.productGUID;
-        private static string OrientationKey => OrientationPrefKey + "." + PlayerSettings.productGUID;
-
+        /// <summary>Page mode for the next build. Project setting, shared by all developers and CI.</summary>
         public static PageMode Mode
         {
-            get => (PageMode)EditorPrefs.GetInt(PrefKey, (int)PageMode.FixedAspect);
-            set => EditorPrefs.SetInt(PrefKey, (int)value);
+            get => WebGlPageSettings.Get().Mode;
+            set => WebGlPageSettings.Get().Mode = value;
         }
 
+        /// <summary>Game orientation for the next build. Project setting, shared by all developers and CI.</summary>
         public static PageOrientation Orientation
         {
-            get => (PageOrientation)EditorPrefs.GetInt(OrientationKey, (int)PageOrientation.Auto);
-            set => EditorPrefs.SetInt(OrientationKey, (int)value);
+            get => WebGlPageSettings.Get().Orientation;
+            set => WebGlPageSettings.Get().Orientation = value;
         }
 
-        /// <summary>Портретная ли игра с учётом Auto: тогда решает WebGL Resolution в Player Settings.</summary>
+        /// <summary>Force <c>devicePixelRatio = 1</c> on mobile browsers. See <see cref="WebGlPageSettings.MobilePixelRatioOne"/>.</summary>
+        public static bool MobilePixelRatioOne
+        {
+            get => WebGlPageSettings.Get().MobilePixelRatioOne;
+            set => WebGlPageSettings.Get().MobilePixelRatioOne = value;
+        }
+
+        /// <summary>Whether the game is portrait, resolving Auto: then WebGL Resolution in Player Settings decides.</summary>
         public static bool IsPortrait => Orientation switch
         {
             PageOrientation.Portrait => true,
@@ -122,6 +146,21 @@ namespace LongLeap.Tools.Editor
             return true;
         }
 
+        [MenuItem(MobileDpiMenuPath, false, 2400)]
+        private static void ToggleMobileDpi() => MobilePixelRatioOne = !MobilePixelRatioOne;
+
+        [MenuItem(MobileDpiMenuPath, true)]
+        private static bool ToggleMobileDpiValidate()
+        {
+            Menu.SetChecked(MobileDpiMenuPath, MobilePixelRatioOne);
+            return true;
+        }
+
+        /// <summary>
+        /// Post-build hook: applies the page style, the orientation overlay and the mobile pixel
+        /// ratio to <c>index.html</c> of a WebGL build. Runs after the other index.html
+        /// postprocessors (order 1000); each step is skipped if the page already has it.
+        /// </summary>
         [PostProcessBuild(1000)]
         public static void ConfigurePage(BuildTarget target, string buildPath)
         {
@@ -136,146 +175,54 @@ namespace LongLeap.Tools.Editor
             }
 
             var html = File.ReadAllText(indexPath);
-            var changed = false;
+            var original = html;
+            var background = "#" + ColorUtility.ToHtmlStringRGB(PlayerSettings.SplashScreen.backgroundColor);
 
-            var mode = Mode;
-            var alreadyStyled = html.IndexOf(AspectPageMarker, StringComparison.Ordinal) >= 0 ||
-                                html.IndexOf(FreePageMarker, StringComparison.Ordinal) >= 0;
+            AddPageStyle(ref html, background);
+            AddOrientationOverlay(ref html, background);
 
-            if (mode == PageMode.FreeAspect && !alreadyStyled)
-            {
-                var headCloseIndex = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
-                if (headCloseIndex >= 0)
-                {
-                    var background = "#" + ColorUtility.ToHtmlStringRGB(PlayerSettings.SplashScreen.backgroundColor);
-
-                    // Unity по умолчанию подгоняет размер буфера под размер canvas (matchWebGLToCanvasSize),
-                    // поэтому достаточно растянуть canvas на всё окно.
-                    var pageStyle =
-                        $"    <style {FreePageMarker}>\n" +
-                        $"      html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; border: 0; overflow: hidden; background: {background}; }}\n" +
-                        "      #unity-container { position: fixed !important; left: 0 !important; top: 0 !important; transform: none !important;\n" +
-                        "        width: 100% !important; height: 100% !important; }\n" +
-                        "      #unity-canvas { position: fixed !important; left: 0 !important; top: 0 !important; transform: none !important;\n" +
-                        "        width: 100% !important; height: 100% !important; display: block !important; }\n" +
-                        "      #unity-footer { display: none !important; }\n" +
-                        "    </style>\n";
-
-                    html = html.Insert(headCloseIndex, pageStyle);
-                    changed = true;
-                    Debug.Log("WebGlPagePostprocessor: free aspect page (canvas fills the browser window).");
-                }
-                else
-                {
-                    Debug.LogWarning("WebGlPagePostprocessor: </head> not found in index.html.");
-                }
-            }
-            else if (mode == PageMode.FixedAspect && !alreadyStyled)
-            {
-                var headCloseIndex = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
-                var canvas = Regex.Match(html, "<canvas\\b[^>]*\\bid\\s*=\\s*[\"']unity-canvas[\"'][^>]*>",
-                    RegexOptions.IgnoreCase);
-                var width = Regex.Match(canvas.Value, "\\bwidth\\s*=\\s*[\"']?(\\d+)", RegexOptions.IgnoreCase);
-                var height = Regex.Match(canvas.Value, "\\bheight\\s*=\\s*[\"']?(\\d+)", RegexOptions.IgnoreCase);
-
-                if (headCloseIndex >= 0 &&
-                    width.Success && height.Success &&
-                    int.TryParse(width.Groups[1].Value, out var gameWidth) &&
-                    int.TryParse(height.Groups[1].Value, out var gameHeight) &&
-                    gameWidth > 0 && gameHeight > 0)
-                {
-                    // Размер canvas задаёт Unity из WebGL Player Settings.
-                    var widthInVh = (100d * gameWidth / gameHeight).ToString("0.########", CultureInfo.InvariantCulture);
-                    var heightInVw = (100d * gameHeight / gameWidth).ToString("0.########", CultureInfo.InvariantCulture);
-                    var background = "#" + ColorUtility.ToHtmlStringRGB(PlayerSettings.SplashScreen.backgroundColor);
-                    var pageStyle =
-                        $"    <style {AspectPageMarker}>\n" +
-                        $"      html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; border: 0; overflow: hidden; background: {background}; }}\n" +
-                        "      #unity-container { position: fixed !important; left: 50% !important; top: 50% !important; transform: translate(-50%, -50%) !important;\n" +
-                        $"        width: min(100vw, {widthInVh}vh) !important; height: min(100vh, {heightInVw}vw) !important; }}\n" +
-                        "      #unity-canvas { position: fixed !important; left: 50% !important; top: 50% !important; transform: translate(-50%, -50%) !important;\n" +
-                        $"        width: min(100vw, {widthInVh}vh) !important; height: min(100vh, {heightInVw}vw) !important; display: block !important; }}\n" +
-                        "      #unity-footer { display: none !important; }\n" +
-                        "    </style>\n";
-
-                    html = html.Insert(headCloseIndex, pageStyle);
-                    changed = true;
-                    Debug.Log($"WebGlPagePostprocessor: canvas aspect ratio set to {gameWidth}:{gameHeight}.");
-                }
-                else
-                {
-                    Debug.LogWarning("WebGlPagePostprocessor: canvas size or </head> not found in index.html.");
-                }
-            }
-
-            // Ориентация обязательна в обоих режимах страницы.
-            if (html.IndexOf(OrientationMarker, StringComparison.Ordinal) < 0)
-            {
-                var headCloseIndex = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
-                var bodyCloseIndex = html.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
-
-                if (headCloseIndex >= 0 && bodyCloseIndex >= 0)
-                {
-                    var portrait = IsPortrait;
-                    var background = "#" + ColorUtility.ToHtmlStringRGB(PlayerSettings.SplashScreen.backgroundColor);
-                    var wrongOrientation = portrait ? "landscape" : "portrait";
-                    var lockOrientation = portrait ? "portrait" : "landscape";
-                    // Иконка телефона изначально вертикальная: анимация показывает поворот в нужную ориентацию.
-                    var hintFrom = portrait ? "-90deg" : "0deg";
-                    var hintTo = portrait ? "0deg" : "-90deg";
-
-                    // Браузеры не дают надёжно заблокировать ориентацию (screen.orientation.lock работает
-                    // только в fullscreen и не везде), поэтому в неправильной ориентации закрываем игру заглушкой.
-                    // Заглушка только для сенсорных устройств (hover: none, pointer: coarse): окно браузера
-                    // на ПК не повернуть, там игра просто показывается с полями.
-                    var orientationStyle =
-                        $"    <style {OrientationMarker}>\n" +
-                        $"      #unity-rotate-overlay {{ display: none; position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 2147483647;\n" +
-                        $"        background: {background}; color: #fff; font: 600 5vmin/1.3 sans-serif; text-align: center;\n" +
-                        "        align-items: center; justify-content: center; flex-direction: column; }\n" +
-                        "      #unity-rotate-overlay .icon { font-size: 18vmin; display: inline-block; animation: unity-rotate-hint 1.8s ease-in-out infinite; }\n" +
-                        $"      @keyframes unity-rotate-hint {{ 0%, 20% {{ transform: rotate({hintFrom}); }} 60%, 100% {{ transform: rotate({hintTo}); }} }}\n" +
-                        $"      @media (orientation: {wrongOrientation}) and (hover: none) and (pointer: coarse) {{\n" +
-                        "        #unity-rotate-overlay { display: flex; }\n" +
-                        "        #unity-container, #unity-canvas { visibility: hidden !important; }\n" +
-                        "      }\n" +
-                        "    </style>\n";
-
-                    var overlay =
-                        $"    <div id=\"unity-rotate-overlay\"><div class=\"icon\">&#128241;</div><div>Rotate your device to {lockOrientation}</div></div>\n" +
-                        "    <script>\n" +
-                        "      // Best effort: на Android в fullscreen ориентацию можно заблокировать.\n" +
-                        "      document.addEventListener('fullscreenchange', function () {\n" +
-                        "        if (!document.fullscreenElement || !screen.orientation || !screen.orientation.lock) return;\n" +
-                        "        // Some browsers return nothing or throw instead of a rejected promise.\n" +
-                        "        try {\n" +
-                        $"          var locked = screen.orientation.lock('{lockOrientation}');\n" +
-                        "          if (locked && locked.catch) locked.catch(function () {});\n" +
-                        "        } catch (e) {}\n" +
-                        "      });\n" +
-                        "    </script>\n";
-
-                    // Сначала body (он дальше по тексту), чтобы не сдвинуть индекс head.
-                    html = html.Insert(bodyCloseIndex, overlay);
-                    html = html.Insert(headCloseIndex, orientationStyle);
-                    changed = true;
-                    Debug.Log($"WebGlPagePostprocessor: {lockOrientation}-only overlay added (orientation: {Orientation}).");
-                }
-                else
-                {
-                    Debug.LogWarning("WebGlPagePostprocessor: </head> or </body> not found, orientation overlay skipped.");
-                }
-            }
-
-            if (html.IndexOf(MobileDpiMarker, StringComparison.Ordinal) >= 0)
-            {
-                html = html.Replace(MobileDpiMarker, "config.devicePixelRatio = 1;");
-                changed = true;
+            if (MobilePixelRatioOne && WebGlPageHtml.TrySetMobilePixelRatioOne(ref html))
                 Debug.Log("WebGlPagePostprocessor: mobile devicePixelRatio set to 1.");
+
+            if (html != original)
+                File.WriteAllText(indexPath, html);
+        }
+
+        // Fixed or Free Aspect style, depending on Mode.
+        private static void AddPageStyle(ref string html, string background)
+        {
+            if (WebGlPageHtml.HasPageStyle(html))
+                return;
+
+            if (Mode == PageMode.FreeAspect)
+            {
+                if (WebGlPageHtml.TryAddFreeAspectStyle(ref html, background))
+                    Debug.Log("WebGlPagePostprocessor: free aspect page (canvas fills the browser window).");
+                else
+                    Debug.LogWarning("WebGlPagePostprocessor: </head> not found in index.html.");
+
+                return;
             }
 
-            if (changed)
-                File.WriteAllText(indexPath, html);
+            if (WebGlPageHtml.TryAddFixedAspectStyle(ref html, background, out var width, out var height))
+                Debug.Log($"WebGlPagePostprocessor: canvas aspect ratio set to {width}:{height}.");
+            else
+                Debug.LogWarning("WebGlPagePostprocessor: canvas size or </head> not found in index.html.");
+        }
+
+        // The orientation overlay is needed in both page modes.
+        private static void AddOrientationOverlay(ref string html, string background)
+        {
+            if (WebGlPageHtml.HasOrientationOverlay(html))
+                return;
+
+            var portrait = IsPortrait;
+
+            if (WebGlPageHtml.TryAddOrientationOverlay(ref html, portrait, background))
+                Debug.Log($"WebGlPagePostprocessor: {(portrait ? "portrait" : "landscape")}-only overlay added " +
+                          $"(orientation: {Orientation}).");
+            else
+                Debug.LogWarning("WebGlPagePostprocessor: </head> or </body> not found, orientation overlay skipped.");
         }
     }
 }

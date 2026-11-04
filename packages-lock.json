@@ -122,12 +122,6 @@
         "com.unity.textmeshpro": "3.0.0"
       }
     },
-    "com.longleap.notifications": {
-      "version": "file:com.longleap.notifications",
-      "depth": 0,
-      "source": "embedded",
-      "dependencies": {}
-    },
     "com.longleap.nullproviders": {
       "version": "file:com.longleap.nullproviders",
       "depth": 0,

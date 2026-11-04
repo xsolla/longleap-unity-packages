@@ -1,70 +1,106 @@
+using System;
 using System.Threading.Tasks;
 using LongLeap.Core;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using UnityEngine;
 
 namespace LongLeap.DailyRewards
 {
+    /// <summary>Calendar state as a single JSON string in <see cref="IPersistentStorage"/>.</summary>
     public sealed class JsonDailyRewardsStateStore : IDailyRewardsStateStore
     {
-        private const int CurrentVersion = 1;
-        private const string DefaultStorageKey = "daily_rewards_state";
+        public const string DefaultStorageKey = "daily_rewards_state";
 
         private readonly IPersistentStorage _storage;
         private readonly string _storageKey;
 
         public JsonDailyRewardsStateStore(IPersistentStorage storage, string storageKey = null)
         {
-            _storage = storage;
+            _storage = storage ?? throw new ArgumentNullException(nameof(storage));
             _storageKey = storageKey ?? DefaultStorageKey;
         }
 
-        public async Task<DailyRewardsState> LoadAsync()
+        public async Task<DailyRewardsStateLoadResult> LoadAsync()
         {
-            var json = await _storage.LoadAsync(_storageKey);
-            return ParseState(json);
-        }
-
-        public async Task SaveAsync(DailyRewardsState state)
-        {
-            var json = JsonConvert.SerializeObject(state, Formatting.Indented);
-            await _storage.SaveAsync(_storageKey, json);
-        }
-
-        private DailyRewardsState ParseState(string json)
-        {
-            if (string.IsNullOrEmpty(json))
-                return EmptyState();
-
-            DailyRewardsState state;
+            string json;
             try
             {
-                state = JsonConvert.DeserializeObject<DailyRewardsState>(json);
+                json = await _storage.LoadAsync(_storageKey);
             }
-            catch
+            catch (Exception e)
             {
-                return EmptyState();
+                Debug.LogError($"JsonDailyRewardsStateStore: storage did not answer — {e}");
+                return DailyRewardsStateLoadResult.Unavailable();
             }
 
-            if (state == null)
-                return EmptyState();
-
-            if (state.Version > CurrentVersion)
-                return EmptyState();
-
-            return state;
+            return Parse(json);
         }
 
-        private static DailyRewardsState EmptyState()
+        public Task SaveAsync(DailyRewardsState state) =>
+            _storage.SaveAsync(_storageKey, JsonConvert.SerializeObject(state));
+
+        /// <summary>
+        /// Parse a save. Empty — <see cref="DailyRewardsStateLoadStatus.Empty"/>:
+        /// there was no save yet. Corrupted or newer than our version —
+        /// <see cref="DailyRewardsStateLoadStatus.Unreadable"/>: it must not be treated as empty,
+        /// otherwise a day already claimed today would be granted again. Older versions are migrated
+        /// to the current one (see <see cref="Migrate"/>).
+        /// </summary>
+        public static DailyRewardsStateLoadResult Parse(string json)
         {
-            return new DailyRewardsState
+            if (string.IsNullOrEmpty(json))
+                return DailyRewardsStateLoadResult.Empty();
+
+            try
             {
-                Version = CurrentVersion,
-                ClaimedDayIndices = System.Array.Empty<int>(),
-                Streak = 0,
-                MaxConsecutiveStreak = 0,
-                LastClaimUtcTicks = 0,
-                CurrentCycleNumber = 0
-            };
+                var token = JToken.Parse(json);
+                if (token.Type == JTokenType.Null)
+                    return DailyRewardsStateLoadResult.Empty();
+
+                if (token is not JObject obj)
+                {
+                    Debug.LogWarning("JsonDailyRewardsStateStore: save is unreadable (expected a JSON object).");
+                    return DailyRewardsStateLoadResult.Unreadable();
+                }
+
+                // Read the version from the JSON, not from the object: the field has a default
+                // (the current version), so a save without a version would pass for a new one.
+                var version = obj.Value<int?>(nameof(DailyRewardsState.Version)) ?? 1;
+                if (version > DailyRewardsState.CurrentVersion)
+                {
+                    Debug.LogWarning($"JsonDailyRewardsStateStore: save version {version} is newer than supported {DailyRewardsState.CurrentVersion}.");
+                    return DailyRewardsStateLoadResult.Unreadable();
+                }
+
+                var state = obj.ToObject<DailyRewardsState>();
+                if (state == null)
+                    return DailyRewardsStateLoadResult.Empty();
+
+                Migrate(obj, version, state);
+                if (state.ClaimedCount < 0)
+                    state.ClaimedCount = 0;
+
+                return DailyRewardsStateLoadResult.Loaded(state);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"JsonDailyRewardsStateStore: save is unreadable ({e.Message}).");
+                return DailyRewardsStateLoadResult.Unreadable();
+            }
+        }
+
+        /// <summary>
+        /// Migrate older formats to the current one.
+        /// v1 → v2: the ClaimedDayIndices array of claimed days is replaced by their count
+        /// <see cref="DailyRewardsState.ClaimedCount"/> — days are claimed strictly in order.
+        /// </summary>
+        private static void Migrate(JObject obj, int version, DailyRewardsState state)
+        {
+            if (version < 2)
+                state.ClaimedCount = (obj["ClaimedDayIndices"] as JArray)?.Count ?? 0;
+
+            state.Version = DailyRewardsState.CurrentVersion;
         }
     }
 }

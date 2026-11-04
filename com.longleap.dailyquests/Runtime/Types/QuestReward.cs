@@ -1,3 +1,5 @@
+using LongLeap.Core;
+
 namespace LongLeap.DailyQuests
 {
     /// <summary>
@@ -7,7 +9,7 @@ namespace LongLeap.DailyQuests
     /// </summary>
     public sealed class QuestReward
     {
-        public QuestRewardKey Key { get; init; }
+        public RewardKey Key { get; init; }
 
         public int Amount { get; init; }
     }

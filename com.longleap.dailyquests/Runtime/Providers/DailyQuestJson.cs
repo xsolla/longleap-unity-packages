@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Newtonsoft.Json;
 using UnityEngine;
+using LongLeap.Core;
 
 namespace LongLeap.DailyQuests
 {
@@ -72,7 +73,7 @@ namespace LongLeap.DailyQuests
                 Rewards = q.rewards?
                     .Select(r => r == null ? null : new QuestReward
                     {
-                        Key = string.IsNullOrEmpty(r.key) ? QuestRewardKey.None : new QuestRewardKey(r.key),
+                        Key = string.IsNullOrEmpty(r.key) ? RewardKey.None : new RewardKey(r.key),
                         Amount = r.amount
                     })
                     .ToArray() ?? Array.Empty<QuestReward>()
