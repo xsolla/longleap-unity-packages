@@ -5,27 +5,32 @@ namespace LongLeap.Localization
 {
     /// <summary>
     /// Static convenience facade over <see cref="ILocalizationService"/>.
-    /// Safely returns the key as a fallback if the service is not initialized.
+    /// Without a service attached it returns keys as-is, so callers never need
+    /// a null check.
     /// </summary>
     public static class Loc
     {
         private static ILocalizationService _service;
 
         /// <summary>
-        /// Raised when the active locale changes.
+        /// Raised when the active locale changes, and once on every
+        /// <see cref="Init"/>.
         /// </summary>
         public static event Action OnLanguageChanged;
 
         /// <summary>
-        /// Переводы доступны: сервис поднят и таблицы активного языка загружены.
-        /// false — либо бутстрап ещё не дошёл до локализации, либо идёт смена
-        /// языка. Пока false, Resolve отдаёт ключи, и текст по ним ставить рано.
+        /// True when a service is attached and the tables of the active locale
+        /// are loaded. False before boot reaches localization and while a
+        /// language switch is loading tables; during that time
+        /// <see cref="Resolve"/> may return raw keys, so text should not be set
+        /// from it yet.
         /// </summary>
         public static bool IsReady => _service != null && _service.IsReady;
 
         /// <summary>
-        /// Initializes the static facade with a localization service instance.
-        /// Called once at boot.
+        /// Attaches a localization service. Called once at boot; calling it again
+        /// replaces the previous service. Raises <see cref="OnLanguageChanged"/>
+        /// so components enabled before the service existed refresh their text.
         /// </summary>
         public static void Init(ILocalizationService service)
         {
@@ -38,20 +43,19 @@ namespace LongLeap.Localization
             _service = service;
             _service.OnLanguageChanged += NotifyLanguageChanged;
 
-            // Обновляем компоненты, которые включились до готовности сервиса.
             NotifyLanguageChanged();
         }
 
         /// <summary>
-        /// Отцепляет сервис — перед перезагрузкой сцены, вместе с его Shutdown.
-        /// Без этого фасад держал бы сервис уже уничтоженной сцены: его таблицы
-        /// выгружены, а хост корутин мёртв, и следующая смена языка пришла бы в
-        /// никуда. Подписчиков не дёргаем: они умирают в этот же момент.
-        ///
-        /// Чужой сервис не сбрасываем: если сцену уже подняли заново и на фасаде
-        /// стоит новый сервис, запоздавший Reset от старого обнулил бы живую
-        /// локализацию.
+        /// Detaches <paramref name="service"/>. Call it together with disposing the
+        /// service when its scene is torn down; otherwise the facade keeps a service
+        /// whose tables are released and whose coroutine host is destroyed.
+        /// Subscribers are not notified: they are being destroyed at the same time.
         /// </summary>
+        /// <remarks>
+        /// Does nothing if a different service is attached. A late Reset from an old
+        /// scene must not detach the service of a scene that was already reloaded.
+        /// </remarks>
         public static void Reset(ILocalizationService service)
         {
             if (service == null || _service != service)
@@ -61,8 +65,8 @@ namespace LongLeap.Localization
             _service = null;
         }
 
-        // Статика переживает вход в Play Mode без перезагрузки домена: без сброса
-        // второй запуск из редактора начинал бы с сервисом от прошлого.
+        // Statics survive entering Play Mode with domain reload disabled; without
+        // this, the next Play session would start with the previous session's service.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
@@ -73,9 +77,8 @@ namespace LongLeap.Localization
         private static void NotifyLanguageChanged() => OnLanguageChanged?.Invoke();
 
         /// <summary>
-        /// Resolves a key via the initialized <see cref="ILocalizationService"/>.
-        /// Returns the key itself (or <see cref="string.Empty"/> for null)
-        /// when the service is unavailable.
+        /// Resolves a key via the attached service. Without a service returns the
+        /// key itself, or <see cref="string.Empty"/> for null.
         /// </summary>
         public static string Resolve(string key)
         {
@@ -86,16 +89,16 @@ namespace LongLeap.Localization
         }
 
         /// <summary>
-        /// Resolves and formats a key via the initialized <see cref="ILocalizationService"/>.
-        /// Returns the raw key as a fallback when the service is unavailable.
+        /// Resolves a key and formats it with <paramref name="args"/> via the attached
+        /// service. Without a service formats the key itself; if the key is not a
+        /// valid format string, returns it unformatted.
         /// </summary>
         public static string ResolveFormat(string key, params object[] args)
         {
             if (_service != null)
                 return _service.ResolveFormat(key, args);
 
-            // Сервиса нет — подставляем в сам ключ. Он подстановок не содержит,
-            // но лишняя скобка в нём всё равно уронила бы string.Format.
+            // A stray brace in the key would make string.Format throw.
             try
             {
                 return string.Format(Resolve(key), args);

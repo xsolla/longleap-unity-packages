@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Localization;
 using UnityEngine.Localization.Settings;
@@ -7,45 +8,97 @@ using UnityEngine.Localization.Tables;
 
 namespace LongLeap.Localization
 {
-    public class LocalizationService : ILocalizationService
+    /// <summary>
+    /// <see cref="ILocalizationService"/> backed by Unity Localization string tables.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Keys are looked up in the tables in the order they were passed to the
+    /// constructor; the first table with a non-empty entry wins. Only tables that
+    /// are already loaded are searched; there is no lazy loading.
+    /// </para>
+    /// <para>
+    /// On a locale change the tables of the new locale are loaded by a coroutine
+    /// on the host set with <see cref="SetCoroutineHost"/>. Until they arrive the
+    /// previous locale's strings stay in use and <see cref="IsReady"/> is false.
+    /// </para>
+    /// <para>
+    /// Dispose the service (and call <see cref="Loc.Reset"/>) when its scene is
+    /// torn down.
+    /// </para>
+    /// </remarks>
+    public class LocalizationService : ILocalizationService, IDisposable
     {
         private readonly LocalizedStringTable[] _localizedTables;
 
-        // Загруженные таблицы — строго по индексам _localizedTables, а не по
-        // именам.
-        //
-        // Раньше кэш был словарём с ключом TableReference.TableCollectionName, и
-        // именно на этом локализация «включалась через раз». Ссылки на таблицы в
-        // префабе сохранены по GUID (так их пишет инспектор), а для GUID-ссылки
-        // это свойство в рантайме возвращает имя ТОЛЬКО если SharedTableData этой
-        // таблицы уже догрузилась (TableReference.SharedTableData: без
-        // UNITY_EDITOR оно лишь заглядывает в StringDatabase.
-        // SharedTableDataOperations и отдаёт null, если операция ещё не готова).
-        // Имя приходило пустым — таблица не попадала в кэш совсем, и Resolve до
-        // конца запуска отдавал сырые ключи. В редакторе имя достаётся из
-        // AssetDatabase всегда, поэтому там всё выглядело исправным, а ломалось
-        // только в сборке.
+        // Loaded tables, stored by index of _localizedTables rather than by name.
+        // TableReference.TableCollectionName is unreliable at runtime for
+        // GUID-based references, which is how the Inspector serializes them: in a
+        // player build it returns a name only after the table's SharedTableData
+        // has loaded, and null before that. In the Editor the name always comes
+        // from the AssetDatabase, so name-keyed caching works there and silently
+        // fails only in builds.
         private StringTable[] _tables;
 
         private MonoBehaviour _coroutineHost;
 
-        // Номер актуальной загрузки таблиц. Растёт на каждой смене локали, чтобы
-        // догрузившаяся старая загрузка не затёрла результат более свежей: язык
-        // могут переключить дважды подряд (портал выставил свой, потом приехали
-        // настройки игрока), и тогда в полёте оказываются две загрузки сразу.
+        // Incremented on every reload. The locale can be switched twice in a row
+        // (e.g. the portal sets one, then player settings set another), leaving two
+        // loads in flight; a load that finishes after a newer one has started must
+        // not overwrite the newer result.
         private int _reloadGeneration;
 
-        // Идёт загрузка таблиц под новый язык: Resolve пока отдаёт прежний
-        // перевод, а окна показывать рано.
+        // Tables for a new locale are loading.
         private bool _reloading;
 
+        // Keys already reported as missing for the current tables, so a key that is
+        // resolved every frame logs once instead of flooding the console.
+        private readonly HashSet<string> _reportedMissingKeys = new HashSet<string>();
+
+        private bool _disposed;
+
+        /// <inheritdoc />
         public event Action OnLanguageChanged;
 
-        // Таблицы активного языка в кэше и ничего не грузится. Сервис создают уже
-        // после первичной загрузки (LocalizationBootstrapper), поэтому на старте
-        // готовы — «не готовы» бывает только на время смены языка.
-        public bool IsReady => !_reloading;
+        /// <inheritdoc />
+        /// <remarks>
+        /// The service is meant to be created after the initial table load (see
+        /// <see cref="LoadTables"/>), so it starts ready and is only not ready while
+        /// a locale change reloads tables. If the coroutine host is destroyed or
+        /// deactivated mid-reload without <see cref="Dispose"/>, the reload is
+        /// abandoned: the service reports ready again and keeps serving the
+        /// previous locale's strings.
+        /// </remarks>
+        public bool IsReady => !_reloading || !CanRunCoroutines(_coroutineHost);
 
+        /// <summary>
+        /// Code of the selected locale (e.g. "en"), or null when there are no
+        /// LocalizationSettings or the locale is still being selected.
+        /// </summary>
+        public string CurrentLocaleCode
+        {
+            get
+            {
+                if (!LocalizationSettings.HasSettings)
+                    return null;
+
+                // The async handle is read instead of SelectedLocale, whose getter
+                // blocks until initialization completes; that is not supported on WebGL.
+                var op = LocalizationSettings.SelectedLocaleAsync;
+                if (!op.IsValid() || !op.IsDone || op.Result == null)
+                    return null;
+
+                return op.Result.Identifier.Code;
+            }
+        }
+
+        /// <param name="localizedTables">Tables to search, in lookup priority order.</param>
+        /// <param name="preloaded">
+        /// Tables already loaded for the active locale, by the same indices as
+        /// <paramref name="localizedTables"/>; usually filled by
+        /// <see cref="LoadTables"/>. Null leaves every table unloaded until the
+        /// next locale change.
+        /// </param>
         public LocalizationService(LocalizedStringTable[] localizedTables,
             StringTable[] preloaded = null)
         {
@@ -59,60 +112,102 @@ namespace LongLeap.Localization
                     _tables[i] = preloaded[i];
             }
 
-            // Подписка идёт через LocalizationSettings.Instance, а он без настроек
-            // в проекте бросается NullReference — проверяем, иначе сервис не
-            // создастся вовсе и бутстрап встанет на пустом месте.
+            // LocalizationSettings.Instance throws a NullReferenceException when the
+            // project has no settings asset; check first so the service can still be
+            // created and resolve keys as-is.
             if (LocalizationSettings.HasSettings)
                 LocalizationSettings.SelectedLocaleChanged += OnUnityLocaleChanged;
         }
 
+        /// <summary>
+        /// Sets the MonoBehaviour that runs table reloads on locale change.
+        /// Without an active host a locale change drops all tables and
+        /// <see cref="Resolve"/> returns raw keys.
+        /// </summary>
         public void SetCoroutineHost(MonoBehaviour host)
         {
             _coroutineHost = host;
         }
 
-        public void Shutdown()
+        /// <summary>
+        /// Unsubscribes from Unity Localization and abandons any reload in flight.
+        /// Call it when the owning scene is torn down, together with
+        /// <see cref="Loc.Reset"/>.
+        /// </summary>
+        public void Dispose()
         {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+
             if (LocalizationSettings.HasSettings)
                 LocalizationSettings.SelectedLocaleChanged -= OnUnityLocaleChanged;
 
-            // Загрузки в полёте объявляем устаревшими: их корутины живут на хосте,
-            // который прямо сейчас умирает вместе со сценой, и их результат уже
-            // никому не нужен.
+            // Loads in flight run on a host that is being destroyed with the scene;
+            // mark them stale so none of them applies its result.
             _reloadGeneration++;
             _reloading = false;
 
             _coroutineHost = null;
         }
 
+        /// <summary>Same as <see cref="Dispose"/>.</summary>
+        [Obsolete("Use Dispose() instead.")]
+        public void Shutdown() => Dispose();
+
+        /// <summary>
+        /// Codes of all locales available in LocalizationSettings. Empty when there are
+        /// no settings or the locales are not loaded yet.
+        /// </summary>
+        public IReadOnlyList<string> GetAvailableLocaleCodes()
+        {
+            var codes = new List<string>();
+
+            if (!LocalizationSettings.HasSettings)
+                return codes;
+
+            var locales = LocalizationSettings.AvailableLocales.Locales;
+            for (int i = 0; i < locales.Count; i++)
+            {
+                if (locales[i] != null)
+                    codes.Add(locales[i].Identifier.Code);
+            }
+
+            return codes;
+        }
+
         private void OnUnityLocaleChanged(Locale locale)
         {
-            // Событие приходит и на наш собственный SwitchLanguage (кадром позже),
-            // и на смену локали со стороны — например из инспектора Unity. Второй
-            // проход по таблицам почти бесплатен: уже загруженные GetTableAsync
-            // отдаёт готовым хендлом из кэша базы.
+            // Raised both after our own SwitchLanguage (a frame later) and on external
+            // changes, e.g. from the Unity Inspector. A second pass over the tables is
+            // nearly free: GetTableAsync returns already-loaded tables from the
+            // database cache.
             StartReload();
         }
 
-        // Перезагрузить таблицы под текущую локаль. Пока идёт загрузка, IsReady ==
-        // false: по нему и ждут те, кому нельзя показывать текст раньше времени.
+        private static bool CanRunCoroutines(MonoBehaviour host)
+            => host != null && host.gameObject.activeInHierarchy;
+
+        // Reloads the tables for the current locale. IsReady is false until done.
         private void StartReload()
         {
+            if (_disposed)
+                return;
+
             _reloadGeneration++;
 
-            // Грузить таблицы некому: хост не назначен, уже уничтожен вместе со
-            // сценой либо выключен (на выключенном объекте StartCoroutine не
-            // запускается — корутина не пошла бы, а мы навсегда остались бы «в
-            // загрузке»). Старые таблицы при этом врут — в них прежний язык, —
-            // так что бросаем их и говорим об этом вслух: тексты уедут в ключи, и
-            // молча такое прятать нельзя.
-            if (_coroutineHost == null || !_coroutineHost.gameObject.activeInHierarchy)
+            // StartCoroutine does not run on an inactive object, so without a live,
+            // active host the reload would never finish. The current tables hold the
+            // previous locale and would show the wrong language, so drop them and say
+            // so: texts falling back to keys must not happen silently.
+            if (!CanRunCoroutines(_coroutineHost))
             {
-                _tables = new StringTable[_localizedTables.Length];
+                SetTables(new StringTable[_localizedTables.Length]);
                 _reloading = false;
 
-                Debug.LogWarning("[Localization] Язык сменился, но грузить таблицы " +
-                    "некому (нет живого coroutine host) — тексты останутся ключами.");
+                Debug.LogWarning("[Localization] Locale changed, but there is no active " +
+                    "coroutine host to load tables; texts will show raw keys.");
 
                 OnLanguageChanged?.Invoke();
                 return;
@@ -125,9 +220,9 @@ namespace LongLeap.Localization
 
         private IEnumerator ReloadTables(int generation)
         {
-            // Смена локали пересоздаёт операцию инициализации Unity — в неё входит
-            // и предзагрузка таблиц нового языка. Ждём её первой: так «готово»
-            // означает, что догрузилось всё, а не только то, что мы спросили сами.
+            // A locale change restarts Unity's initialization operation, which also
+            // preloads the new locale's tables. Wait for it first, so "ready" means
+            // everything has loaded, not only the tables requested here.
             if (LocalizationSettings.HasSettings)
             {
                 var initOp = LocalizationSettings.InitializationOperation;
@@ -136,27 +231,32 @@ namespace LongLeap.Localization
                     yield return initOp;
             }
 
-            // Грузим в отдельный массив и подменяем целиком, а не чистим старый
-            // заранее: пока таблицы нового языка едут (на WebGL это несколько
-            // кадров, а то и секунд), Resolve отдаёт прежний перевод, а не сырой
-            // ключ. Иначе на экране успевают мигнуть «menu_play» вместо текста.
+            // Load into a separate array and swap it in at the end. Until the new
+            // tables arrive (several frames or even seconds on WebGL), Resolve keeps
+            // returning the previous translation instead of flashing raw keys.
             var loaded = new StringTable[_localizedTables.Length];
 
             yield return LoadTables(_localizedTables, loaded);
 
-            // Язык переключили ещё раз, пока мы грузились — наш результат устарел,
-            // и подменять им таблицы нельзя: в них уже более свежий язык. Флаг
-            // загрузки тоже не снимаем — его снимет та перезагрузка, что идёт
-            // сейчас.
+            // The locale was switched again while loading: this result is stale. The
+            // reloading flag is left to the newer reload to clear.
             if (generation != _reloadGeneration)
                 yield break;
 
-            _tables = loaded;
+            SetTables(loaded);
             _reloading = false;
 
             OnLanguageChanged?.Invoke();
         }
 
+        private void SetTables(StringTable[] tables)
+        {
+            _tables = tables;
+            _reportedMissingKeys.Clear();
+        }
+
+        /// <inheritdoc />
+        /// <remarks>A missing key is logged once per key until the tables change.</remarks>
         public string Resolve(string key)
         {
             if (string.IsNullOrEmpty(key))
@@ -177,34 +277,44 @@ namespace LongLeap.Localization
                 }
             }
 
-            Debug.LogWarning($"[Localization] Missing translation for key '{key}'.");
+            if (_reportedMissingKeys.Add(key))
+                Debug.LogWarning($"[Localization] Missing translation for key '{key}'.");
+
             return key;
         }
 
+        /// <inheritdoc />
+        /// <remarks>
+        /// Uses <see cref="string.Format(string, object[])"/> placeholders
+        /// (<c>{0}</c>); Unity Smart Strings arguments are not applied.
+        /// </remarks>
         public string ResolveFormat(string key, params object[] args)
         {
             string resolved = Resolve(key);
 
-            // Перевод — это данные из таблицы, и в нём может оказаться и лишняя
-            // фигурная скобка, и меньше подстановок, чем аргументов. Ронять на
-            // этом кадр нельзя: показываем строку как есть и кричим в лог.
+            // Translations are data: a stray brace or fewer placeholders than
+            // arguments must not throw mid-frame. Show the string as-is and log it.
             try
             {
                 return string.Format(resolved, args);
             }
             catch (FormatException e)
             {
-                Debug.LogWarning("[Localization] Не удалось подставить аргументы в " +
-                    $"'{key}' ('{resolved}'): {e.Message}");
+                Debug.LogWarning($"[Localization] Failed to format '{key}' " +
+                    $"('{resolved}'): {e.Message}");
 
                 return resolved;
             }
         }
 
         /// <summary>
-        /// Переключает язык. false — такой локали нет среди доступных либо она уже
-        /// выбрана, то есть перезагрузки таблиц не будет и сервис остаётся готовым.
+        /// Switches the active locale and starts reloading tables.
         /// </summary>
+        /// <returns>
+        /// True if a switch started. False if the code is empty, there are no
+        /// LocalizationSettings, the locale is not available, or it is already
+        /// selected; in those cases no reload happens and the service stays ready.
+        /// </returns>
         public bool SwitchLanguage(string localeCode)
         {
             if (string.IsNullOrEmpty(localeCode))
@@ -212,8 +322,8 @@ namespace LongLeap.Localization
 
             if (!LocalizationSettings.HasSettings)
             {
-                Debug.LogWarning("[Localization] Нет LocalizationSettings — " +
-                    $"язык '{localeCode}' не переключить.");
+                Debug.LogWarning("[Localization] No LocalizationSettings; " +
+                    $"cannot switch to locale '{localeCode}'.");
                 return false;
             }
 
@@ -225,39 +335,34 @@ namespace LongLeap.Localization
                 if (locale == null || locale.Identifier.Code != localeCode)
                     continue;
 
-                // Уже выбран — молча выходим: присваивание того же языка таблицы
-                // не перезагружает и события не даёт, а нам важно вернуть false,
-                // чтобы вызывающий не ждал загрузку, которой не будет.
+                // Assigning the selected locale again neither reloads tables nor raises
+                // an event; return false so the caller does not wait for a reload.
                 if (LocalizationSettings.SelectedLocale == locale)
                     return false;
 
                 LocalizationSettings.SelectedLocale = locale;
 
-                // Перезагрузку запускаем сами, не дожидаясь SelectedLocaleChanged:
-                // Unity дёргает это событие не из сеттера — он пересоздаёт операцию
-                // инициализации и, пока та не готова, отправляет событие из своей
-                // корутины, то есть кадром позже (см.
-                // LocalizationSettings.SendLocaleChangedEvents). Полагаясь на
-                // событие, мы бы между переключением языка и началом загрузки
-                // отвечали «всё готово» — ровно в это окно и успевали открыться
-                // окна с текстом на прежнем языке или с ключами.
+                // Start the reload now instead of waiting for SelectedLocaleChanged.
+                // Unity raises that event from a coroutine once its re-created
+                // initialization operation completes, i.e. at least a frame later
+                // (see LocalizationSettings.SendLocaleChangedEvents). Until then
+                // IsReady would still report true, and UI opened in that window
+                // would show the previous language or raw keys.
                 StartReload();
 
                 return true;
             }
 
-            // Раньше молчали, и опечатка в коде языка выглядела как «локализация
-            // не включилась»: язык не менялся, а в логе ни строчки.
-            Debug.LogWarning($"[Localization] Локали '{localeCode}' нет среди " +
-                "доступных — язык не переключён.");
+            Debug.LogWarning($"[Localization] Locale '{localeCode}' is not among the " +
+                "available locales; locale not switched.");
 
             return false;
         }
 
         /// <summary>
-        /// Грузит таблицы активной локали в <paramref name="target"/> — по тем же
-        /// индексам, что и в <paramref name="tables"/>. Массив должен быть не
-        /// короче: незагруженные позиции остаются null.
+        /// Loads the tables of the active locale into <paramref name="target"/>, by the
+        /// same indices as in <paramref name="tables"/>. Entries that fail to load stay
+        /// null and are logged as errors. Extra entries in the longer array are ignored.
         /// </summary>
         public static IEnumerator LoadTables(
             LocalizedStringTable[] tables,
@@ -283,11 +388,9 @@ namespace LongLeap.Localization
                 }
                 else
                 {
-                    // Не загрузившаяся таблица — это молча пропавший перевод:
-                    // Resolve по её ключам будет отдавать сами ключи. Таблицу
-                    // называем по GUID из ссылки: имя (TableCollectionName) в
-                    // рантайме доступно не всегда — из-за этого и был баг.
-                    Debug.LogError("[Localization] Не удалось загрузить таблицу " +
+                    // Identified by GUID: TableCollectionName is not reliably
+                    // available at runtime (see the _tables comment).
+                    Debug.LogError("[Localization] Failed to load table " +
                         $"#{i} (GUID {table.TableReference.TableCollectionNameGuid}).");
                 }
             }

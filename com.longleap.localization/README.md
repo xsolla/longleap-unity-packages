@@ -1,172 +1,180 @@
 # LongLeap Localization
 
-Wraps `Unity.Localization` with a static facade (`Loc`), typed key wrapper, and component-based text binding.
+Pluggable localization for Unity 6:
 
-## Data Sources
+- `Loc` — a static facade that any code can call to resolve keys.
+- `ILocalizationService` — the contract behind it. Plug in your own implementation,
+  or use the bundled one.
+- `LocalizationService` — an implementation backed by Unity Localization string
+  tables, with locale switching that never flashes raw keys.
+- `LocKey` — a serializable key type for Inspector fields.
+- `LocalizedText` — a component that keeps a `TMP_Text` / `UI.Text` translated.
 
-Localization data lives in Unity's Localization package assets, backed by Addressables.
+## Installation
 
-| Asset | Location | Purpose |
-|---|---|---|
-| `LocalizationSettings` | `Assets/Localization/LocalizationSettings.asset` | Root settings — available locales, locale selector |
-| `StringTableCollection` | `Assets/Localization/{Name}.asset` | Shared key definitions across all locales |
-| `StringTable` (per locale) | `Assets/Localization/{Name}_{locale}.asset` | Actual translations for a specific locale |
-| `Locale` | `Assets/Localization/{code}.asset` | Locale definitions (`en`, `ru`, etc.) |
-
-The package uses `LocalizedStringTable` objects — Inspector-assigned handles that know their `TableCollectionName` and load the correct per-locale `StringTable` via Addressables at runtime. Tables are grouped under `Assets/AddressableAssetsData/` in groups like `Localization-String-Tables-en`.
-
-Keys are arbitrary strings defined in the shared table data. No key format is enforced by the package.
+Add the package to `Packages/manifest.json`. Dependencies: `com.unity.localization`
+1.5.0 and `com.unity.ugui` 2.0.0 (TextMeshPro ships inside uGUI in Unity 6).
 
 ## Public API
 
 | Type | Kind | Purpose |
 |---|---|---|
-| `Loc` | Static class | Convenience facade: `Resolve(key)` returns translated string, `ResolveFormat(key, args)` returns formatted string. Falls back to `string.Empty` for null keys; falls back to the raw key string when service is unavailable. |
-| `ILocalizationService` | Interface | `Resolve(key)`, `ResolveFormat(key, args)` |
-| `LocalizationService` | Class | Manages `StringTable` cache, locale switching via `SwitchLanguage(code)`, automatic table reload on locale change. Instance `OnLanguageChanged` event. Constructor: `(LocalizedStringTable[] localizedTables, Dictionary<string, StringTable> preloaded = null)`. Constructor fires `OnLanguageChanged` immediately. No static state — use `Loc.Init(service)` to wire the static facade. |
-| `LocKey` | Struct, `[Serializable]` | Typed key wrapper. Implicit conversions to/from `string`. `IsEmpty`, value equality, Inspector-serializable. Static `Format(string format, params object[] args)` creates a `LocKey` from a format string. |
-| `LocalizedText` | MonoBehaviour | `[DisallowMultipleComponent]`. Binds a `LocKey` to `TMP_Text` (preferred) or `UnityEngine.UI.Text` (fallback). Subscribes to `OnLanguageChanged` for auto-refresh. `SetKey(key)`, `SetFormatArgs(args)`. |
+| `Loc` | Static class | `Init(service)`, `Reset(service)`, `IsReady`, `Resolve(key)`, `ResolveFormat(key, args)`, static `OnLanguageChanged`. Without a service returns keys as-is (`string.Empty` for null). |
+| `ILocalizationService` | Interface | `Resolve`, `ResolveFormat`, `IsReady`, `OnLanguageChanged`. |
+| `LocalizationService` | Class, `IDisposable` | Unity Localization implementation. Constructor `(LocalizedStringTable[] tables, StringTable[] preloaded = null)`. `SetCoroutineHost(host)`, `SwitchLanguage(code) → bool`, `CurrentLocaleCode`, `GetAvailableLocaleCodes()`, static `LoadTables(tables, target)` coroutine, `Dispose()`. |
+| `LocKey` | `[Serializable]` struct | Key wrapper. Implicit conversions to and from `string`, `IsEmpty`, value equality, `LocKey.Format(format, args)`. Null and `""` are the same empty key. |
+| `LocalizedText` | MonoBehaviour | Binds a `LocKey` to `TMP_Text` (preferred) or `UnityEngine.UI.Text`. `Key`, `SetKey(key)`, `SetFormatArgs(args)`. One per GameObject. |
 
-## Initialization
+## Setup with Unity Localization
 
-This package does **not** provide a bootstrapper component. You must write your own initialization code following this pattern:
+Localization data lives in Unity Localization assets (Addressables-backed):
+`LocalizationSettings`, `Locale` assets, and `StringTableCollection`s with one
+`StringTable` per locale. Keys are arbitrary strings; the package enforces no format.
 
-1. Collect the required `LocalizedStringTable[]` references (e.g. via Inspector-assigned fields on a MonoBehaviour, or via Addressables).
-2. Construct a `LocalizationService(localizedTables, preloaded)`.
-3. Call `Loc.Init(service)` to wire the static facade.
-4. Call `SetCoroutineHost(someMonoBehaviour)` to enable locale switching (table reload uses coroutines).
-4. Wait for tables to load before using localization.
+The package has no bootstrapper. Write one along these lines:
 
-### Preloading pattern (recommended)
+1. Reference the `LocalizedStringTable`s to search (e.g. Inspector fields).
+2. Load them with `LocalizationService.LoadTables` before creating the service.
+3. Create the service, give it a coroutine host, and attach it with `Loc.Init`.
+4. On teardown, call `Loc.Reset(service)` and `service.Dispose()`.
 
 ```csharp
-public class MyBootstrapper : MonoBehaviour
+public class LocalizationBootstrapper : MonoBehaviour
 {
     [SerializeField] private LocalizedStringTable[] _tables;
 
-    public bool IsReady { get; private set; }
     public LocalizationService Service { get; private set; }
 
     IEnumerator Start()
     {
-        var cache = new Dictionary<string, StringTable>();
-        yield return LocalizationService.LoadTables(_tables, cache);
-        Service = new LocalizationService(_tables, cache);
-        Service.SetCoroutineHost(this);
+        yield return LocalizationSettings.InitializationOperation;
+
+        var preloaded = new StringTable[_tables.Length];
+        yield return LocalizationService.LoadTables(_tables, preloaded);
+
+        Service = new LocalizationService(_tables, preloaded);
+        Service.SetCoroutineHost(this); // runs table reloads on locale change
         Loc.Init(Service);
-        IsReady = true;
+    }
+
+    void OnDestroy()
+    {
+        if (Service == null)
+            return;
+
+        Loc.Reset(Service);
+        Service.Dispose();
     }
 }
 ```
 
-Consumer wait pattern:
+Wait for `Loc.IsReady` before showing UI that must not display raw keys.
+`LocalizedText` already handles this on its own.
+
+**Coroutine host.** Table reloads on locale change run as coroutines on the host.
+Without an active host, a locale change drops all tables (logged as a warning), and
+texts fall back to keys until the next successful reload.
+
+## Using your own string source
+
+`Loc` accepts any `ILocalizationService`. A game without Unity Localization tables
+can attach a dictionary-backed service:
 
 ```csharp
-IEnumerator Init(MyBootstrapper bootstrapper)
+public sealed class EnglishStrings : ILocalizationService
 {
-    while (!bootstrapper.IsReady)
-        yield return null;
+    static readonly Dictionary<string, string> Strings = new() { ["btn_back"] = "BACK" };
+
+    public event Action OnLanguageChanged { add { } remove { } }
+    public bool IsReady => true;
+
+    public string Resolve(string key) =>
+        string.IsNullOrEmpty(key) ? string.Empty
+        : Strings.TryGetValue(key, out var v) ? v : key;
+
+    public string ResolveFormat(string key, params object[] args)
+    {
+        try { return string.Format(Resolve(key), args); }
+        catch (FormatException) { return Resolve(key); }
+    }
 }
+
+Loc.Init(new EnglishStrings());
 ```
 
-### Manual path (no preloading)
-
-```csharp
-var tables = new LocalizedStringTable[] { myTableReference };
-var service = new LocalizationService(tables);
-service.SetCoroutineHost(someMonoBehaviour); // required for locale switching
-Loc.Init(service);
-```
-
-If you skip `SetCoroutineHost`, locale switching will clear the cache but never reload tables — all `Resolve()` calls will log warnings and return raw keys.
-
-### Pure-code path (no MonoBehaviour at all)
-
-If you don't need runtime locale switching, you can construct `LocalizationService` without a coroutine host. Just ensure all tables are pre-visited (Addressables cache) before the locale changes, or never change locale after init. Call `Loc.Init(service)` to enable the static facade for lookups.
-
-### DI registration
-
-```csharp
-var service = new LocalizationService(tables);
-Loc.Init(service);
-container.Bind<ILocalizationService>().To<LocalizationService>().FromInstance(service).AsSingle();
-```
+Implementations should follow the same contract: return the key when it is
+missing, return `string.Empty` for null, and never throw from `ResolveFormat`.
 
 ## Usage
 
 ### Resolving keys
 
 ```csharp
-string text  = Loc.Resolve("welcome_message");       // plain lookup
-string label = Loc.ResolveFormat("player_level", 5);  // string.Format after resolve
+string text  = Loc.Resolve("welcome_message");
+string label = Loc.ResolveFormat("player_level", 5); // "Level {0}" → "Level 5"
 ```
 
-**Null key behaviour**: `Loc.Resolve(null)` returns `string.Empty` — safe to call with nullable keys. When the service is not yet initialized (null via `Loc.Init`), the facade returns `string.Empty` for null and the raw key string for non-null keys.
+Formatting uses `string.Format` placeholders (`{0}`). Unity Smart Strings
+arguments are not applied. A malformed format string returns the unformatted text
+and logs a warning instead of throwing.
 
-### Component binding
+To refresh custom views on locale change, subscribe to `Loc.OnLanguageChanged` in
+`OnEnable` and unsubscribe in `OnDisable`. It also fires on every `Loc.Init`.
 
-Attach `LocalizedText` to any GameObject with a `TMP_Text` or `UnityEngine.UI.Text` component. Set the `Key` field in the Inspector. The component auto-refreshes when locale changes. Only one `LocalizedText` per GameObject (`[DisallowMultipleComponent]`).
+### LocalizedText
 
-In code:
+Add `LocalizedText` next to a `TMP_Text` or `UI.Text` and set **Key** in the
+Inspector. While `Loc.IsReady` is false, the text authored in the prefab is kept.
+
 ```csharp
-GetComponent<LocalizedText>().SetKey("score_display");
-GetComponent<LocalizedText>().SetFormatArgs(current, max);
+var label = GetComponent<LocalizedText>();
+label.SetKey("score_display");
+label.SetFormatArgs(current, max);
+label.SetKey(null); // clears the text
 ```
-
-`TMP_Text` takes priority over `UnityEngine.UI.Text` if both are present.
 
 ### Locale switching
 
 ```csharp
-service.SwitchLanguage("ru");
+if (service.SwitchLanguage("ru"))
+{
+    // Reload started: Loc.IsReady is false until the new tables are in,
+    // then OnLanguageChanged fires.
+}
 ```
 
-This finds the matching `Locale` in `AvailableLocales` and assigns it to `LocalizationSettings.SelectedLocale`, which triggers:
-1. `OnUnityLocaleChanged` — table cache is cleared
-2. All `LocalizedStringTable`s are reloaded for the new locale (via coroutine on the host)
-3. `OnLanguageChanged` event fires — all `LocalizedText` components refresh
+`SwitchLanguage` returns false without reloading when the code is empty, the
+locale is not available (a warning is logged), or the locale is already selected.
+Locale changes made outside the service, e.g. from the Unity Inspector, are picked
+up too.
 
-### Key not found
+During a reload, `Resolve` keeps returning the previous locale's strings, so raw
+keys never flash on screen. If the locale is switched again mid-reload, only the
+latest reload applies.
 
-If no table contains the requested key, a warning is logged (`[Localization] Missing translation for key '...'`) and the raw key string is returned as fallback. This means incomplete tables are visible rather than silent.
-
-### Table lookup order
-
-`Resolve()` iterates the `_localizedTables` array **in order**. The first table with the key wins. No lazy loading — if a table isn't in the cache, the key is simply not found.
-
-### LocKey.Format
-
-`LocKey.Format` is a **static** method that creates a `LocKey` from a format string — useful for enum-based key generation:
+### Keys
 
 ```csharp
-var key = LocKey.Format("enemy_{0}_name", enemyId);  // → "enemy_goblin_name"
+[SerializeField] private LocKey _title;
+
+var key = LocKey.Format("enemy_{0}_name", enemyId); // "enemy_goblin_name"
 string text = Loc.Resolve(key);
 ```
 
-## Internals
+## Behaviour notes
 
-### Initialization
-
-The static facade `Loc` is initialized once at boot via `Loc.Init(service)`. The service itself is constructed through normal DI and has no static state. The `Loc` facade forwards `OnLanguageChanged` from the service to static subscribers.
-
-### Table cache
-
-A `Dictionary<string, StringTable>` keyed by `TableCollectionName`. Populated on construction (via `preloaded` dict) or on locale switch (via `ReloadTablesAfterLocaleChange`). No lazy loading — cache miss means key not found.
-
-### Constructor event
-
-The `LocalizationService` constructor fires `OnLanguageChanged?.Invoke()` immediately after subscribing to `SelectedLocaleChanged`. This ensures subscribers (like `LocalizedText` components) receive the initial locale right away, without waiting for a locale switch.
-
-### Locale change handling
-
-`SwitchLanguage()` sets `LocalizationSettings.SelectedLocale`, which raises `SelectedLocaleChanged`. The handler `OnUnityLocaleChanged` then:
-
-1. Clears the table cache.
-2. If a `_coroutineHost` is set, starts `ReloadTablesAfterLocaleChange()` coroutine — loads all tables for the new locale, then fires `OnLanguageChanged`.
-3. If no coroutine host is set, fires `OnLanguageChanged` immediately (with an empty cache — all `Resolve()` calls will warn and return raw keys).
-
-There is no `_isSwitching` guard. The handler reacts to every `SelectedLocaleChanged` event, whether triggered programmatically via `SwitchLanguage()` or externally (e.g. system locale change).
-
-### Domain reload safety
-
-With `Loc.Init(service)`, the static facade reference and `OnLanguageChanged` subscribers are reset each time the application starts. When "Enter Play Mode Options → Disable Domain Reload" is enabled, ensure `Loc.Init()` is called again on each Play session entry — the static state persists across domain reloads when that option is active. `LocalizationService` itself has no static state and does not require special cleanup.
+- **Lookup order.** Tables are searched in constructor order. The first non-empty
+  entry wins. Only loaded tables are searched (no lazy loading).
+- **Missing keys.** The key itself is returned, and
+  `[Localization] Missing translation for key '…'` is logged once per key until the
+  tables change.
+- **Failed table loads** are logged as errors with the table index and GUID.
+- **Tables are cached by index, not by name.** At runtime in a player build,
+  `TableReference.TableCollectionName` can be null for GUID-based references until
+  the shared table data has loaded.
+- **Host destroyed mid-reload.** If the coroutine host is destroyed or deactivated
+  during a reload and `Dispose` was not called, the reload is abandoned. `IsReady`
+  becomes true again, and the previous locale's strings stay in use.
+- **Domain reload disabled.** `Loc` clears its static state when Play Mode starts.
+- **No LocalizationSettings.** The service can still be created and resolves keys
+  as-is. `SwitchLanguage` logs a warning and returns false.

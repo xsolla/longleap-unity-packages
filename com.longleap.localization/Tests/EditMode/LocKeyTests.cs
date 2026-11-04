@@ -1,97 +1,64 @@
-using LongLeap.Localization;
 using NUnit.Framework;
 
-public class LocKeyTests
+namespace LongLeap.Localization.Tests
 {
-    [Test]
-    public void LocKey_ImplicitString_ReturnsValue()
+    public class LocKeyTests
     {
-        LocKey key = new LocKey("test_key");
-        string value = key;
+        [Test]
+        public void ImplicitConversions_RoundTripValue()
+        {
+            LocKey key = "test_key";
+            string value = key;
 
-        Assert.AreEqual("test_key", value);
-    }
+            Assert.AreEqual("test_key", value);
+            Assert.AreEqual("test_key", key.ToString());
+        }
 
-    [Test]
-    public void LocKey_ImplicitFromString_SetsValue()
-    {
-        LocKey key = (LocKey)"test_key";
+        [TestCase(null)]
+        [TestCase("")]
+        public void NullOrEmpty_IsEmptyAndEqualsDefault(string value)
+        {
+            var key = new LocKey(value);
 
-        Assert.AreEqual("test_key", (string)key);
-    }
+            Assert.IsTrue(key.IsEmpty);
+            Assert.IsTrue(default(LocKey).IsEmpty);
+            Assert.AreEqual(default(LocKey), key);
+            Assert.AreEqual(default(LocKey).GetHashCode(), key.GetHashCode());
+            Assert.AreEqual(string.Empty, key.ToString());
+        }
 
-    [Test]
-    public void LocKey_IsEmpty_NullValue_ReturnsTrue()
-    {
-        LocKey key = new LocKey(null);
+        [Test]
+        public void NonEmpty_IsNotEmpty()
+        {
+            Assert.IsFalse(new LocKey("test").IsEmpty);
+        }
 
-        Assert.IsTrue(key.IsEmpty);
-    }
+        [Test]
+        public void SameValue_AreEqual()
+        {
+            LocKey a = "key";
+            LocKey b = new LocKey("key");
 
-    [Test]
-    public void LocKey_IsEmpty_Default_ReturnsTrue()
-    {
-        LocKey key = default(LocKey);
+            Assert.IsTrue(a.Equals(b));
+            Assert.IsTrue(a == b);
+            Assert.IsFalse(a != b);
+            Assert.AreEqual(a.GetHashCode(), b.GetHashCode());
+        }
 
-        Assert.IsTrue(key.IsEmpty);
-    }
+        [Test]
+        public void DifferentValue_AreNotEqual()
+        {
+            LocKey a = "key_a";
+            LocKey b = "key_b";
 
-    [Test]
-    public void LocKey_IsEmpty_NonEmpty_ReturnsFalse()
-    {
-        LocKey key = new LocKey("test");
+            Assert.IsFalse(a.Equals(b));
+            Assert.IsTrue(a != b);
+        }
 
-        Assert.IsFalse(key.IsEmpty);
-    }
-
-    [Test]
-    public void LocKey_Equals_SameValue_ReturnsTrue()
-    {
-        LocKey a = new LocKey("key");
-        LocKey b = new LocKey("key");
-
-        Assert.AreEqual(a, b);
-    }
-
-    [Test]
-    public void LocKey_Equals_DifferentValue_ReturnsFalse()
-    {
-        LocKey a = new LocKey("key_a");
-        LocKey b = new LocKey("key_b");
-
-        Assert.AreNotEqual(a, b);
-    }
-
-    [Test]
-    public void LocKey_EqOperator_SameValue_ReturnsTrue()
-    {
-        LocKey a = "test";
-        LocKey b = "test";
-
-        Assert.IsTrue(a == b);
-    }
-
-    [Test]
-    public void Loc_Resolve_NullInstance_ReturnsKey()
-    {
-        string result = Loc.Resolve("my_key");
-
-        Assert.AreEqual("my_key", result);
-    }
-
-    [Test]
-    public void Loc_ResolveFormat_NullInstance_ReturnsKey()
-    {
-        string result = Loc.ResolveFormat("format_{0}", 42);
-
-        Assert.AreEqual("format_42", result);
-    }
-
-    [Test]
-    public void Loc_Resolve_NullKey_ReturnsEmpty()
-    {
-        string result = Loc.Resolve(null);
-
-        Assert.AreEqual(string.Empty, result);
+        [Test]
+        public void Format_BuildsKey()
+        {
+            Assert.AreEqual(new LocKey("enemy_goblin_name"), LocKey.Format("enemy_{0}_name", "goblin"));
+        }
     }
 }

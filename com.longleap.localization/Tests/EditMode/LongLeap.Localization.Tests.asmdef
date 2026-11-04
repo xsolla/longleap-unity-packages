@@ -3,8 +3,10 @@
   "rootNamespace": "LongLeap.Localization.Tests",
   "references": [
     "LongLeap.Localization",
-    "NUnit.Framework",
-    "UnityEditor.TestRunner"
+    "Unity.Localization",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner",
+    "NUnit.Framework"
   ],
   "includePlatforms": [
     "Editor"
@@ -14,6 +16,8 @@
   "overrideReferences": false,
   "precompiledReferences": [],
   "autoReferenced": false,
-  "defineConstraints": [],
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
   "versionDefines": []
 }

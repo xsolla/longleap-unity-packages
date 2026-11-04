@@ -372,7 +372,7 @@ share one shape:
 | `CloudSaveKey` | core | **throws** on `. $ # [ ] /` |
 | `StatPath` | stats | **throws**; `IsNone` for `default` |
 | `EventName` | analytics | `None` sentinel + `IsValid`; logs an error, service drops the event |
-| `LocKey` | localization | **throws** when empty; `IsEmpty`, and the only one that is not a `readonly struct` |
+| `LocKey` | localization | null and `""` are the same empty key (`IsEmpty`); the only one that is not a `readonly struct` (Unity serialization) |
 
 **Versions.** Everything is `0.1.0` except `com.longleap.remoteconfig` at
 `1.0.0`. Nothing is enforced by a registry (these are embedded packages), so a

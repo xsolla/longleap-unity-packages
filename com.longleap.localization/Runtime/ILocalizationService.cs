@@ -4,11 +4,12 @@ namespace LongLeap.Localization
 {
     /// <summary>
     /// Service that resolves localization keys into translated strings.
+    /// Implement it to plug any string source into <see cref="Loc"/>.
     /// </summary>
     public interface ILocalizationService
     {
         /// <summary>
-        /// Raised when the active locale changes.
+        /// Raised when the active locale changes and its strings are available.
         /// </summary>
         event Action OnLanguageChanged;
 
@@ -28,7 +29,8 @@ namespace LongLeap.Localization
 
         /// <summary>
         /// Resolves a key and formats the result with the supplied arguments
-        /// via <see cref="string.Format(string, object[])"/>.
+        /// via <see cref="string.Format(string, object[])"/>. Must not throw on
+        /// a malformed format string.
         /// </summary>
         string ResolveFormat(string key, params object[] args);
     }

@@ -2,11 +2,18 @@
   "name": "com.longleap.localization",
   "version": "0.1.0",
   "displayName": "LongLeap Localization",
-  "description": "Pluggable localization service wrapping Unity.Localization with static facade, key wrappers, component-based text binding, and auto-initializing bootstrapper.",
+  "description": "Pluggable localization: a static Loc facade over an ILocalizationService, a Unity Localization string-table implementation with safe locale switching, a serializable LocKey, and a LocalizedText component for TextMeshPro and uGUI text.",
   "unity": "6000.0",
   "keywords": ["localization", "translation", "locale", "text", "longleap"],
+  "author": {
+    "name": "LongLeap"
+  },
+  "license": "SEE LICENSE IN LICENSE.md",
+  "documentationUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.localization/README.md",
+  "changelogUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.localization/CHANGELOG.md",
+  "licensesUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.localization/LICENSE.md",
   "dependencies": {
     "com.unity.localization": "1.5.0",
-    "com.unity.textmeshpro": "3.0.0"
+    "com.unity.ugui": "2.0.0"
   }
 }

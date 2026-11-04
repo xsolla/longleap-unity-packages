@@ -1,21 +1,26 @@
 # LongLeap Localization
 
-Localization service using Unity's Localization package. Static facade + MonoBehaviour component for Inspector-bound text.
+Pluggable localization: a static facade over a swappable service, plus a Unity
+Localization implementation and a MonoBehaviour for Inspector-bound text.
 
 **Loc**:
-Static facade for resolving localized strings. Initialized once at boot via `Loc.Init(service)`. `Loc.Resolve(key)` returns the string in the current language (EN/RU). Falls back to the key itself if the service is unavailable.
+Static facade for resolving localized strings. A service is attached at boot via `Loc.Init(service)` and detached via `Loc.Reset(service)`. `Loc.IsReady` tells whether translations are available. Falls back to the key itself when no service is attached.
 _Avoid_: i18n, translation
 
-**LocKey**:
-A serializable string wrapper for localization keys. Used in Inspector fields throughout config assets. Has `IsEmpty` and implicit string conversion.
+**ILocalizationService**:
+The contract behind `Loc`: `Resolve`, `ResolveFormat`, `IsReady`, `OnLanguageChanged`. Games may implement it themselves (e.g. a dictionary of strings).
 
 **LocalizationService**:
-Wraps Unity's `LocalizedStringDatabase`. Handles language switching and fallback logic. No static state — constructed via DI, wired to `Loc` via `Loc.Init()`.
+The Unity Localization implementation over a `LocalizedStringTable[]`. Caches tables by index, reloads them on locale change via a coroutine host, and keeps the previous locale's strings until the new ones load. No static state; `IDisposable`.
+
+**LocKey**:
+A serializable string wrapper for localization keys, used in Inspector fields. Null and empty are the same empty key (`IsEmpty`). Implicit string conversion.
 
 **LocalizedText**:
-MonoBehaviour component that binds a `LocKey` to a `TMP_Text`. Auto-updates on language change via `Loc.OnLanguageChanged`.
+MonoBehaviour that binds a `LocKey` to a `TMP_Text` or `UI.Text`. Refreshes on `Loc.OnLanguageChanged` and waits while `Loc.IsReady` is false.
 
 ## Relationships
 
-- **Localization → Core**: `LocKey` is a standalone newtype; no core dependency.
-- **Settings → Localization**: `EnumSetting<T>` and `SettingsPanel` use `Loc.Resolve` for display labels.
+- **Localization → Core**: none; the package is standalone.
+- **Settings → Localization**: `EnumSetting<T>` and the settings panel rows use `Loc.Resolve` for display labels.
+- **UI, XsollaId → Localization**: views subscribe to `Loc.OnLanguageChanged`; the account widget uses `LocalizedText`.
