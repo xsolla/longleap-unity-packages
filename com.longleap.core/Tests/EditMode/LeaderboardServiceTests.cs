@@ -1,7 +1,6 @@
 using NUnit.Framework;
 using LongLeap.Core.Auth;
 using LongLeap.Core.Leaderboards;
-using LongLeap.Null;
 using System.Threading.Tasks;
 
 namespace LongLeap.Core.Tests
@@ -9,8 +8,8 @@ namespace LongLeap.Core.Tests
     [TestFixture]
     public class LeaderboardServiceTests
     {
-        private NullLeaderboardProvider _provider;
-        private NullAuthProvider _auth;
+        private RecordingProvider _provider;
+        private FixedAuth _auth;
         private LeaderboardService _service;
         private BoardId _killBoard;
         private BoardId _timeBoard;
@@ -18,8 +17,8 @@ namespace LongLeap.Core.Tests
         [SetUp]
         public void Setup()
         {
-            _provider = new NullLeaderboardProvider();
-            _auth = new NullAuthProvider();
+            _provider = new RecordingProvider();
+            _auth = new FixedAuth();
             _killBoard = new BoardId("kills");
             _timeBoard = new BoardId("survival_time");
 
@@ -59,8 +58,7 @@ namespace LongLeap.Core.Tests
             await board.SubmitScoreAsync(100);
             await _service.FlushAsync();
 
-            var page = await _provider.GetTopAsync(_killBoard, SortDirection.Descending, 10);
-            Assert.AreEqual(0, page.Entries.Count);
+            Assert.AreEqual("test_kills", _provider.LastBoard.Value, "the flushed score reaches the provider");
         }
 
         [Test]
@@ -99,6 +97,13 @@ namespace LongLeap.Core.Tests
             Assert.AreEqual(1, after.Entries.Count, "the accepted score must replace the cached empty top");
             Assert.AreEqual(100, after.Entries[0].Score);
             Assert.AreEqual("dev_kills", provider.LastBoard.Value, "the provider gets the prefixed id");
+        }
+
+        // Logs in as one fixed user without a token.
+        private sealed class FixedAuth : IAuthProvider
+        {
+            public Task<AuthResult> LoginAsync() =>
+                Task.FromResult<AuthResult>(new AuthResult.Success(IdToken.None, new UserId("tester")));
         }
 
         // Keeps submitted scores and serves them back as the top.

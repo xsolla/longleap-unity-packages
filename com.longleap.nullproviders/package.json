@@ -1,0 +1,26 @@
+{
+  "name": "com.longleap.nullproviders",
+  "version": "0.1.0",
+  "displayName": "LongLeap Null Providers",
+  "description": "Null-object backends for the LongLeap core service seams: auth, cloud saves, leaderboards, leagues and ads. Each one does nothing, makes no network calls and completes synchronously with a safe default. Chosen explicitly when a game has no real backend (guest play, offline builds, builds without ads, tests).",
+  "unity": "6000.0",
+  "keywords": [
+    "null object",
+    "null provider",
+    "offline",
+    "guest",
+    "no ads",
+    "testing",
+    "longleap"
+  ],
+  "author": {
+    "name": "LongLeap"
+  },
+  "license": "SEE LICENSE IN LICENSE.md",
+  "documentationUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.nullproviders/README.md",
+  "changelogUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.nullproviders/CHANGELOG.md",
+  "licensesUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.nullproviders/LICENSE.md",
+  "dependencies": {
+    "com.longleap.core": "0.1.0"
+  }
+}

@@ -3,7 +3,6 @@
   "rootNamespace": "",
   "references": [
     "LongLeap.Core",
-    "LongLeap.Null",
     "UnityEngine.TestRunner",
     "NUnit.Framework"
   ],

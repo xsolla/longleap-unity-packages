@@ -1,9 +1,8 @@
 {
   "name": "LongLeap.Null",
   "rootNamespace": "LongLeap.Null",
-      "references": [
-    "LongLeap.Core",
-    "LongLeap.RemoteConfig"
+  "references": [
+    "LongLeap.Core"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

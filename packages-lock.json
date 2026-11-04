@@ -128,13 +128,12 @@
       "source": "embedded",
       "dependencies": {}
     },
-    "com.longleap.null": {
-      "version": "file:com.longleap.null",
+    "com.longleap.nullproviders": {
+      "version": "file:com.longleap.nullproviders",
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.longleap.core": "0.1.0",
-        "com.longleap.remoteconfig": "1.0.0"
+        "com.longleap.core": "0.1.0"
       }
     },
     "com.longleap.platform.unity": {

@@ -111,7 +111,7 @@ Consequences worth knowing before you add anything:
 | Package | What it is | Depends on | Gate |
 |---|---|---|---|
 | `com.longleap.firebase` | Production: anonymous auth, cloud saves, leaderboards, remote config. REST only, no Firebase SDK. | core, remoteconfig | — |
-| `com.longleap.null` | Always-succeeds stubs for every service. Testing and offline mode. | core, remoteconfig | — |
+| `com.longleap.nullproviders` | Null-object backends for the core seams: auth, cloud saves, leaderboards, leagues, ads. Guest play, offline builds, builds without ads, tests. Feature seams keep their null backend in their own package. | core | — |
 | `com.longleap.gamepix` | GamePix portal: interstitial + rewarded ads, portal host info, HTML5 packaging. | core | `GAMEPIX` + the GamePix plugin at `Assets/Plugins/GamePix` |
 
 **Platform**

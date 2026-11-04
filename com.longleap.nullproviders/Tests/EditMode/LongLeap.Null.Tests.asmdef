@@ -1,10 +1,9 @@
 {
   "name": "LongLeap.Null.Tests",
   "rootNamespace": "",
-      "references": [
+  "references": [
     "LongLeap.Core",
     "LongLeap.Null",
-    "LongLeap.RemoteConfig",
     "UnityEngine.TestRunner",
     "NUnit.Framework"
   ],

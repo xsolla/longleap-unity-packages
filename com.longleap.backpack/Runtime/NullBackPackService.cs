@@ -9,7 +9,7 @@ namespace LongLeap.Backpack
     //
     // Why, if BackPackService without an endpoint behaves the same: so consumers
     // do not check the service for null, and "off" is visible from the type in the
-    // container and in the log. Lives here rather than in com.longleap.null: that
+    // container and in the log. Lives here rather than in com.longleap.nullproviders: that
     // package does not depend on features, and would otherwise pull backpack into
     // every game.
     //

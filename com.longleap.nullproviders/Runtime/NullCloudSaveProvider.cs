@@ -4,10 +4,21 @@ using LongLeap.Core.CloudSaves;
 
 namespace LongLeap.Null
 {
-    // Область сейва здесь тоже заглушка, и это не пробел: писать заглушке
-    // некуда, поэтому и разделять гостевую ветвь с аккаунтной незачем.
-    // Переключатель сейвов от этого не ломается — он видит пустой сейв аккаунта
-    // и молча оставляет игроку то, что уже есть.
+    /// <summary>
+    /// Cloud save backend that keeps nothing: writes are dropped, reads return
+    /// empty results. The player's data then lives only in the local cache of
+    /// <see cref="CloudSaveService"/> on this device.
+    /// </summary>
+    /// <remarks>
+    /// Guest scope only. <see cref="UseAccount"/> is ignored, so the provider
+    /// never reports an account scope. Do not pair it with a signed-in
+    /// account: the save switcher would treat every launch as "guest data,
+    /// player signed in" and merge again each time.
+    /// </remarks>
+    // The account scope is a stub on purpose: the provider has nowhere to
+    // write, so splitting guest and account data would be pointless. For a
+    // guest the save switcher sees no account scope and leaves the local save
+    // as it is.
     public sealed class NullCloudSaveProvider : ICloudSaveProvider, IAccountCloudSaveScope
     {
         public Task SetStringAsync(CloudSaveKey key, string value) => Task.CompletedTask;

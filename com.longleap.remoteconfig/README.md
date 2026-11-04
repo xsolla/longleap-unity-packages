@@ -60,7 +60,7 @@ Edit `Assets/Resources/Backend/FirebaseConfig.asset` in the Inspector. Three fie
 |`RemoteConfigService`|`LongLeap.RemoteConfig`|Class (sealed)|Implementation. Loads `rc_cache` from PlayerPrefs on construction. Fetches from backend via `FetchAsync()`. `IDisposable`|
 |`IRemoteConfigProvider`|`LongLeap.RemoteConfig`|Interface|Provider seam: `Task<RemoteConfigFetchResult> FetchAsync()`|
 |`RemoteConfigFetchResult`|`LongLeap.RemoteConfig`|Class|`Parameters` (Dict), `Experiments` (List of `AbExperimentInfo`), `IsSuccess` (bool)|
-|`NullRemoteConfigBackend`|`LongLeap.Null`|Class (sealed)|No-op backend in `com.longleap.null`. Always returns `IsSuccess=false` — game falls through to cached values or inline defaults|
+|`NullRemoteConfigBackend`|`LongLeap.RemoteConfig`|Class (sealed)|No-op backend. Completes synchronously with `IsSuccess=false` — game falls through to cached values or inline defaults|
 |`InMemoryPlayerPrefs`|`LongLeap.RemoteConfig.Storage`|Class (sealed)|In-memory `IPlayerPrefs` implementation for tests. No persistence — `Save()` is a no-op|
 
 ### `com.longleap.core` (dependency)

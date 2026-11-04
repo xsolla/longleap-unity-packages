@@ -1,10 +1,12 @@
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using LongLeap.Core.Leaderboards;
 
 namespace LongLeap.Null
 {
+    /// <summary>
+    /// Leaderboard backend that keeps nothing: submits report success and are
+    /// dropped, every page is empty, the player has no rank on a board of 0.
+    /// </summary>
     public sealed class NullLeaderboardProvider : ILeaderboardProvider
     {
         public Task<bool> SubmitScoreAsync(BoardId boardId, string uid, long score, string displayName, SortDirection sort)
@@ -29,7 +31,7 @@ namespace LongLeap.Null
 
         public void Dispose()
         {
-            // Null-реализация — ресурсов для освобождения нет
+            // Null implementation: nothing to release.
         }
     }
 }

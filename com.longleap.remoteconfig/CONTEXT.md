@@ -9,7 +9,10 @@ Interface: `FetchAsync()`, `GetString(key, default)`, `GetInt`, `GetFloat`, `Get
 Implementation. Loads `rc_cache` from PlayerPrefs on construction. Fetches from backend via `FetchAsync()`. `IDisposable`. Deduplicates concurrent fetch calls.
 
 **IRemoteConfigProvider**:
-Provider seam: `Task<RemoteConfigFetchResult> FetchAsync()`. Implementations: `FirebaseRemoteConfigBackend` (production, in `com.longleap.firebase`), `NullRemoteConfigBackend` (no-op, in `com.longleap.null`).
+Provider seam: `Task<RemoteConfigFetchResult> FetchAsync()`. Implementations: `FirebaseRemoteConfigBackend` (production, in `com.longleap.firebase`), `NullRemoteConfigBackend` (no-op, in this package).
+
+**NullRemoteConfigBackend**:
+No-op backend. Every fetch completes synchronously with `IsSuccess=false`, so the service keeps cached values and getters return inline defaults.
 
 **RemoteConfigFetchResult**:
 DTO: `Parameters` (Dict), `Experiments` (List of `AbExperimentInfo`), `IsSuccess` (bool).
@@ -27,5 +30,4 @@ The backend registers a Firebase Installation ID (FID) on first use. Persisted i
 
 - **RemoteConfig → Core**: Uses `IPlayerPrefs`, `IExperimentInfoProvider`, `AbExperimentInfo`.
 - **RemoteConfig → Firebase**: Production backend (`FirebaseRemoteConfigBackend`) in `com.longleap.firebase`.
-- **RemoteConfig → Null**: Null backend (`NullRemoteConfigBackend`) in `com.longleap.null`.
 - **RemoteConfig → Analytics**: `RemoteConfigService` implements `IExperimentInfoProvider` for A/B experiment auto-tagging.

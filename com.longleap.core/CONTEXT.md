@@ -9,7 +9,7 @@ A feature module exposed by a package (auth, leaderboards, achievements, cloud s
 _Avoid_: Manager, controller, system
 
 **Backend**:
-A swappable implementation of one or more service interfaces. Null backends live in `com.longleap.null`; production Firebase backends live in `com.longleap.firebase`. Game code never sees backends directly — it sees the service wrapping them.
+A swappable implementation of one or more service interfaces. Null backends of the core seams live in `com.longleap.nullproviders`; production Firebase backends live in `com.longleap.firebase`. Game code never sees backends directly — it sees the service wrapping them.
 _Avoid_: Adapter, provider implementation
 
 **Provider**:
@@ -23,7 +23,7 @@ Fluent API that wires services and backends together. `Build()` returns a `Servi
 Holds constructed service instances. Lifecycle-managed (`IDisposable`). The single entry point game code uses to access services.
 
 **Null backend**:
-A backend that does nothing and always returns success. Shipped in `com.longleap.null` Runtime. Explicitly opted into at construction time — never a silent fallback.
+A backend that does nothing and returns a safe default (success where that is harmless, otherwise "unavailable" / "not found"). Core-seam null backends ship in `com.longleap.nullproviders` Runtime; feature seams keep theirs next to the interface. Explicitly opted into at construction time — never a silent fallback.
 _Avoid_: Stub, mock, no-op backend
 
 ## Auth
