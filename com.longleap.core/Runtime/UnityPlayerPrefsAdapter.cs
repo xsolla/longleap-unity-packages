@@ -1,8 +1,12 @@
-using LongLeap.Core;
 using UnityEngine;
 
-namespace LongLeap.Platform.Unity
+namespace LongLeap.Core
 {
+    /// <summary>
+    /// <see cref="IPlayerPrefs"/> over Unity's static <see cref="PlayerPrefs"/>.
+    /// Pure pass-through: values are written to disk only on <see cref="Save"/>
+    /// (or when Unity quits normally).
+    /// </summary>
     public sealed class UnityPlayerPrefsAdapter : IPlayerPrefs
     {
         public string GetString(string key, string defaultValue = "")

@@ -1,14 +1,21 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using LongLeap.Core;
 
-namespace LongLeap.Platform.Unity
+namespace LongLeap.Core
 {
+    /// <summary>
+    /// <see cref="IPersistentStorage"/> backed by files: each key is stored as
+    /// <c>&lt;directory&gt;/&lt;key&gt;.json</c>. The directory is created on the first save.
+    /// Saves write a temp file first, then replace the old one.
+    /// File access runs on the thread pool (<see cref="Task.Run(Action)"/>), so this
+    /// class is not suitable for WebGL; use <see cref="PlayerPrefsPersistentStorage"/> there.
+    /// </summary>
     public sealed class FilePersistentStorage : IPersistentStorage
     {
         private readonly string _directory;
 
+        /// <param name="directory">Folder for the files, e.g. <c>Application.persistentDataPath + "/saves"</c>.</param>
         public FilePersistentStorage(string directory)
         {
             _directory = directory ?? throw new ArgumentNullException(nameof(directory));

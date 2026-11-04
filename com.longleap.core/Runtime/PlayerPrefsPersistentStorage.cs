@@ -1,9 +1,15 @@
 using System.Threading.Tasks;
-using LongLeap.Core;
 using UnityEngine;
 
-namespace LongLeap.Platform.Unity
+namespace LongLeap.Core
 {
+    /// <summary>
+    /// <see cref="IPersistentStorage"/> backed by Unity <see cref="PlayerPrefs"/>.
+    /// Completes synchronously; call from the main thread. Every write and delete
+    /// calls <see cref="PlayerPrefs.Save"/>, which on WebGL is a write to the
+    /// browser's IndexedDB, so avoid it for data that changes every frame.
+    /// Works on every platform, including WebGL.
+    /// </summary>
     public sealed class PlayerPrefsPersistentStorage : IPersistentStorage
     {
         public Task<string> LoadAsync(string key)

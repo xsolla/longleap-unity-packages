@@ -1,6 +1,6 @@
 # LongLeap Core
 
-Foundation interfaces and types shared across all LongLeap packages. No implementation — only contracts and data types.
+Foundation interfaces and types shared across all LongLeap packages, plus the backend-agnostic services (cloud saves, leaderboards, leagues) and the Unity implementations of the storage contracts.
 
 ## Cross-cutting concepts
 
@@ -68,7 +68,10 @@ Player's 1-based position on a board. The service can query "my rank" and "entri
 ## Shared
 
 **IPlayerPrefs**:
-Abstraction over Unity PlayerPrefs: `GetString/Int/Float`, `SetString/Int/Float`, `HasKey`, `DeleteKey`, `Save`.
+Abstraction over Unity PlayerPrefs: `GetString/Int/Float`, `SetString/Int/Float`, `HasKey`, `DeleteKey`, `Save`. Implemented by `UnityPlayerPrefsAdapter`; tests use in-memory fakes.
+
+**IPersistentStorage**:
+Async key-value string storage. Implemented by `PlayerPrefsPersistentStorage` (all platforms, including WebGL) and `FilePersistentStorage` (a file per key; not for WebGL).
 
 **IExperimentInfoProvider**:
 Exposes `ActiveExperiments` (`IReadOnlyList<AbExperimentInfo>`) for analytics auto-tagging. Implemented by `RemoteConfigService`.

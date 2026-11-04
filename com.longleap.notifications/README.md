@@ -21,6 +21,7 @@ All configuration is per-call — no ScriptableObjects, no resource files.
 | `NotificationData` | Struct (readonly) | Payload: `Title`, `Message` (default `""`), `Duration` (default 3s), `Priority` (default `Default`). Two constructors: full + title-only. |
 | `NotificationPriority` | Enum | `Low` (0), `Default` (10), `High` (20), `Critical` (30) |
 | `ITimer` | Interface | Timer seam: `Start(TimeSpan, Action)`, `Cancel()`. Inject custom timers for testing or alternative timing. |
+| `CoroutineTimer` | Class (sealed) `: ITimer` | Default timer: a coroutine on a host MonoBehaviour with `WaitForSecondsRealtime` (ignores `Time.timeScale`). |
 | `NotificationSystemView` | Abstract class (MonoBehaviour) | Base view. Provides public `OnShowRequest(NotificationData, Action)` handler method. Manages display timer, safety timeout, calls `Complete()` when dismissed. Override `OnShow(NotificationData)` to instantiate popups. |
 
 ## Initialization
@@ -61,7 +62,7 @@ public class MyNotificationView : NotificationSystemView
 }
 ```
 
-The two timer factory methods (`CreateDisplayTimer()`, `CreateSafetyTimer()`) are **abstract** — subclasses *must* override them. Consumers supply their own `ITimer` implementation (typically a MonoBehaviour-based coroutine timer). The package provides only the `ITimer` interface — no default timer implementation.
+The two timer factory methods (`CreateDisplayTimer()`, `CreateSafetyTimer()`) are **abstract** — subclasses *must* override them. `CoroutineTimer` (in this package) is the usual choice; supply your own `ITimer` for other timing.
 
 ### Wiring
 
@@ -165,8 +166,11 @@ Result: `[Critical, Critical, High, High, Default, Low]` — same priority = FIF
 
 ### Timer implementation
 
-The package defines the `ITimer` interface only — no default implementation is provided. Consumers must supply their own `ITimer` implementation by overriding `CreateDisplayTimer()` and `CreateSafetyTimer()`.
+`CoroutineTimer` runs a coroutine on its host MonoBehaviour and waits with `WaitForSecondsRealtime`, so timers are **unscaled** — they continue during `Time.timeScale = 0`. Behaviour:
 
-A typical implementation uses `WaitForSecondsRealtime` on a host MonoBehaviour, which means timers are **unscaled** — they continue during `Time.timeScale = 0`.
+- `Start` cancels a running countdown first and is safe to call from inside the callback.
+- A negative duration counts as zero; the callback still runs no earlier than the next frame.
+- A null host (constructor) or null callback throws `ArgumentNullException`; starting on a destroyed host or an inactive GameObject throws `InvalidOperationException`. `NotificationSystemView` catches that for the display timer and completes the notification.
+- Unity stops coroutines when the host GameObject is deactivated or destroyed, so a running countdown then never fires. Keep the view active while notifications are shown.
 
-The `ITimer` interface exists so tests can inject `FakeTimer` (a simple callback holder) and manually fire events without waiting for real time.
+The `ITimer` interface exists so tests can inject `FakeTimer` (a simple callback holder) and manually fire events without waiting for real time. `CoroutineTimer` itself is covered by PlayMode tests.

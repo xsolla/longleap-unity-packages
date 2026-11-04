@@ -2,14 +2,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using LongLeap.Achievements;
-using LongLeap.Platform.Unity;
 using Newtonsoft.Json;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 
-namespace LongLeap.Platform.Unity.Tests
+namespace LongLeap.Achievements.Tests
 {
     [TestFixture]
     public class JsonAchievementProviderTests
@@ -40,19 +38,19 @@ namespace LongLeap.Platform.Unity.Tests
         }
 
         [Test]
-        public async Task Load_StatObjective_ParsesCorrectly()
+        public async Task Load_StatAchievement_MapsAllFields()
         {
             WriteManifest("combat.json");
             WriteFile("combat.json", @"
 {
   ""achievements"": [
     {
-      ""id"": ""ach_kill_10"",
+      ""id"": ""ach_kill_100"",
       ""group"": ""combat"",
-      ""isHidden"": false,
-      ""prerequisites"": [],
+      ""isHidden"": true,
+      ""prerequisites"": [""ach_kill_10""],
       ""objectives"": [
-        { ""id"": ""obj_kill"", ""statPath"": ""kill"", ""statTarget"": 10 }
+        { ""id"": ""obj_kill"", ""statPath"": ""kill"", ""statTarget"": 100 }
       ]
     }
   ]
@@ -62,13 +60,15 @@ namespace LongLeap.Platform.Unity.Tests
 
             Assert.AreEqual(1, definitions.Length);
             var def = definitions[0];
-            Assert.AreEqual("ach_kill_10", def.Id.Value);
+            Assert.AreEqual("ach_kill_100", def.Id.Value);
             Assert.AreEqual("combat", def.Group.Value);
-            Assert.IsFalse(def.IsHidden);
+            Assert.IsTrue(def.IsHidden);
+            Assert.AreEqual(new[] { "ach_kill_10" }, def.Prerequisites.Select(p => p.Value).ToArray());
             Assert.AreEqual(1, def.Objectives.Length);
             Assert.AreEqual("obj_kill", def.Objectives[0].Id.Value);
             Assert.AreEqual("kill", def.Objectives[0].StatPath);
-            Assert.AreEqual(10, def.Objectives[0].StatTarget);
+            Assert.AreEqual(100, def.Objectives[0].StatTarget);
+            Assert.IsNull(def.Objectives[0].Required);
         }
 
         [Test]
@@ -91,13 +91,13 @@ namespace LongLeap.Platform.Unity.Tests
             var definitions = await Load();
 
             Assert.AreEqual(1, definitions.Length);
+            Assert.IsFalse(definitions[0].IsHidden);
+            Assert.IsEmpty(definitions[0].Prerequisites);
             var obj = definitions[0].Objectives[0];
             Assert.AreEqual("obj_all", obj.Id.Value);
             Assert.IsNull(obj.StatPath);
             Assert.AreEqual(0, obj.StatTarget);
-            Assert.AreEqual(2, obj.Required.Length);
-            Assert.AreEqual("hero_monk", obj.Required[0].Value);
-            Assert.AreEqual("hero_ninja", obj.Required[1].Value);
+            Assert.AreEqual(new[] { "hero_monk", "hero_ninja" }, obj.Required.Select(r => r.Value).ToArray());
         }
 
         [Test]
@@ -137,54 +137,6 @@ namespace LongLeap.Platform.Unity.Tests
         }
 
         [Test]
-        public async Task Load_WithPrerequisites_ParsesCorrectly()
-        {
-            WriteManifest("test.json");
-            WriteFile("test.json", @"
-{
-  ""achievements"": [
-    {
-      ""id"": ""ach_kill_100"",
-      ""group"": ""combat"",
-      ""prerequisites"": [""ach_kill_10""],
-      ""objectives"": [
-        { ""id"": ""obj_kill"", ""statPath"": ""kill"", ""statTarget"": 100 }
-      ]
-    }
-  ]
-}");
-
-            var definitions = await Load();
-
-            Assert.AreEqual(1, definitions.Length);
-            Assert.AreEqual(1, definitions[0].Prerequisites.Length);
-            Assert.AreEqual("ach_kill_10", definitions[0].Prerequisites[0].Value);
-        }
-
-        [Test]
-        public async Task Load_WithHidden_ParsesCorrectly()
-        {
-            WriteManifest("test.json");
-            WriteFile("test.json", @"
-{
-  ""achievements"": [
-    {
-      ""id"": ""hidden_ach"",
-      ""group"": ""test"",
-      ""isHidden"": true,
-      ""objectives"": [
-        { ""id"": ""o"", ""statPath"": ""kill"", ""statTarget"": 1 }
-      ]
-    }
-  ]
-}");
-
-            var definitions = await Load();
-
-            Assert.IsTrue(definitions[0].IsHidden);
-        }
-
-        [Test]
         public async Task CorruptJsonFile_Skipped_OtherFilesLoaded()
         {
             WriteManifest("valid.json", "corrupt.json");
@@ -201,6 +153,8 @@ namespace LongLeap.Platform.Unity.Tests
   ]
 }");
             WriteFile("corrupt.json", "{ this is not valid json!!! }");
+
+            LogAssert.Expect(LogType.Warning, new Regex("corrupt\\.json"));
 
             var definitions = await Load();
 
@@ -237,7 +191,7 @@ namespace LongLeap.Platform.Unity.Tests
             Assert.IsEmpty(definitions);
         }
 
-        // Ровно то, что случилось на GamePix: на месте манифеста пришла HTML-страница.
+        // Exactly what happened on GamePix: an HTML page arrived in place of the manifest.
         [Test]
         public async Task CorruptManifest_LogsError_ReturnsEmptyArray()
         {
@@ -260,29 +214,6 @@ namespace LongLeap.Platform.Unity.Tests
 
             Assert.IsNotNull(definitions);
             Assert.IsEmpty(definitions);
-        }
-
-        [Test]
-        public async Task Load_NoTitleDescription_DoesNotFail()
-        {
-            WriteManifest("test.json");
-            WriteFile("test.json", @"
-{
-  ""achievements"": [
-    {
-      ""id"": ""ach_test"",
-      ""group"": ""test"",
-      ""objectives"": [
-        { ""id"": ""o"", ""statPath"": ""kill"", ""statTarget"": 1 }
-      ]
-    }
-  ]
-}");
-
-            var definitions = await Load();
-
-            Assert.AreEqual(1, definitions.Length);
-            Assert.AreEqual("ach_test", definitions[0].Id.Value);
         }
     }
 }

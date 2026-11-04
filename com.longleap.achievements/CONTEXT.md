@@ -16,3 +16,4 @@ A value (0..target) representing how close an objective is to completion. Stat-d
 - **Achievements → Stats**: `AchievementSystem` subscribes to `IStatSystem` to derive objective progress from stat changes.
 - **Achievements → Game**: unlocks and availability are reported through `IAchievementGameBridge`; the game decides what to show (in Climber — a toast via `NotificationBootstrapper`).
 - **Achievements → Storage**: unlocks are persisted through `IAchievementStateStore`, implemented by the game.
+- **Achievements → Definitions**: loaded through `IAchievementProvider`. `ResourcesAchievementProvider` reads `manifest.json` and the files it lists from `Resources/Achievements` (inside the build, no network); parsing is done by `JsonAchievementProvider`, which logs errors on a missing or corrupt manifest.

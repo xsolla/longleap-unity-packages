@@ -7,6 +7,13 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `UnityPlayerPrefsAdapter`, `PlayerPrefsPersistentStorage` and `FilePersistentStorage`
+  in the `LongLeap.Core` namespace, moved from the removed `com.longleap.platform.unity`
+  package (was `LongLeap.Platform.Unity`). Behaviour is unchanged; replace
+  `using LongLeap.Platform.Unity;` with `using LongLeap.Core;`.
+
 ### Removed
 
 - `LongLeap.Core.Ads.NoAdsProvider`. Use `LongLeap.Null.NullAdsProvider` from

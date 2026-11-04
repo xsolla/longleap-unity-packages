@@ -17,7 +17,7 @@ depends only on uGUI, Input System and Addressables.
 | `LongLeap.UI.DailyRewards` | dailyrewards, localization | `DailyRewardsScreen`, `DailyRewardDayView`. |
 | `LongLeap.UI.DailyQuests` | dailyquests, localization | `DailyQuestPanel`, `DailyQuestItemView`, `DailyQuestRewardFlyout`, `PlayerStatRowView`, seam `IPlayerStatsSource`. |
 | `LongLeap.UI.BackPack` | backpack, xsollaid | `UserBackPackWindow`, `BackPackItemView`, `BackPackRewardView`, seams `IBackPackProduct` / `IBackPackProductCatalog`. |
-| `LongLeap.UI.Notifications` | notifications, platform.unity | `NotificationBootstrapper` (static `Show`, queues until ready), `GameNotificationView`, `NotificationPopup` (Animator or a code fade). |
+| `LongLeap.UI.Notifications` | notifications | `NotificationBootstrapper` (static `Show`, queues until ready), `GameNotificationView`, `NotificationPopup` (Animator or a code fade). |
 
 ## Windows
 

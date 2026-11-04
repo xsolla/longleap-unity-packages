@@ -136,14 +136,6 @@
         "com.longleap.core": "0.1.0"
       }
     },
-    "com.longleap.platform.unity": {
-      "version": "file:com.longleap.platform.unity",
-      "depth": 0,
-      "source": "embedded",
-      "dependencies": {
-        "com.longleap.core": "0.1.0"
-      }
-    },
     "com.longleap.platform.webgl": {
       "version": "file:com.longleap.platform.webgl",
       "depth": 0,

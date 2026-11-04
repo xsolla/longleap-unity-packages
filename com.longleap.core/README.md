@@ -8,7 +8,7 @@ Foundation package — defines all core abstractions, interfaces, domain types, 
 
 | Module | Defines | Implemented elsewhere |
 |---|---|---|
-| Contracts | `IPlayerPrefs`, `IPersistentStorage`, `IExperimentInfoProvider`, `AbExperimentInfo` | Game-provided |
+| Contracts | `IPlayerPrefs`, `IPersistentStorage`, `IExperimentInfoProvider`, `AbExperimentInfo` | Unity implementations of `IPlayerPrefs` / `IPersistentStorage` ship here (see [Storage](#storage)); `IExperimentInfoProvider` by `RemoteConfigService` |
 | Auth | `IAuthProvider`, `AuthResult`, `UserId`, `IdToken` | `NullAuthProvider`, `FirebaseAnonymousAuthProvider` |
 | Cloud Saves | `ICloudSaveService`/`ICloudSaveProvider`, `CloudSaveKey`, `CloudSaveService`, extensions | `NullCloudSaveProvider`, `FirebaseCloudSaveProvider` |
 | Leaderboards | `ILeaderboardService`/`ILeaderboardProvider`/`ILeaderboard`, `LeaderboardService`, value types | `NullLeaderboardProvider`, `FirebaseLeaderboardProvider` |
@@ -59,6 +59,16 @@ Foundation package — defines all core abstractions, interfaces, domain types, 
 | `IExperimentInfoProvider` | Interface | `IReadOnlyList<AbExperimentInfo> ActiveExperiments` |
 | `AbExperimentInfo` | Readonly struct | `ExperimentId` (string), `VariantIndex` (int) |
 
+### Storage
+
+Unity implementations of the storage contracts.
+
+| Type | Kind | Purpose |
+|---|---|---|
+| `UnityPlayerPrefsAdapter` | Sealed class `: IPlayerPrefs` | Pass-through to `UnityEngine.PlayerPrefs` |
+| `PlayerPrefsPersistentStorage` | Sealed class `: IPersistentStorage` | Key-value storage in `PlayerPrefs`. Synchronous, saves on every write. Works on WebGL |
+| `FilePersistentStorage` | Sealed class `: IPersistentStorage` | One `<key>.json` file per key in a given folder. Runs on the thread pool, so not for WebGL |
+
 ## Initialization
 
 Each service is constructed independently:
@@ -87,6 +97,25 @@ var key = new CloudSaveKey("progress");
 await saves.SetStringAsync(key, "42");
 var value = await saves.GetStringAsync(key);
 ```
+
+### Storage
+
+```csharp
+IPlayerPrefs prefs = new UnityPlayerPrefsAdapter();
+prefs.SetString("last_level", "forest");
+string level = prefs.GetString("last_level", "default_level");
+
+// WebGL-safe; completes synchronously, call from the main thread.
+IPersistentStorage storage = new PlayerPrefsPersistentStorage();
+await storage.SaveAsync("settings", json);
+string data = await storage.LoadAsync("settings"); // null if missing
+
+// Desktop / mobile. The folder is created on the first save.
+IPersistentStorage files = new FilePersistentStorage(Application.persistentDataPath + "/saves");
+await files.SaveAsync("profile", json);
+```
+
+`FilePersistentStorage` writes `<key>.json.tmp`, deletes the old file and moves the temp file into place. A failed save is logged as an error and not rethrown; a file that cannot be read loads as `null`. Keys are used as file names unchanged, so keep them to characters that are valid in a file name.
 
 ### Leaderboards
 

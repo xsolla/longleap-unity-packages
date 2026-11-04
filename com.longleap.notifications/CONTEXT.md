@@ -19,3 +19,6 @@ Concrete implementation with priority queue (linear insert into `List`), auto-ad
 
 **NotificationSystemView**:
 Abstract MonoBehaviour for rendering notifications. Game code extends this to provide the visual implementation.
+
+**ITimer** / **CoroutineTimer**:
+One-shot timer seam used by the view for the display and safety timeouts. `CoroutineTimer` is the default implementation: a coroutine on the view with `WaitForSecondsRealtime` (unscaled time).

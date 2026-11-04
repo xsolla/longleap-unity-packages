@@ -90,7 +90,7 @@ Consequences worth knowing before you add anything:
 
 | Package | What it is |
 |---|---|
-| `com.longleap.core` | All contracts and domain types, plus the `CloudSaveService` and `LeaderboardService` implementations. Everything depends on this. |
+| `com.longleap.core` | All contracts and domain types, plus the `CloudSaveService` and `LeaderboardService` implementations and the Unity storage implementations (`UnityPlayerPrefsAdapter`, `PlayerPrefsPersistentStorage`, `FilePersistentStorage`). Everything depends on this. |
 | `com.longleap.notifications` | Priority-queued popup notifications. Fully standalone; game code supplies the view. |
 | `com.longleap.localization` | `Loc` static facade over Unity.Localization, `LocKey` newtype, `LocalizedText` component. |
 
@@ -118,7 +118,6 @@ Consequences worth knowing before you add anything:
 
 | Package | What it is | Depends on |
 |---|---|---|
-| `com.longleap.platform.unity` | `PlayerPrefs` adapter, file and PlayerPrefs persistent storage, coroutine timer, Resources achievement loader. | core |
 | `com.longleap.platform.webgl` | `sendBeacon` transport for analytics (survives tab close) and a page-visibility hook that flushes analytics when the tab is hidden. | core, analytics |
 
 **Identity**

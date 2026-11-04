@@ -3,7 +3,8 @@
   "rootNamespace": "LongLeap.Achievements",
   "references": [
     "LongLeap.Core",
-    "LongLeap.Stats"
+    "LongLeap.Stats",
+    "Newtonsoft.Json"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

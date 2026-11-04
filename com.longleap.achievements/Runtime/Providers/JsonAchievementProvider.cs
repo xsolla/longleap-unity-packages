@@ -2,22 +2,26 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using LongLeap.Achievements;
 using Newtonsoft.Json;
 using UnityEngine;
 
-namespace LongLeap.Platform.Unity
+namespace LongLeap.Achievements
 {
-    // Разбор определений ачивок из JSON: manifest.json со списком файлов и сами
-    // файлы. Откуда берётся текст — не его дело: источник передают снаружи
-    // (Resources в игре, словарь в тестах). Так формат проверяется без ассетов.
+    /// <summary>
+    /// Parses achievement definitions from JSON: a <c>manifest.json</c> listing the
+    /// files, plus the files themselves. Where the text comes from is not its
+    /// concern: the source is passed in (Resources in the game, a dictionary in
+    /// tests), so the format can be tested without assets.
+    /// Completes synchronously.
+    /// </summary>
     public sealed class JsonAchievementProvider : IAchievementProvider
     {
         public const string ManifestFileName = "manifest.json";
 
-        // Имя файла из манифеста → его текст, или null, если файла нет.
+        // File name from the manifest -> its text, or null if the file is missing.
         private readonly Func<string, string> _loadText;
 
+        /// <param name="loadText">Returns the text of a file by name, or <c>null</c> if it does not exist.</param>
         public JsonAchievementProvider(Func<string, string> loadText)
         {
             _loadText = loadText ?? throw new ArgumentNullException(nameof(loadText));
@@ -33,8 +37,8 @@ namespace LongLeap.Platform.Unity
 
             var allDefinitions = new List<AchievementDefinition>();
 
-            // Порядок манифеста задаёт порядок определений, а от него — порядок
-            // карточек в коллекции.
+            // Manifest order sets the order of the definitions, and that in turn
+            // sets the order of the cards in the collection.
             foreach (var fileName in manifest)
             {
                 var text = _loadText(fileName);
@@ -61,9 +65,10 @@ namespace LongLeap.Platform.Unity
             return allDefinitions.ToArray();
         }
 
-        // Пустой результат здесь — почти всегда поломка сборки, а не «ачивок нет»:
-        // без определений GetStatus отдаёт null, и всё, что гейтится ачивками,
-        // молча показывается открытым. Поэтому — LogError, а не тишина.
+        // An empty result here almost always means a broken build, not "there are
+        // no achievements": without definitions GetStatus returns null, and
+        // everything gated by achievements silently shows as unlocked. Hence
+        // LogError rather than silence.
         private string[] LoadManifest()
         {
             var text = _loadText(ManifestFileName);

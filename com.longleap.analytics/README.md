@@ -15,10 +15,9 @@ Backends (GA4, console, null) and HTTP transports (UnityWebRequest, WebGL beacon
 
 | Package | Role |
 |---|---|
-| `com.longleap.core` | `IExperimentInfoProvider` / `AbExperimentInfo` for experiment tagging, `IPlayerPrefs` for the client ID |
+| `com.longleap.core` | `IExperimentInfoProvider` / `AbExperimentInfo` for experiment tagging, `IPlayerPrefs` for the client ID and `UnityPlayerPrefsAdapter` (its `PlayerPrefs` implementation, used in the quick start) |
 | `com.unity.nuget.newtonsoft-json` | Request serialization |
 | `com.unity.modules.unitywebrequest` | Default HTTP transport |
-| `com.longleap.platform.unity` (optional) | `UnityPlayerPrefsAdapter`, an `IPlayerPrefs` over `PlayerPrefs`, used in the quick start |
 | `com.longleap.platform.webgl` (optional) | `WebGlBeaconTransport` and `WebGlPageLifecycle` for WebGL builds |
 
 ## GA4 setup
@@ -33,7 +32,7 @@ The API secret ships inside the build and can be extracted. Treat it as public, 
 
 ```csharp
 using LongLeap.Analytics;
-using LongLeap.Platform.Unity;   // UnityPlayerPrefsAdapter
+using LongLeap.Core;             // UnityPlayerPrefsAdapter
 using LongLeap.Platform.WebGL;   // optional, WebGL builds
 
 IAnalyticsBackend backend;
