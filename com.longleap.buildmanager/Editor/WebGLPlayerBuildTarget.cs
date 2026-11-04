@@ -8,30 +8,26 @@ using UnityEngine;
 
 namespace LongLeap.BuildManager.Editor
 {
-    // Обычная WebGL-сборка: то, чем собирают всё, кроме портальной версии.
+    // The plain WebGL build: the default way to build.
     //
-    // Подходит всегда и имеет наименьший приоритет, поэтому любой более
-    // конкретный способ (вендорный билдер площадки) её перебивает.
-    //
-    // Этот класс закрывает дыру: в проекте НЕ БЫЛО точки входа в сборку вовсе.
-    // На «Tools / Build WebGL» ссылаются serve.py и GamePixHtml5Packager, но
-    // самого BuildScript.cs в репозитории давно нет.
+    // Always applicable and has the lowest priority, so any more specific way
+    // (a portal's vendor builder, for example) overrides it.
     internal sealed class WebGLPlayerBuildTarget : IProjectBuildTargetProvider, IProjectWarningProvider
     {
-        // Путь принадлежит СПОСОБУ сборки, а не пресету: вендорный билдер
-        // площадки всё равно подменяет его на свой (html5), так что пресету
-        // такое решение не принадлежит.
-        //
-        // Именно этот путь serve.py проверяет первым:
-        // CANDIDATE_DIRS = ('Builds/WebGL', 'html5').
-        public const string OutputPath = "Builds/WebGL";
+        public const string TargetId = "webgl.player";
+
+        // The path belongs to the WAY of building, not to the preset: another
+        // build target picks its own output folder anyway, so this is not the
+        // preset's decision to make. Set in Project Settings / LongLeap /
+        // Build Manager.
+        private static string OutputPath => BuildManagerSettings.instance.WebGLOutputPath;
 
         private const string CallbackPage = "xid-callback.html";
 
         public IEnumerable<ProjectBuildTarget> GetBuildTargets()
         {
             yield return new ProjectBuildTarget(
-                "webgl.player",
+                TargetId,
                 $"WebGL -> {OutputPath}",
                 0,
                 Build,
@@ -40,28 +36,55 @@ namespace LongLeap.BuildManager.Editor
 
         public IEnumerable<ProjectWarning> GetWarnings(IProjectOptionState pendingState)
         {
-            if (AddressablesPrepass.IsInstalled && !AddressablesPrepass.WillUnityBuildContent())
-            {
-                yield return new ProjectWarning(
-                    ProjectWarningSeverity.Info,
-                    "Addressables is set not to build content with the player, so this window will " +
-                    "build the content bundles before the player. Without that the build would ship " +
-                    "whatever bundles were left from last time.");
-            }
-
-            // Про сжатие предупреждаем ТОЛЬКО если собирать будет этот способ.
-            // Вендорный билдер площадки всё равно ставит Disabled сам — .gpx
-            // сжимает себя, — и требовать там Brotli значило бы кричать
-            // «волки» на каждой портальной сборке.
-            if (ProjectBuildTargets.Select(pendingState)?.Id != "webgl.player")
+            // Warn ONLY if this way is the one that will build. The Addressables
+            // prepass runs only here, and another build target may set its own
+            // compression (a portal package, for example, may compress itself
+            // and need Disabled); demanding Brotli there would cry wolf on
+            // every such build.
+            if (ProjectBuildTargets.Select(pendingState)?.Id != TargetId)
                 yield break;
 
+            string outputProblem = BuildManagerSettings.ValidateOutputPath(OutputPath);
+
+            if (outputProblem != null)
+            {
+                yield return new ProjectWarning(
+                    ProjectWarningSeverity.Error,
+                    outputProblem,
+                    blocksBuild: true,
+                    fixLabel: "Open Build Manager Settings",
+                    fix: () => SettingsService.OpenProjectSettings(BuildManagerSettings.SettingsPath));
+            }
+
+            switch (AddressablesPrepass.Check(out string addressablesProblem))
+            {
+                case AddressablesPrepass.Outcome.WillBuild:
+                    yield return new ProjectWarning(
+                        ProjectWarningSeverity.Info,
+                        "Addressables is set not to build content with the player, so this window " +
+                        "will build the content bundles before the player. Without that the build " +
+                        "would ship whatever bundles were left from last time.");
+                    break;
+
+                case AddressablesPrepass.Outcome.Failed:
+                    // Run would cancel the player build for the same reason, so
+                    // say it before Build is pressed, not after.
+                    yield return new ProjectWarning(
+                        ProjectWarningSeverity.Error,
+                        addressablesProblem,
+                        blocksBuild: true);
+                    break;
+            }
+
+            // Info, not Warning: the right compression depends on the host, and
+            // a host that sends Content-Encoding headers is fine without the
+            // fallback. This is a recommendation for plain static hosting.
             WebGLCompressionFormat compression = PlayerSettings.WebGL.compressionFormat;
 
             if (compression != WebGLCompressionFormat.Brotli)
             {
                 yield return new ProjectWarning(
-                    ProjectWarningSeverity.Warning,
+                    ProjectWarningSeverity.Info,
                     $"WebGL Compression Format is {compression}. A self-hosted HTML5 upload wants " +
                     "Brotli with Decompression Fallback on — that is what serves smallest over a " +
                     "plain static host.",
@@ -71,7 +94,7 @@ namespace LongLeap.BuildManager.Editor
             else if (!PlayerSettings.WebGL.decompressionFallback)
             {
                 yield return new ProjectWarning(
-                    ProjectWarningSeverity.Warning,
+                    ProjectWarningSeverity.Info,
                     "WebGL compression is Brotli but Decompression Fallback is off. A static host " +
                     "that does not send the right Content-Encoding will then fail to load the build.",
                     fixLabel: "Open Player Settings",
@@ -92,13 +115,21 @@ namespace LongLeap.BuildManager.Editor
                 return;
             }
 
+            string outputProblem = BuildManagerSettings.ValidateOutputPath(OutputPath);
+
+            if (outputProblem != null)
+            {
+                Debug.LogError($"Build Manager: {outputProblem}");
+                return;
+            }
+
             AddressablesPrepass.Outcome outcome = AddressablesPrepass.Run(out string message);
 
             switch (outcome)
             {
                 case AddressablesPrepass.Outcome.Failed:
-                    // Останавливаемся: собрать плеер со старыми бандлами хуже,
-                    // чем не собрать вовсе.
+                    // Stop here: building the player with stale bundles is
+                    // worse than not building at all.
                     Debug.LogError($"Build Manager: {message} The player build was cancelled.");
                     return;
 
@@ -119,15 +150,16 @@ namespace LongLeap.BuildManager.Editor
             {
                 scenes = scenes,
 
-                // Для WebGL это ПАПКА, без расширения.
+                // For WebGL this is a FOLDER, with no extension.
                 locationPathName = OutputPath,
                 target = BuildTarget.WebGL,
                 targetGroup = BuildTargetGroup.WebGL,
 
-                // Сознательно не AutoRunPlayer: Unity открыла бы сборку на
-                // localhost, а вход требует ровно 127.0.0.1 — это другой
-                // origin, под него зарегистрирован redirect uri, и IndexedDB
-                // с сохранениями тоже отдельный. Запускать надо serve.py.
+                // Deliberately not AutoRunPlayer: Unity would open the build on
+                // localhost, but sign-in needs exactly 127.0.0.1. That is a
+                // different origin, the redirect uri is registered for it, and
+                // the IndexedDB holding the saves is separate too. Run serve.py
+                // instead.
                 options = BuildOptions.None,
             };
 
@@ -150,18 +182,19 @@ namespace LongLeap.BuildManager.Editor
             }
 
             Debug.Log(
-                $"Build Manager: WebGL build succeeded in {summary.totalTime}, " +
-                $"{summary.totalSize / (1024 * 1024)} MB at {OutputPath}. " +
+                $"Build Manager: WebGL build succeeded in " +
+                $"{(int)summary.totalTime.TotalMinutes}m {summary.totalTime.Seconds}s, " +
+                $"{summary.totalSize / (1024.0 * 1024.0):F1} MB at {OutputPath}. " +
                 "Serve it with \"python serve.py\" and open http://127.0.0.1:8081 " +
                 "(127.0.0.1 exactly — localhost is a different origin).");
 
             WarnIfCallbackPageMissing();
         }
 
-        // То же, что проверяет serve.py: при включённом входе страница возврата
-        // обязана лежать рядом с index.html. Её кладёт постпроцесс
-        // XsollaIdCallbackPagePostprocessor, и если её нет — вход в этой
-        // сборке мёртв, хотя сборка «удалась».
+        // The same check serve.py makes: with sign-in on, the callback page must
+        // sit next to index.html. The XsollaIdCallbackPagePostprocessor
+        // post-process step puts it there, and if it is missing, sign-in in this
+        // build is dead even though the build "succeeded".
         private static void WarnIfCallbackPageMissing()
         {
             if (!ScriptingDefines.IsOn("XSOLLA_ID"))

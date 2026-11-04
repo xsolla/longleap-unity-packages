@@ -3,20 +3,20 @@ using UnityEngine;
 
 namespace LongLeap.BuildManager.Editor
 {
-    // Оформление подсветки изменённых строк.
+    // Styling for the highlight of changed rows.
     //
-    // Подсветка НЕ опирается на цвет в одиночку — сигналов четыре, и три из
-    // них работают в оттенках серого:
+    // The highlight does NOT rely on colour alone. There are four signals, and
+    // three of them work in greyscale:
     //
-    //   1. полоска слева (форма, видна при любом контрасте);
-    //   2. заливка строки (цвет, самый слабый сигнал, нужен только чтобы
-    //      взгляд цеплялся при прокрутке);
-    //   3. маркер «*» и приписка «(off -> on)» (текст — и он ещё и говорит,
-    //      ЧТО именно изменится, а не только что что-то изменилось);
-    //   4. звёздочка в заголовке окна.
+    //   1. a bar on the left (shape, visible at any contrast);
+    //   2. a row fill (colour, the weakest signal, only there to catch the eye
+    //      while scrolling);
+    //   3. the "*" marker and the "(off -> on)" suffix (text, which also says
+    //      WHAT will change, not just that something changed);
+    //   4. an asterisk in the window title.
     //
-    // Цвета разные для двух тем редактора: один и тот же синий на светлой
-    // теме выглядит грязным, на тёмной — неразличимым.
+    // The colours differ between the two editor themes: the same blue looks
+    // muddy on the light theme and is indistinguishable on the dark one.
     internal static class BuildManagerStyles
     {
         public const float AccentBarWidth = 3f;
@@ -50,8 +50,8 @@ namespace LongLeap.BuildManager.Editor
         public static GUIStyle Marker => _marker ?? (_marker =
             new GUIStyle(EditorStyles.boldLabel) { alignment = TextAnchor.MiddleLeft });
 
-        // Причина, по которой строка погашена. Идёт под строкой с отступом,
-        // потому что относится к ней, а не к блоку.
+        // The reason a row is disabled. It goes under the row, indented, because
+        // it belongs to the row and not to the block.
         public static GUIStyle Reason => _reason ?? (_reason =
             new GUIStyle(EditorStyles.miniLabel)
             {
@@ -65,8 +65,8 @@ namespace LongLeap.BuildManager.Editor
         public static GUIStyle PresetSelected => _presetSelected ?? (_presetSelected =
             new GUIStyle(EditorStyles.miniButton) { fontStyle = FontStyle.Bold });
 
-        // Сбрасываем кэш стилей при смене темы: GUIStyle помнит цвета темы, в
-        // которой был создан.
+        // Drop the cached styles when the theme changes: a GUIStyle remembers
+        // the colours of the theme it was created in.
         public static void Invalidate()
         {
             _dirtyLabel = null;

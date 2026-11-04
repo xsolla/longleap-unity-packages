@@ -74,7 +74,7 @@ namespace LongLeap.Core.Editor
 
                 foreach (ProjectOption option in ProjectOptionRegistry.AllOptions())
                 {
-                    if (option.GetAvailability(staged).IsAvailable)
+                    if (IsAvailable(option, staged))
                         continue;
 
                     string before = staged.GetValue(option.Id);
@@ -104,7 +104,7 @@ namespace LongLeap.Core.Editor
 
             foreach ((ProjectOption option, string target) in Targets(preset))
             {
-                if (!option.GetAvailability(state).IsAvailable)
+                if (!IsAvailable(option, state))
                     continue;
 
                 if (state.GetValue(option.Id) != target)
@@ -112,6 +112,27 @@ namespace LongLeap.Core.Editor
             }
 
             return true;
+        }
+
+        // GetAvailability is code from another package. One that throws must
+        // not break every preset click and every redraw, so it counts as
+        // unavailable, the same as the Build Manager window treats it:
+        // Reconcile reverts the option to its saved value and Matches ignores
+        // it.
+        private static bool IsAvailable(ProjectOption option, IProjectOptionState state)
+        {
+            try
+            {
+                return option.GetAvailability(state).IsAvailable;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError(
+                    $"Build options: the availability check for '{option.Id}' threw; the option " +
+                    $"is treated as unavailable. {exception}");
+
+                return false;
+            }
         }
 
         private static IEnumerable<(ProjectOption Option, string Target)> Targets(

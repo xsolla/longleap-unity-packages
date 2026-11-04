@@ -7,25 +7,26 @@ using UnityEngine;
 
 namespace LongLeap.BuildManager.Editor
 {
-    // Окно, в котором видно всю конфигурацию сборки сразу.
+    // A window that shows the whole build configuration at once.
     //
-    // Главное свойство: щелчок по галочке НИЧЕГО не пишет. Раньше каждый пункт
-    // меню правил символы компиляции немедленно, поэтому смена площадки стоила
-    // полдюжины нажатий с перекомпиляцией между каждым. Здесь правки копятся,
-    // изменённые строки подсвечены, и Apply записывает всё одним разом — одна
-    // запись дефайнов, одна перезагрузка домена.
+    // The key property: clicking a checkbox writes NOTHING. Previously every
+    // menu item changed the scripting defines immediately, so switching the
+    // distribution cost half a dozen clicks with a recompile between each one.
+    // Here edits accumulate, changed rows are highlighted, and Apply writes
+    // everything in one go: one define write, one domain reload.
     //
-    // Собрать игру можно только из ЧИСТОГО состояния, и это не формальность:
-    // пока правки не применены и не перекомпилированы, код под #if соберётся
-    // по старым дефайнам — например, постпроцесс index.html у GamePix живёт
-    // целиком под #if GAMEPIX и в такой сборке просто не сработает.
-    public sealed class BuildManagerWindow : EditorWindow
+    // The game can only be built from a CLEAN state, and that is not a
+    // formality: until the edits are applied and recompiled, #if-gated code
+    // compiles against the old defines. For example, a build post-process step
+    // that lives entirely under an #if would simply not run in such a build.
+    internal sealed class BuildManagerWindow : EditorWindow
     {
         private const string Title = "Build Manager";
         private const string DirtyTitle = "Build Manager*";
 
-        // Приоритет 0 против 120 у Cloud Save Panel: разрыв больше десяти, и
-        // Unity сама рисует разделитель между ними.
+        // Priority 0 keeps the window at the top of the LongLeap menu. Unity
+        // draws a separator before any item whose priority is more than ten
+        // higher, so other packages can group their items below it.
         [MenuItem("LongLeap/" + Title, false, 0)]
         private static void Open()
         {
@@ -34,18 +35,22 @@ namespace LongLeap.BuildManager.Editor
             window.minSize = new Vector2(460f, 400f);
         }
 
-        // Отложенные правки СЕРИАЛИЗУЕМ. Это не машинерия продолжения после
-        // перезагрузки домена, а обычная сериализация полей EditorWindow — та
-        // же, что помнит раскрытые фолдауты в инспекторе. Без неё сохранение
-        // любого чужого скрипта молча выбрасывало бы подготовленную
-        // конфигурацию.
+        // Staged edits ARE serialized. This is not continue-after-domain-reload
+        // machinery, just ordinary EditorWindow field serialization, the same
+        // that remembers expanded foldouts in the inspector. Without it, saving
+        // any unrelated script would silently throw away the prepared
+        // configuration.
         [SerializeField] private List<PendingEntry> _pending = new List<PendingEntry>();
         [SerializeField] private string _selectedPresetId;
         [SerializeField] private Vector2 _scroll;
 
-        // Дефайны записаны, но перекомпиляция ещё не прошла. Снимается в
-        // OnEnable, потому что OnEnable вызывается как раз после перезагрузки
-        // домена — той самой, которой мы и ждали.
+        // Defines are written but the recompile has not happened yet. Cleared
+        // in OnEnable, which runs right after the domain reload we were
+        // waiting for. A compile that fails does not reload the domain, so the
+        // flag stays set; BuildDisabledReason reports the compile errors
+        // before it, and the reload after the errors are fixed clears it.
+        // (CompilationPipeline.compilationFinished is not used on purpose: it
+        // fires before the reload, while the old assemblies are still loaded.)
         [SerializeField] private bool _awaitingRecompile;
 
         private SavedProjectOptionState _saved;
@@ -56,6 +61,14 @@ namespace LongLeap.BuildManager.Editor
         private bool _stateValid;
         private bool _proSkin;
 
+        // Computed in RefreshDerived, read while drawing. Each of these calls
+        // into other packages' predicates, which may touch the disk, so none of
+        // them may run per IMGUI event.
+        private string _presetLabel;
+        private string _buildLabel;
+        private string _buildBlockedReason;
+        private Dictionary<ProjectOptionAction, string> _actionDisabledReasons;
+
         [Serializable]
         private struct PendingEntry
         {
@@ -65,9 +78,7 @@ namespace LongLeap.BuildManager.Editor
 
         private void OnEnable()
         {
-            if (_awaitingRecompile)
-                _awaitingRecompile = false;
-
+            _awaitingRecompile = false;
             _proSkin = EditorGUIUtility.isProSkin;
             _stateValid = false;
         }
@@ -76,8 +87,8 @@ namespace LongLeap.BuildManager.Editor
 
         private void OnProjectChange() => _stateValid = false;
 
-        // Закрытие окна с неприменёнными правками спрашивает — ровно как у
-        // изменённого ассета.
+        // Closing the window with unapplied edits asks first, exactly like a
+        // modified asset.
         public override void SaveChanges()
         {
             base.SaveChanges();
@@ -94,9 +105,9 @@ namespace LongLeap.BuildManager.Editor
 
         private void OnGUI()
         {
-            // Пересобираем состояние только в фазе раскладки. В перерисовке
-            // этого делать нельзя: описатели читают ассеты и файлы с диска —
-            // ремонт asmdef-ов, например, читает два файла.
+            // Rebuild the state only during the Layout pass. It must not be done
+            // during Repaint: option descriptors may read assets and files
+            // from disk.
             if (Event.current.type == EventType.Layout)
                 EnsureState();
 
@@ -130,13 +141,13 @@ namespace LongLeap.BuildManager.Editor
 
             EditorGUILayout.EndScrollView();
 
-            // Подвал ВНЕ прокрутки: Apply и Build должны быть под рукой при
-            // любом положении скролла, а причина, по которой кнопка погашена,
-            // должна быть видна рядом с самой кнопкой.
+            // The footer is OUTSIDE the scroll view: Apply and Build must be at
+            // hand at any scroll position, and the reason a button is disabled
+            // must be visible next to the button itself.
             DrawFooter();
         }
 
-        // ---------- состояние ----------
+        // ---------- state ----------
 
         private void EnsureState()
         {
@@ -155,16 +166,19 @@ namespace LongLeap.BuildManager.Editor
             _staged = new StagedProjectOptionState(_saved, _pendingMap);
 
             PrunePending();
-            RefreshDerived();
 
+            // Before RefreshDerived, which builds the toolbar label from it.
             if (string.IsNullOrEmpty(_selectedPresetId))
                 _selectedPresetId = InferPreset();
+
+            RefreshDerived();
 
             _stateValid = true;
         }
 
-        // Отложенные правки могли устареть, пока окно было не в фокусе: кто-то
-        // переключил тот же дефайн из меню, или настройка стала недоступна.
+        // Staged edits may have gone stale while the window was out of focus:
+        // someone toggled the same define from the menu, or the option became
+        // unavailable.
         private void PrunePending()
         {
             foreach (string id in _pendingMap.Keys.ToList())
@@ -175,7 +189,7 @@ namespace LongLeap.BuildManager.Editor
                     continue;
                 }
 
-                // Совпало с сохранённым — правка перестала быть правкой.
+                // Matches the saved value, so the edit is no longer an edit.
                 if (_pendingMap[id] == _saved.GetValue(id))
                 {
                     _pendingMap.Remove(id);
@@ -203,10 +217,11 @@ namespace LongLeap.BuildManager.Editor
                 _pending.Add(new PendingEntry { Id = entry.Key, Value = entry.Value });
         }
 
-        // Доступность и замечания считаются здесь, а НЕ в перерисовке: предикат
-        // доступности у GAMEPIX делает Directory.Exists, а поставщики замечаний
-        // читают ассеты. На каждый кадр это было бы расточительно, а меняться
-        // они могут только от правки или от пересбора состояния.
+        // Availability and warnings are computed here, NOT during repaint:
+        // availability predicates may touch the disk (Directory.Exists, for
+        // example), and warning providers read assets. Doing that every frame
+        // would be wasteful, and they can only change after an edit or a state
+        // rebuild.
         private void RefreshDerived()
         {
             _availability = new Dictionary<string, ProjectOptionAvailability>();
@@ -215,6 +230,11 @@ namespace LongLeap.BuildManager.Editor
                 _availability[option.Id] = SafeAvailability(option);
 
             _warnings = ProjectWarnings.Collect(_staged);
+
+            _presetLabel = DescribePreset();
+            _buildLabel = BuildLabelText();
+            _buildBlockedReason = ProjectBuildBlockedReason();
+            _actionDisabledReasons = CollectActionDisabledReasons();
 
             hasUnsavedChanges = IsDirty;
             saveChangesMessage =
@@ -229,11 +249,12 @@ namespace LongLeap.BuildManager.Editor
             {
                 ProjectOptionAvailability availability = option.GetAvailability(_staged);
 
-                // Односторонняя настройка, которая уже сделана, — это как
-                // погасший пункт ремонта asmdef-ов: чинить больше нечего.
-                // Смотрим на СОХРАНЁННОЕ значение, как и меню: по отложенному
-                // строка гасла сразу после щелчка, а PrunePending в Apply
-                // выбрасывал правку как «недоступную» — ремонт не делался.
+                // A one-way option (a one-time repair, for example) that is
+                // already done has nothing left to do, so it is disabled.
+                // Check the SAVED value, as the menu does: checking the staged
+                // value would disable the row right after the click, and
+                // PrunePending in Apply would then drop the edit as
+                // "unavailable", so the option would never be written.
                 if (availability.IsAvailable
                     && option.OneWay
                     && _staged.GetSavedValue(option.Id) == ProjectOption.On)
@@ -262,9 +283,9 @@ namespace LongLeap.BuildManager.Editor
         {
             _staged.Set(option.Id, value);
 
-            // После правки часть настроек могла стать недоступной — их
-            // отложенные значения надо вернуть к сохранённым, иначе строка
-            // покажется изменённой, а Apply полез бы её писать.
+            // After an edit some options may have become unavailable. Their
+            // staged values must go back to the saved ones, otherwise the row
+            // would look changed and Apply would try to write it.
             ProjectOptionPresets.Reconcile(_staged);
 
             SyncPendingList();
@@ -282,14 +303,17 @@ namespace LongLeap.BuildManager.Editor
             return null;
         }
 
-        // ---------- отрисовка ----------
+        // ---------- drawing ----------
 
         private void DrawToolbar()
         {
             using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
             {
-                GUILayout.Label(DescribePreset(), EditorStyles.miniLabel);
+                GUILayout.Label(_presetLabel, EditorStyles.miniLabel);
                 GUILayout.FlexibleSpace();
+
+                if (GUILayout.Button("Settings", EditorStyles.toolbarButton))
+                    SettingsService.OpenProjectSettings(BuildManagerSettings.SettingsPath);
 
                 if (GUILayout.Button("Refresh", EditorStyles.toolbarButton))
                     _stateValid = false;
@@ -373,9 +397,8 @@ namespace LongLeap.BuildManager.Editor
                 List<ProjectOption> required = visible.Where(o => o.Required).ToList();
                 List<ProjectOption> optional = visible.Where(o => !o.Required).ToList();
 
-                // Подзаголовки рисуем только когда есть обе половины. Иначе
-                // одинокий «Optional» над единственной строкой DevTools —
-                // просто шум.
+                // Draw the subheaders only when both halves exist. Otherwise a
+                // lone "Optional" above a section's only row is just noise.
                 bool split = required.Count > 0 && optional.Count > 0;
 
                 DrawOptionGroup(split ? "Required" : null, required);
@@ -408,9 +431,9 @@ namespace LongLeap.BuildManager.Editor
             Rect row = GUILayoutUtility.GetRect(
                 0f, lineHeight + BuildManagerStyles.RowPadding * 2f);
 
-            // Фон рисуем ДО контрола и по заранее полученному прямоугольнику:
-            // GUILayoutUtility.GetLastRect после EditorGUILayout отстаёт на
-            // кадр, и подсветка мигала бы.
+            // Draw the background BEFORE the control, using a rect reserved up
+            // front: GUILayoutUtility.GetLastRect after EditorGUILayout lags by
+            // one frame, and the highlight would flicker.
             if (dirty)
                 BuildManagerStyles.DrawDirtyBackground(row);
 
@@ -478,9 +501,9 @@ namespace LongLeap.BuildManager.Editor
                 GUILayout.Label(availability.Reason, BuildManagerStyles.Reason);
         }
 
-        // Приписка говорит, ЧТО именно изменится, а не только что что-то
-        // изменилось: это тот сигнал подсветки, который работает и в оттенках
-        // серого, и при любом масштабе.
+        // The suffix says WHAT will change, not just that something changed:
+        // this is the highlight signal that works both in greyscale and at any
+        // scale.
         private string BuildLabel(ProjectOption option, string effective, bool dirty)
         {
             if (!dirty)
@@ -519,17 +542,7 @@ namespace LongLeap.BuildManager.Editor
                 foreach (ProjectOptionAction action in section.Actions)
                 {
                     string disabled = null;
-
-                    try
-                    {
-                        disabled = action.GetDisabledReason();
-                    }
-                    catch (Exception exception)
-                    {
-                        Debug.LogError(
-                            $"{Title}: the disabled-reason check for action '{action.Label}' " +
-                            $"threw. {exception}");
-                    }
+                    _actionDisabledReasons?.TryGetValue(action, out disabled);
 
                     string tooltip = disabled ?? action.Tooltip;
 
@@ -547,6 +560,32 @@ namespace LongLeap.BuildManager.Editor
 
                 GUILayout.FlexibleSpace();
             }
+        }
+
+        private static Dictionary<ProjectOptionAction, string> CollectActionDisabledReasons()
+        {
+            var reasons = new Dictionary<ProjectOptionAction, string>();
+
+            foreach (ProjectOptionSection section in ProjectOptionRegistry.Sections)
+            {
+                foreach (ProjectOptionAction action in section.Actions)
+                {
+                    try
+                    {
+                        reasons[action] = action.GetDisabledReason();
+                    }
+                    catch (Exception exception)
+                    {
+                        Debug.LogError(
+                            $"{Title}: the disabled-reason check for action '{action.Label}' " +
+                            $"threw and the action was disabled. {exception}");
+
+                        reasons[action] = "Its disabled-reason check threw — see the Console.";
+                    }
+                }
+            }
+
+            return reasons;
         }
 
         private void RunAction(ProjectOptionAction action)
@@ -619,7 +658,7 @@ namespace LongLeap.BuildManager.Editor
             }
         }
 
-        // ---------- подвал ----------
+        // ---------- footer ----------
 
         private void DrawFooter()
         {
@@ -657,7 +696,7 @@ namespace LongLeap.BuildManager.Editor
                     using (new EditorGUI.DisabledScope(buildBlocked != null))
                     {
                         if (GUILayout.Button(
-                                new GUIContent(BuildLabelText(), "Build with the options as applied."),
+                                new GUIContent(_buildLabel, "Build with the options as applied."),
                                 GUILayout.Height(24f)))
                         {
                             EditorApplication.delayCall += Build;
@@ -670,9 +709,10 @@ namespace LongLeap.BuildManager.Editor
             }
         }
 
-        // Подпись считаем по ОТЛОЖЕННОМУ состоянию, чтобы было видно, чем
-        // обернётся правка, ещё до Apply. Собирает при этом всегда применённая
-        // конфигурация — собрать из грязного состояния всё равно нельзя.
+        // The label is computed from the STAGED state, so you can see what an
+        // edit will lead to before Apply. The build itself always uses the
+        // applied configuration: building from a dirty state is not allowed
+        // anyway.
         private string BuildLabelText()
         {
             ProjectBuildTarget target = ProjectBuildTargets.Select(_staged);
@@ -680,21 +720,34 @@ namespace LongLeap.BuildManager.Editor
             return target == null ? "Build" : $"Build ({target.Label})";
         }
 
+        // Editor-state checks are cheap and change without any edit, so they
+        // run live. Everything that depends on the project comes from the
+        // reason RefreshDerived cached.
         private string BuildDisabledReason()
         {
             if (IsDirty)
                 return $"Apply first — {_pendingMap.Count} staged change(s). " +
                        "Defines need a recompile before they reach the build.";
 
-            if (_awaitingRecompile)
-                return "Waiting for script recompilation after Apply.";
-
             if (EditorApplication.isCompiling || EditorApplication.isUpdating)
                 return "Wait for script compilation and asset import to finish.";
+
+            // Before _awaitingRecompile: a failed compile does not reload the
+            // domain, so the flag stays set and "waiting" would be wrong.
+            if (EditorUtility.scriptCompilationFailed)
+                return "Fix the script compilation errors first (see the Console).";
+
+            if (_awaitingRecompile)
+                return "Waiting for script recompilation after Apply.";
 
             if (EditorApplication.isPlayingOrWillChangePlaymode)
                 return "Exit Play Mode first.";
 
+            return _buildBlockedReason;
+        }
+
+        private string ProjectBuildBlockedReason()
+        {
             if (!EditorBuildSettings.scenes.Any(scene => scene.enabled))
                 return "Enable at least one scene in File / Build Profiles.";
 
@@ -712,19 +765,29 @@ namespace LongLeap.BuildManager.Editor
             if (target == null)
                 return "No package registered a build target.";
 
-            ProjectBuildTargetAvailability availability = target.GetAvailability();
+            try
+            {
+                ProjectBuildTargetAvailability availability = target.GetAvailability();
 
-            return availability.IsAvailable ? null : availability.Reason;
+                return availability.IsAvailable ? null : availability.Reason;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError(
+                    $"{Title}: the availability check for build target '{target.Id}' threw. {exception}");
+
+                return $"The availability check for build target '{target.Id}' threw — see the Console.";
+            }
         }
 
-        // ---------- действия ----------
+        // ---------- actions ----------
 
         private void Apply()
         {
-            // Через delayCall, а не из OnGUI: запись дефайнов ставит в очередь
-            // перезагрузку домена, а DisplayDialog прокручивает цикл событий —
-            // и то и другое внутри блока IMGUI даёт «You are pushing more
-            // GUIClips than you are popping».
+            // Called through delayCall, not from OnGUI: writing defines queues
+            // a domain reload, and DisplayDialog pumps the event loop. Either
+            // one inside an IMGUI block causes "You are pushing more GUIClips
+            // than you are popping".
             _stateValid = false;
             EnsureState();
 
@@ -768,8 +831,13 @@ namespace LongLeap.BuildManager.Editor
                         confirmation.Confirm,
                         confirmation.Cancel))
                 {
-                    // Отменили одно подтверждение — теряем одну правку, а не
-                    // весь Apply.
+                    // Declining one confirmation drops one edit, not the whole
+                    // Apply.
+                    //
+                    // Known limit: off-cascades that this edit staged stay
+                    // staged. It cannot happen with today's descriptors:
+                    // DefineOption asks only when turning ON, and cascades
+                    // happen only when turning OFF.
                     _pendingMap.Remove(id);
                     cancelled.Add(option.Label);
                     continue;
@@ -778,31 +846,66 @@ namespace LongLeap.BuildManager.Editor
                 changes.Add(new Change(option, _saved.GetValue(id), to));
             }
 
+            // Edits whose write threw. They stay staged, so the row stays
+            // highlighted and Apply can be retried.
+            var failed = new List<Change>();
+
             if (changes.Count > 0)
             {
                 var context = new ProjectWriteContext();
 
-                // Порядок важен: сначала произвольные записи (они правят файлы
-                // на диске), потом ассеты, и только потом дефайны — компиляция,
-                // которую запустит запись дефайна, должна увидеть уже
-                // исправленные файлы.
-                foreach (Change change in changes.Where(c => c.Option is CustomOption))
-                    change.Option.Write(change.To, context);
+                // Order matters: custom writes first (they patch files on
+                // disk), then assets, and only then defines. The compile that
+                // the define write triggers must see the already-patched files.
+                IEnumerable<Change> ordered = changes.Where(c => c.Option is CustomOption)
+                    .Concat(changes.Where(c => c.Option is AssetEnumOption))
+                    .Concat(changes.Where(c => c.Option is DefineOption));
 
-                foreach (Change change in changes.Where(c => c.Option is AssetEnumOption))
-                    change.Option.Write(change.To, context);
+                var written = new List<Change>();
 
-                foreach (Change change in changes.Where(c => c.Option is DefineOption))
-                    change.Option.Write(change.To, context);
+                foreach (Change change in ordered)
+                {
+                    try
+                    {
+                        change.Option.Write(change.To, context);
+                        written.Add(change);
+                    }
+                    catch (Exception exception)
+                    {
+                        Debug.LogError(
+                            $"{Title}: writing '{change.Option.Label}' failed; the change stays " +
+                            $"staged. {exception}");
 
-                context.Log(Summary(changes));
+                        failed.Add(change);
+                    }
+                }
 
-                foreach (Change change in changes)
-                    context.Log(change.Option.DescribeApplied(change.To));
+                if (written.Count > 0)
+                {
+                    context.Log(Summary(written));
 
-                ProjectWriteResult result = context.Flush();
+                    foreach (Change change in written)
+                        context.Log(change.Option.DescribeApplied(change.To));
+                }
 
-                _awaitingRecompile = result.DefinesChanged;
+                try
+                {
+                    // Asset and define writes are buffered until here; only
+                    // custom writes already went to disk.
+                    ProjectWriteResult result = context.Flush();
+
+                    _awaitingRecompile = result.DefinesChanged;
+                }
+                catch (Exception exception)
+                {
+                    // Nothing buffered is known to have landed, so keep every
+                    // change staged. Custom writes are re-run on the next Apply.
+                    Debug.LogError(
+                        $"{Title}: writing the build options failed; all changes stay staged. " +
+                        $"{exception}");
+
+                    failed.AddRange(written);
+                }
             }
 
             if (cancelled.Count > 0)
@@ -813,6 +916,10 @@ namespace LongLeap.BuildManager.Editor
             }
 
             _pendingMap.Clear();
+
+            foreach (Change change in failed)
+                _pendingMap[change.Option.Id] = change.To;
+
             SyncPendingList();
 
             _stateValid = false;
@@ -841,8 +948,9 @@ namespace LongLeap.BuildManager.Editor
 
         private void Revert()
         {
-            // Перечитываем, а не просто чистим: проект мог уехать с тех пор,
-            // как окно открыли, и «вернуть как в проекте» значит именно это.
+            // Re-read rather than just clear: the project may have moved on
+            // since the window was opened, and "revert to the project" means
+            // exactly that.
             _pendingMap?.Clear();
             _pending.Clear();
             _selectedPresetId = null;

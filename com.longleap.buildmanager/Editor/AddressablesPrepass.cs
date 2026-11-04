@@ -5,24 +5,25 @@ using System.Reflection;
 
 namespace LongLeap.BuildManager.Editor
 {
-    // Сборка контента Addressables перед сборкой плеера.
+    // Builds Addressables content before the player build.
     //
-    // Зачем вообще: в проекте m_BuildAddressablesWithPlayerBuild = 0 и ни одна
-    // строка кода не вызывает BuildPlayerContent. То есть бандлы не собирает
-    // НИКТО, и сборка плеера уносит с собой те, что лежали с прошлого раза.
+    // Why at all: when Addressables is set not to build content with the
+    // player (Build Addressables on Player Build = Do not Build) and nothing
+    // calls BuildPlayerContent, NOBODY builds the bundles, and the player
+    // build ships whatever was left from last time.
     //
-    // Почему через рефлексию: пакет окна обязан собираться и в проекте без
-    // Addressables. Жёсткая зависимость сделала бы Addressables обязательным
-    // для всех, кто возьмёт Build Manager.
+    // Why through reflection: the window package must compile in a project
+    // without Addressables. A hard dependency would make Addressables mandatory
+    // for everyone who takes Build Manager.
     //
-    // Решения на краях:
-    //   пакета нет           -> молча пропускаем, это нормальный проект;
-    //   настроек нет         -> пропускаем с сообщением;
-    //   API не нашёлся       -> ОТМЕНЯЕМ сборку. Молча уехавшие устаревшие
-    //                           бандлы хуже упавшей сборки, и только громкий
-    //                           отказ заставит починить рефлексию после
-    //                           обновления пакета;
-    //   Unity соберёт сама   -> пропускаем, чтобы не делать работу дважды.
+    // Edge-case decisions:
+    //   package missing      -> skip silently, that is a normal project;
+    //   no settings          -> skip with a message;
+    //   API not found        -> CANCEL the build. Silently shipped stale
+    //                           bundles are worse than a failed build, and only
+    //                           a loud failure forces someone to fix the
+    //                           reflection after a package update;
+    //   Unity builds it      -> skip, so the work is not done twice.
     internal static class AddressablesPrepass
     {
         private const string EditorAssembly = "Unity.Addressables.Editor";
@@ -30,9 +31,10 @@ namespace LongLeap.BuildManager.Editor
         private const string SettingsType =
             "UnityEditor.AddressableAssets.Settings.AddressableAssetSettings";
 
-        // Внимание: этот тип лежит в UnityEditor.AddressableAssets, а не в
-        // ...AddressableAssets.Settings, куда его тянет положить соседство с
-        // AddressableAssetSettings. Ровно на этом прошлая версия и падала.
+        // Careful: this type lives in UnityEditor.AddressableAssets, not in
+        // ...AddressableAssets.Settings, where its closeness to
+        // AddressableAssetSettings tempts you to put it. An earlier version of
+        // this class failed on exactly that.
         private const string DefaultObjectType =
             "UnityEditor.AddressableAssets.AddressableAssetSettingsDefaultObject";
 
@@ -41,65 +43,28 @@ namespace LongLeap.BuildManager.Editor
             NotInstalled,
             NoSettings,
             AlreadyBuiltWithPlayer,
+
+            // Check only: Run would build the content.
+            WillBuild,
+
+            // Run only: the content was built.
             Built,
+
+            // Run: the build failed or the API is missing. Check: the API is
+            // missing, so Run would cancel the player build.
             Failed,
         }
 
+        // What Run would do, without building anything. For the window's
+        // pre-build warnings, so they match what the build will really do.
+        public static Outcome Check(out string message) => Prepare(out _, out message);
+
         public static Outcome Run(out string message)
         {
-            message = null;
+            Outcome outcome = Prepare(out MethodInfo build, out message);
 
-            Assembly assembly = AppDomain.CurrentDomain
-                .GetAssemblies()
-                .FirstOrDefault(a => a.GetName().Name == EditorAssembly);
-
-            if (assembly == null)
-                return Outcome.NotInstalled;
-
-            Type defaultObject = Resolve(assembly, DefaultObjectType);
-            Type settingsType = Resolve(assembly, SettingsType);
-
-            if (defaultObject == null || settingsType == null)
-            {
-                message =
-                    $"Addressables is installed but neither {DefaultObjectType} nor a type named " +
-                    $"AddressableAssetSettingsDefaultObject / AddressableAssetSettings was found in " +
-                    $"{EditorAssembly}. The package API moved; fix AddressablesPrepass.";
-                return Outcome.Failed;
-            }
-
-            PropertyInfo exists = defaultObject.GetProperty(
-                "SettingsExists", BindingFlags.Public | BindingFlags.Static);
-
-            if (exists == null)
-            {
-                message =
-                    $"Addressables is installed but {DefaultObjectType}.SettingsExists was not " +
-                    "found. The package API moved; fix AddressablesPrepass.";
-                return Outcome.Failed;
-            }
-
-            if (!(bool)exists.GetValue(null))
-                return Outcome.NoSettings;
-
-            if (BuildsWithPlayer(defaultObject, settingsType))
-                return Outcome.AlreadyBuiltWithPlayer;
-
-            // Берём перегрузку с out-параметром именно ради того, чтобы узнать
-            // об ошибке: у версии без него результат никуда не возвращается.
-            MethodInfo build = settingsType
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .FirstOrDefault(m => m.Name == "BuildPlayerContent"
-                                     && m.GetParameters().Length == 1
-                                     && m.GetParameters()[0].IsOut);
-
-            if (build == null)
-            {
-                message =
-                    $"Addressables is installed but {SettingsType}.BuildPlayerContent(out result) " +
-                    "was not found. The package API moved; fix AddressablesPrepass.";
-                return Outcome.Failed;
-            }
+            if (outcome != Outcome.WillBuild)
+                return outcome;
 
             var arguments = new object[1];
 
@@ -127,8 +92,75 @@ namespace LongLeap.BuildManager.Editor
             return Outcome.Built;
         }
 
-        // Unity умеет собирать контент вместе с плеером сама. Если так
-        // настроено — не дублируем: полная пересборка бандлов не бесплатна.
+        // Everything Run needs before it builds: resolves the API and reads the
+        // settings. Returns WillBuild with the build method when there is
+        // content to build.
+        private static Outcome Prepare(out MethodInfo build, out string message)
+        {
+            build = null;
+            message = null;
+
+            Assembly assembly = FindEditorAssembly();
+
+            if (assembly == null)
+                return Outcome.NotInstalled;
+
+            Type defaultObject = Resolve(assembly, DefaultObjectType);
+            Type settingsType = Resolve(assembly, SettingsType);
+
+            if (defaultObject == null || settingsType == null)
+            {
+                message =
+                    $"Addressables is installed but {DefaultObjectType} or {SettingsType} was not " +
+                    $"found in {EditorAssembly}, not even by its short name. The package API " +
+                    "moved; fix AddressablesPrepass.";
+                return Outcome.Failed;
+            }
+
+            PropertyInfo exists = defaultObject.GetProperty(
+                "SettingsExists", BindingFlags.Public | BindingFlags.Static);
+
+            if (exists == null)
+            {
+                message =
+                    $"Addressables is installed but {DefaultObjectType}.SettingsExists was not " +
+                    "found. The package API moved; fix AddressablesPrepass.";
+                return Outcome.Failed;
+            }
+
+            if (!(bool)exists.GetValue(null))
+                return Outcome.NoSettings;
+
+            if (BuildsWithPlayer(defaultObject, settingsType))
+                return Outcome.AlreadyBuiltWithPlayer;
+
+            // The overload with the out parameter is taken precisely to learn
+            // about errors: the one without it returns its result nowhere.
+            build = settingsType
+                .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .FirstOrDefault(m => m.Name == "BuildPlayerContent"
+                                     && m.GetParameters().Length == 1
+                                     && m.GetParameters()[0].IsOut);
+
+            if (build == null)
+            {
+                message =
+                    $"Addressables is installed but {SettingsType}.BuildPlayerContent(out result) " +
+                    "was not found. The package API moved; fix AddressablesPrepass.";
+                return Outcome.Failed;
+            }
+
+            return Outcome.WillBuild;
+        }
+
+        private static Assembly FindEditorAssembly() =>
+            AppDomain.CurrentDomain
+                .GetAssemblies()
+                .FirstOrDefault(a => a.GetName().Name == EditorAssembly);
+
+        // Unity can build the content together with the player by itself. If it
+        // is set up that way, do not duplicate it: a full bundle rebuild is not
+        // free.
         private static bool BuildsWithPlayer(Type defaultObject, Type settingsType)
         {
             try
@@ -145,25 +177,25 @@ namespace LongLeap.BuildManager.Editor
                         BindingFlags.Public | BindingFlags.Instance)
                     ?.GetValue(settings);
 
-                // Имя члена перечисления, а не число: PlayerBuildOption лежит
-                // в чужом пакете и её порядок нам не принадлежит.
+                // The enum member name, not its number: PlayerBuildOption lives
+                // in someone else's package and its order is not ours.
                 return value != null && value.ToString() == "BuildWithPlayer";
             }
             catch (Exception)
             {
-                // Не смогли прочитать — соберём сами. Лишняя пересборка это
-                // потерянное время, пропущенная — уехавшие устаревшие бандлы.
+                // Could not read it, so build ourselves. An extra rebuild costs
+                // time; a missed one ships stale bundles.
                 return false;
             }
         }
 
-        // Сначала полное имя, потом короткое.
+        // Full name first, then the short name.
         //
-        // Пространство имён у этих двух типов уже один раз оказалось не тем,
-        // что ожидалось (DefaultObject живёт НЕ рядом с Settings), и цена
-        // ошибки — отменённая сборка. Поиск по короткому имени внутри той же
-        // сборки переживает переезд между пространствами имён; имя самого типа
-        // меняется гораздо реже.
+        // The namespace of these two types has already once turned out not to
+        // be what was expected (DefaultObject does NOT live next to Settings),
+        // and the cost of that mistake is a cancelled build. A lookup by short
+        // name inside the same assembly survives a move between namespaces; the
+        // type name itself changes far less often.
         private static Type Resolve(Assembly assembly, string fullName)
         {
             if (assembly == null)
@@ -195,25 +227,6 @@ namespace LongLeap.BuildManager.Editor
             {
                 return exception.Types.Where(t => t != null);
             }
-        }
-
-        public static bool IsInstalled =>
-            AppDomain.CurrentDomain.GetAssemblies()
-                .Any(a => a.GetName().Name == EditorAssembly);
-
-        // Для замечания в окне: собирает ли Unity контент сама.
-        public static bool WillUnityBuildContent()
-        {
-            Assembly assembly = AppDomain.CurrentDomain
-                .GetAssemblies()
-                .FirstOrDefault(a => a.GetName().Name == EditorAssembly);
-
-            Type defaultObject = Resolve(assembly, DefaultObjectType);
-            Type settingsType = Resolve(assembly, SettingsType);
-
-            return defaultObject != null
-                   && settingsType != null
-                   && BuildsWithPlayer(defaultObject, settingsType);
         }
     }
 }

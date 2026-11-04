@@ -11,6 +11,13 @@
     "tooling",
     "longleap"
   ],
+  "author": {
+    "name": "LongLeap"
+  },
+  "license": "SEE LICENSE IN LICENSE.md",
+  "documentationUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.buildmanager/README.md",
+  "changelogUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.buildmanager/CHANGELOG.md",
+  "licensesUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.buildmanager/LICENSE.md",
   "dependencies": {
     "com.longleap.core": "0.1.0"
   }

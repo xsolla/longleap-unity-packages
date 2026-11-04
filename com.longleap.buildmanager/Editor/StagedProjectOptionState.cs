@@ -3,12 +3,12 @@ using LongLeap.Core.Editor;
 
 namespace LongLeap.BuildManager.Editor
 {
-    // Сохранённое состояние плюс незаписанные правки.
+    // The saved state plus the unwritten edits.
     //
-    // Это то представление, против которого окно считает доступность — и
-    // именно поэтому строка «Debug Panel» гаснет в тот же миг, когда сняли
-    // галочку «Sign-in Enabled», ещё до Apply. Меню в это же время считает
-    // доступность против сохранённого состояния и ведёт себя как раньше.
+    // This is the view the window computes availability against, and that is
+    // why a dependent row (a debug panel, say) is disabled the moment the
+    // feature it depends on is unchecked, before Apply. Menu items meanwhile
+    // compute availability against the saved state.
     internal sealed class StagedProjectOptionState : IStagedOptionState
     {
         private readonly SavedProjectOptionState _saved;
@@ -34,10 +34,10 @@ namespace LongLeap.BuildManager.Editor
 
         public bool IsDefineOn(string symbol)
         {
-            // Если за символом стоит зарегистрированная настройка, отвечаем по
-            // отложенному значению. Незарегистрированные символы (их может
-            // поставить кто-то руками в Player Settings) читаем из
-            // сохранённого состояния — других сведений о них нет.
+            // If a registered option stands behind the symbol, answer from the
+            // staged value. Unregistered symbols (someone may set them by hand
+            // in Player Settings) are read from the saved state: there is
+            // nothing else known about them.
             if (ProjectOptionRegistry.TryGetDefineOption(symbol, out DefineOption option))
             {
                 string value = GetValue(option.Id);
@@ -57,25 +57,48 @@ namespace LongLeap.BuildManager.Editor
             if (!ProjectOptionRegistry.TryGetOption(optionId, out ProjectOption option))
                 return;
 
-            // Значение, равное сохранённому, НЕ храним. Из-за этого «изменено
-            // ли» — это просто наличие ключа, а два щелчка по галочке сами
-            // убирают подсветку.
-            if (value == _saved.GetValue(optionId))
-                _pending.Remove(optionId);
-            else
-                _pending[optionId] = value;
+            Stage(optionId, value);
 
             if (!(option is DefineOption define) || value == ProjectOption.On)
                 return;
 
-            // Каскад: выключили вход — отладке входа взяться уже не от чего.
-            // Это НЕ то же, что погасить строку: символ действительно уходит
-            // из набора, ровно как в XsollaIdMenu.SetDefine.
-            foreach (string dependent in define.CascadeOffSymbols)
+            // Cascade: with a feature off, its dependent defines (its debug
+            // mode, say) have nothing left to work on. This is NOT the same as
+            // disabling the row: the symbol really leaves the set, exactly as
+            // DefineOption.Write does when the option is written from a menu.
+            //
+            // Walked with a queue and a visited set rather than recursion, so
+            // two descriptors that cascade into each other cannot overflow the
+            // stack.
+            var visited = new HashSet<string> { define.Id };
+            var queue = new Queue<DefineOption>();
+            queue.Enqueue(define);
+
+            while (queue.Count > 0)
             {
-                if (ProjectOptionRegistry.TryGetDefineOption(dependent, out DefineOption cascaded))
-                    Set(cascaded.Id, ProjectOption.Off);
+                foreach (string dependent in queue.Dequeue().CascadeOffSymbols)
+                {
+                    if (!ProjectOptionRegistry.TryGetDefineOption(dependent, out DefineOption cascaded))
+                        continue;
+
+                    if (!visited.Add(cascaded.Id))
+                        continue;
+
+                    Stage(cascaded.Id, ProjectOption.Off);
+                    queue.Enqueue(cascaded);
+                }
             }
+        }
+
+        // A value equal to the saved one is NOT stored. Because of that, "is it
+        // changed" is just the presence of the key, and clicking a checkbox
+        // twice clears the highlight by itself.
+        private void Stage(string optionId, string value)
+        {
+            if (value == _saved.GetValue(optionId))
+                _pending.Remove(optionId);
+            else
+                _pending[optionId] = value;
         }
 
         public void Clear(string optionId) => _pending.Remove(optionId);
