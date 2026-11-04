@@ -32,7 +32,10 @@ Adds params to every envelope at send time (`TrySetParam`, which never overwrite
 Delivers a batch and reports a `SendResult`. `Ga4Backend`, `ConsoleAnalyticsBackend` and `NullAnalyticsBackend` are built in.
 
 **Transport** (`IAnalyticsTransport`):
-Moves one HTTP POST for `Ga4Backend`. `UnityWebRequestAnalyticsTransport` is the default; `WebGlBeaconTransport` lives in `com.longleap.platform.webgl`. A transport with a size limit also implements `IAnalyticsTransportLimits`.
+Moves one HTTP POST for `Ga4Backend`. `UnityWebRequestAnalyticsTransport` is the default; `WebGlBeaconTransport` (`navigator.sendBeacon`, survives tab close, bodies capped at 60 kB) is the WebGL one. A transport with a size limit also implements `IAnalyticsTransportLimits`.
+
+**Page lifecycle** (`WebGlPageLifecycle`):
+Maps the browser's page visibility (`visibilitychange`, `pagehide`, `pageshow`) to `SetForeground`. Hidden means background, which flushes the queue. While attached, `AnalyticsFlushDriver`'s focus tracking is off for the same service; detaching switches it back on. The JavaScript side is `LongLeapAnalytics.jslib`; its functions are prefixed `LongLeapAnalytics` to avoid clashes with other plugins.
 
 **Settings** (`Ga4Settings`):
 Project-level GA4 data: measurement ID, API secret, endpoint, validate-only. A sealed class, not an interface, so it can grow without breaking anyone. `Ga4ConfigSO` is the asset form.
@@ -86,4 +89,4 @@ A random per-installation ID (`AnalyticsClientId`), stored in `IPlayerPrefs`. It
 
 - **Analytics → Core**: `IExperimentInfoProvider` and `AbExperimentInfo` for experiment tags, `IPlayerPrefs` for the client ID.
 - **RemoteConfig → Core**: `RemoteConfigService` implements `IExperimentInfoProvider`. Analytics and RemoteConfig don't reference each other; the game wires them with `new ExperimentEnricher(remoteConfig)`.
-- **Platform.WebGL → Analytics**: provides `WebGlBeaconTransport` (an `IAnalyticsTransport` with limits) and `WebGlPageLifecycle`, and switches off the flush driver's focus tracking.
+- **Analytics ↛ Tools**: `WebGlPageLifecycle` keeps its own visibility listener instead of using `LongLeap.Tools.PageVisibility`, so analytics does not depend on tools (and through it on the Input System and UGUI).

@@ -5,7 +5,7 @@ namespace LongLeap.Analytics
     // Moves one HTTP POST. Kept separate from the backend so the payload format
     // lives in one place while the way bytes leave the device can change:
     // UnityWebRequest by default, navigator.sendBeacon on WebGL
-    // (com.longleap.platform.webgl), a fake in tests.
+    // (WebGlBeaconTransport), a fake in tests.
     //
     // Must not throw for network problems: report them as
     // AnalyticsHttpResponse.NetworkError.

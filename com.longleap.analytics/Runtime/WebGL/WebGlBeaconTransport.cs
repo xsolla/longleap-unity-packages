@@ -1,10 +1,9 @@
 using System.Threading.Tasks;
-using LongLeap.Analytics;
 #if UNITY_WEBGL && !UNITY_EDITOR
 using System.Runtime.InteropServices;
 #endif
 
-namespace LongLeap.Platform.WebGL
+namespace LongLeap.Analytics
 {
     // Sends analytics requests with navigator.sendBeacon. Unlike
     // UnityWebRequest, the browser delivers a beacon even when the tab is

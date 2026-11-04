@@ -16,10 +16,10 @@ namespace LongLeap.Analytics
     // again. The driver does not own the service: dispose the service
     // yourself, and Detach the driver if the service is replaced.
     //
-    // On WebGL attach WebGlPageLifecycle (com.longleap.platform.webgl) too.
-    // Page visibility is a better background signal than focus (focus is also
-    // lost when the player clicks outside the canvas, e.g. on a portal page),
-    // so WebGlPageLifecycle switches focus tracking off for its service.
+    // On WebGL attach WebGlPageLifecycle too. Page visibility is a better
+    // background signal than focus (focus is also lost when the player clicks
+    // outside the canvas, e.g. on a portal page), so WebGlPageLifecycle
+    // switches focus tracking off for its service while it is attached.
     [AddComponentMenu("")]
     [DisallowMultipleComponent]
     public sealed class AnalyticsFlushDriver : MonoBehaviour
@@ -61,11 +61,20 @@ namespace LongLeap.Analytics
 
         // Stops using window focus as the background signal for this service.
         // For components that report visibility themselves (WebGlPageLifecycle).
-        // Works whether the driver is attached before or after.
+        // Works whether the driver is attached before or after. Undo it with
+        // EnableFocusTracking when that component goes away.
         public static void DisableFocusTracking(IAnalyticsService service)
         {
             if (service != null)
                 FocusTrackingOff.Add(service);
+        }
+
+        // Uses window focus as the background signal again (the default) and
+        // forgets the service, so the set does not keep it alive.
+        public static void EnableFocusTracking(IAnalyticsService service)
+        {
+            if (service != null)
+                FocusTrackingOff.Remove(service);
         }
 
         // Destroys the driver's GameObject. The service is left untouched.

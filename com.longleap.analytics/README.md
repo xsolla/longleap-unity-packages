@@ -18,7 +18,8 @@ Backends (GA4, console, null) and HTTP transports (UnityWebRequest, WebGL beacon
 | `com.longleap.core` | `IExperimentInfoProvider` / `AbExperimentInfo` for experiment tagging, `IPlayerPrefs` for the client ID and `UnityPlayerPrefsAdapter` (its `PlayerPrefs` implementation, used in the quick start) |
 | `com.unity.nuget.newtonsoft-json` | Request serialization |
 | `com.unity.modules.unitywebrequest` | Default HTTP transport |
-| `com.longleap.platform.webgl` (optional) | `WebGlBeaconTransport` and `WebGlPageLifecycle` for WebGL builds |
+
+The WebGL beacon transport and page-visibility hook are part of this package (see [WebGL](#webgl)); no extra package is needed.
 
 ## GA4 setup
 
@@ -33,7 +34,6 @@ The API secret ships inside the build and can be extracted. Treat it as public, 
 ```csharp
 using LongLeap.Analytics;
 using LongLeap.Core;             // UnityPlayerPrefsAdapter
-using LongLeap.Platform.WebGL;   // optional, WebGL builds
 
 IAnalyticsBackend backend;
 if (ga4ConfigAsset.IsConfigured)
@@ -65,7 +65,7 @@ analytics.Send(new AnalyticsEvent("tutorial_completed").With("step_count", 7));
 
 Dispose the service when the game shuts down. `Dispose` makes one last delivery attempt.
 
-Without `com.longleap.platform.webgl`, omit the transport argument and the `WebGlPageLifecycle` line. `Ga4Backend` then uses `UnityWebRequestAnalyticsTransport`.
+A game that never ships to WebGL can omit the transport argument and the `WebGlPageLifecycle` line; `Ga4Backend` then uses `UnityWebRequestAnalyticsTransport`. Both are harmless on other platforms.
 
 ## Defining events
 
@@ -137,8 +137,10 @@ The constants are in `Ga4Rules`.
 | `IAnalyticsTransport` / `AnalyticsHttpResponse` | Interface / struct | One HTTP POST |
 | `IAnalyticsTransportLimits` | Interface | Optional on a transport: `MaxBodyBytes` |
 | `UnityWebRequestAnalyticsTransport` | Sealed class | Default transport |
+| `WebGlBeaconTransport` | Sealed class, `IAnalyticsTransportLimits` | `navigator.sendBeacon` POST, bodies ≤ 60 kB. `IsSupported`, `CreateForCurrentPlatform(settings)` |
+| `WebGlPageLifecycle` | MonoBehaviour | `Attach(service)` (one per service), `TryGet`, `Detach`. Page visibility → `SetForeground` |
 | `AnalyticsClientId` | Static class | `GetOrCreate(prefs)` / `Reset(prefs)` for a persistent random client ID |
-| `AnalyticsFlushDriver` | MonoBehaviour | `Attach(service)` (one per service), `TryGet`, `Detach`, `DisableFocusTracking(service)` |
+| `AnalyticsFlushDriver` | MonoBehaviour | `Attach(service)` (one per service), `TryGet`, `Detach`, `DisableFocusTracking(service)` / `EnableFocusTracking(service)` |
 
 ## How it works
 
@@ -229,6 +231,44 @@ Both values are sent at the request level. `Ga4PayloadBuilder` starts a new requ
 
 The service is main-thread only. The `UnityWebRequest` transport completes on the main thread. A custom backend or transport must not resume on a worker thread.
 
+## WebGL
+
+Two types in `Runtime/WebGL`, with their JavaScript side in `Runtime/WebGL/LongLeapAnalytics.jslib`. Nothing needs to be added to the WebGL template. Both compile on every platform:
+
+- **`WebGlBeaconTransport`** sends GA4 requests with `navigator.sendBeacon`. The browser delivers these even while the tab is closing; a `UnityWebRequest` still running at that moment is lost. `CreateForCurrentPlatform(settings)` returns it in WebGL players. Everywhere else (including the Editor), and whenever `settings.ValidateOnly` is set, it returns `UnityWebRequestAnalyticsTransport`, because validation needs to read GA4's response.
+- **`WebGlPageLifecycle`** reports page visibility to the service. Hidden page → `SetForeground(false)`, which flushes the queue while the page can still send. Visible again (including a back/forward cache restore) → `SetForeground(true)`. Unity raises no callback when a tab closes. It does nothing outside WebGL players.
+
+### Behaviour worth knowing
+
+- **Delivery is what the browser reports.** A beacon is fire-and-forget: the page never sees GA4's answer.
+  - Accepted by the browser: counts as delivered (HTTP 204) and is never retried.
+  - Refused: reported as a network error. The service logs it and retries with backoff, without using up an attempt.
+  - There is no `fetch` fallback on purpose. `fetch` with `keepalive` shares the beacon quota and fails only later, after a success would already have been reported.
+- **Quota.** Browsers refuse new beacons once those still in flight exceed about 64 KB. Each request is capped at 60 kB (`Ga4Backend` splits larger ones), so one request always fits on its own. A big flush at tab close can still be partly refused, and whatever is refused then is lost with the page. Frequent flushes (`BatchSize`, `FlushIntervalSeconds`) keep the final flush small.
+- **CORS.** Bodies are sent as `text/plain` (a CORS "simple" request), so no preflight is needed. GA4 parses the JSON regardless of the content type.
+- **Focus vs visibility.** While a `WebGlPageLifecycle` is attached, `AnalyticsFlushDriver`'s focus tracking is off for that service: losing focus (clicking outside the canvas on a portal page) no longer counts as background; only hiding the page does. `Detach()` switches focus tracking back on.
+- **Listeners.** The jslib listens to `visibilitychange`, `pagehide` and `pageshow` and calls back into C# directly (a function pointer plus an instance id), so the GameObject's name does not matter. Duplicate states are filtered. `Detach()` (or destroying the object) removes the listeners.
+
+### JavaScript functions
+
+| Function | C# caller | Notes |
+|---|---|---|
+| `LongLeapAnalyticsSendBeacon(url, body)` | `WebGlBeaconTransport` | Returns 1 only when the browser queued the request |
+| `LongLeapAnalyticsWatchVisibility(id, callback)` | `WebGlPageLifecycle.Attach` | Registers the visibility listeners; calls `callback(id, hidden)` |
+| `LongLeapAnalyticsUnwatchVisibility(id)` | `WebGlPageLifecycle.OnDestroy` | Removes them |
+
+### Manual test checklist (WebGL build)
+
+None of this runs in the Editor. Check it in a real build before each release, with the browser's DevTools Network tab open and filtered to `collect`:
+
+1. **Normal sending:** play for a minute. Beacon requests (type `ping`/`beacon`) to `/mp/collect` appear about every `FlushIntervalSeconds` while events are sent.
+2. **Tab switch:** send a few events and switch tabs straight away. A beacon goes out on hide.
+3. **Tab close:** send a few events and close the tab. With DevTools "Preserve log" on, or in `chrome://net-export`, the final beacon is visible.
+4. **Portal focus:** in an iframe portal (e.g. GamePix), click outside the canvas while the game stays visible. No flush, and engagement keeps counting.
+5. **Back/forward cache:** navigate away and back. The game resumes, and events after the return carry a sensible `engagement_time_msec`.
+6. **Validation:** build with `ValidateOnly` on. The console shows `Ga4Backend: validation passed` (this uses UnityWebRequest).
+7. **GA4 DebugView / Realtime:** events appear with the right device category, OS and language.
+
 ## Writing a backend
 
 Implement `IAnalyticsBackend`:
@@ -247,4 +287,4 @@ The EditMode tests are in `Tests/EditMode` and make no network calls:
 
 To run them in a project, add `com.longleap.analytics` to `testables` in `Packages/manifest.json`.
 
-WebGL behaviour can only be checked in a browser; see the checklist in `com.longleap.platform.webgl/README.md`.
+WebGL behaviour can only be checked in a browser; see the [manual test checklist](#manual-test-checklist-webgl-build).

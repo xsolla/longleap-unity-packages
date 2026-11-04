@@ -25,15 +25,14 @@ mergeInto(LibraryManager.library, {
         return 0;
     },
 
-    // Reports page visibility to a GameObject via SendMessage: OnPageHidden
-    // when the tab is hidden or the page is being unloaded, OnPageVisible when
-    // it is shown again (including a back/forward cache restore). Duplicate
-    // states are filtered. Listeners are kept per GameObject so they can be
-    // removed again by LongLeapAnalyticsUnwatchVisibility.
-    LongLeapAnalyticsWatchVisibility: function (gameObjectNamePtr) {
-        var target = UTF8ToString(gameObjectNamePtr);
+    // Reports page visibility by calling callback(id, hidden): hidden = 1 when
+    // the tab is hidden or the page is being unloaded, 0 when it is shown
+    // again (including a back/forward cache restore). Duplicate states are
+    // filtered. Listeners are kept per id so that
+    // LongLeapAnalyticsUnwatchVisibility can remove them.
+    LongLeapAnalyticsWatchVisibility: function (id, callback) {
         var watchers = Module.longLeapAnalyticsWatchers || (Module.longLeapAnalyticsWatchers = {});
-        if (watchers[target]) {
+        if (watchers[id]) {
             return;
         }
 
@@ -44,7 +43,7 @@ mergeInto(LibraryManager.library, {
                 return;
             }
             state.hidden = isHidden;
-            SendMessage(target, isHidden ? 'OnPageHidden' : 'OnPageVisible');
+            {{{ makeDynCall('vii', 'callback') }}}(id, isHidden ? 1 : 0);
         }
 
         var handlers = {
@@ -56,13 +55,12 @@ mergeInto(LibraryManager.library, {
         document.addEventListener('visibilitychange', handlers.visibilitychange);
         window.addEventListener('pagehide', handlers.pagehide);
         window.addEventListener('pageshow', handlers.pageshow);
-        watchers[target] = handlers;
+        watchers[id] = handlers;
     },
 
-    LongLeapAnalyticsUnwatchVisibility: function (gameObjectNamePtr) {
-        var target = UTF8ToString(gameObjectNamePtr);
+    LongLeapAnalyticsUnwatchVisibility: function (id) {
         var watchers = Module.longLeapAnalyticsWatchers;
-        var handlers = watchers && watchers[target];
+        var handlers = watchers && watchers[id];
         if (!handlers) {
             return;
         }
@@ -70,6 +68,6 @@ mergeInto(LibraryManager.library, {
         document.removeEventListener('visibilitychange', handlers.visibilitychange);
         window.removeEventListener('pagehide', handlers.pagehide);
         window.removeEventListener('pageshow', handlers.pageshow);
-        delete watchers[target];
+        delete watchers[id];
     }
 });

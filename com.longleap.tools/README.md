@@ -1,6 +1,6 @@
 # LongLeap Tools
 
-Shared tools for every game. Currently: the **global device profile** (runtime), **building blocks for code-built UI** (runtime) and the **WebGL page mode** (editor).
+Shared tools for every game. Currently: the **global device profile** (runtime), **page visibility** in the browser (runtime), **building blocks for code-built UI** (runtime) and the **WebGL page mode** (editor).
 
 ## Runtime UI
 
@@ -72,11 +72,29 @@ Mode, orientation and pixel density are project settings: they live in `ProjectS
 
 The HTML edits themselves are pure functions in `WebGlPageHtml` (string in, string out, covered by tests); `WebGlPagePostprocessor` only reads the file, takes the settings and logs. Neither class depends on the game.
 
+## Page visibility
+
+`PageVisibility` (assembly `LongLeap.Tools`) tells whether the browser tab with the game is hidden: switched away from, minimized, or being closed. On the web this is the reliable "the player left" signal. Unity raises no callback when a tab closes, and window focus is also lost when the player clicks outside the canvas while the game stays on screen (a portal page around an iframe).
+
+```csharp
+using LongLeap.Tools;
+
+PageVisibility.Changed += hidden => { if (hidden) Save(); };
+if (PageVisibility.IsHidden) { /* tab is in background right now */ }
+```
+
+- Listens to `visibilitychange`, `pagehide` and `pageshow` through `LongLeapTools.jslib`. A back/forward cache restore counts as shown again. Duplicate states are filtered.
+- The browser listener is registered on the first subscription and kept for the page's lifetime. `IsHidden` is current from then on.
+- Only WebGL players report anything (`IsSupported`). Elsewhere, including the Editor, `IsHidden` stays false and `Changed` never fires, so keep `OnApplicationPause` for native mobile.
+- Handlers run synchronously inside the browser event, on the main thread. An exception in one handler is logged and does not stop the others. Work started there is the last chance before the page may be gone; an awaited continuation may never run.
+
+`com.longleap.analytics` has its own listener (`WebGlPageLifecycle`) so that it does not depend on this package.
+
 ## Assemblies
 
 | Assembly | Contents |
 |---|---|
-| `LongLeap.Tools` | `DeviceProfile`, `DeviceInfo`, `LongLeapTools.jslib` (depends on Unity.InputSystem) |
+| `LongLeap.Tools` | `DeviceProfile`, `DeviceInfo`, `PageVisibility`, `LongLeapTools.jslib` (depends on Unity.InputSystem) |
 | `LongLeap.Tools.UI` | `RuntimeUi`, `RuntimeUiTheme` (depends on UGUI and TextMeshPro) |
 | `LongLeap.Tools.Editor` | `WebGlPagePostprocessor`, `WebGlPageHtml`, `WebGlPageSettings`, the `Tools/Device Profile` menu |
 | `LongLeap.Tools.Tests` | EditMode tests (`Tests/EditMode`); visible in the Test Runner when the package is listed in the manifest's `testables` |

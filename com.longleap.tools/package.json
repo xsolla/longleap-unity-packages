@@ -2,7 +2,7 @@
   "name": "com.longleap.tools",
   "version": "0.1.0",
   "displayName": "LongLeap Tools",
-  "description": "Shared tools for every game: global device profile (desktop / mobile / web desktop / web mobile), code-built UI bricks (RuntimeUi) and the WebGL page mode editor tool.",
+  "description": "Shared tools for every game: global device profile (desktop / mobile / web desktop / web mobile), browser page visibility (tab hidden / shown), code-built UI bricks (RuntimeUi) and the WebGL page mode editor tool.",
   "unity": "6000.0",
   "keywords": ["tools", "device", "platform", "webgl", "longleap"],
   "dependencies": {

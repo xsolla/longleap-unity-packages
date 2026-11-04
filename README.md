@@ -92,7 +92,7 @@ Consequences worth knowing before you add anything:
 |---|---|
 | `com.longleap.core` | All contracts and domain types, plus the `CloudSaveService` and `LeaderboardService` implementations and the Unity storage implementations (`UnityPlayerPrefsAdapter`, `PlayerPrefsPersistentStorage`, `FilePersistentStorage`). Everything depends on this. |
 | `com.longleap.localization` | `Loc` static facade over Unity.Localization, `LocKey` newtype, `LocalizedText` component. |
-| `com.longleap.tools` | `DeviceInfo` — the one place that decides the device profile (desktop / mobile / web desktop / web mobile); `RuntimeUi` — code-built UI bricks for the settings and UI windows, styled by a per-game `RuntimeUiTheme` asset; `WebGlPagePostprocessor` — WebGL `index.html` page mode (fixed / free aspect), rotate-device overlay in the browser's language, mobile pixel ratio, stored in `ProjectSettings/LongLeapWebGlPage.asset`. |
+| `com.longleap.tools` | `DeviceInfo` — the one place that decides the device profile (desktop / mobile / web desktop / web mobile); `RuntimeUi` — code-built UI bricks for the settings and UI windows, styled by a per-game `RuntimeUiTheme` asset; `WebGlPagePostprocessor` — WebGL `index.html` page mode (fixed / free aspect), rotate-device overlay in the browser's language, mobile pixel ratio, stored in `ProjectSettings/LongLeapWebGlPage.asset`; `PageVisibility` — browser tab hidden/shown event (the WebGL replacement for focus/pause as the "player left" signal). |
 
 **Features**
 
@@ -103,7 +103,7 @@ Consequences worth knowing before you add anything:
 | `com.longleap.dailyrewards` | Streaks, cycles (`Once`/`Loop`), grace period, UTC reset window, calendar view-model. | core |
 | `com.longleap.dailyquests` | JSON-defined quest pool, weighted daily set per UTC reset window, progress derived from stats (delta since issue), rewards claimed by the player. | core, stats |
 | `com.longleap.settings` | Typed settings (bool / int / float / enum) with auto-generated UI and per-group cloud persistence. | core, localization, tools |
-| `com.longleap.analytics` | GA4 Measurement Protocol analytics: validated events, batching with retry/backoff and a bounded queue, sessions and engagement time, consent switch, user ID/properties, A/B experiment tagging. Pluggable backends and HTTP transports; `AnalyticsFlushDriver` hooks it to the player loop. | core |
+| `com.longleap.analytics` | GA4 Measurement Protocol analytics: validated events, batching with retry/backoff and a bounded queue, sessions and engagement time, consent switch, user ID/properties, A/B experiment tagging. Pluggable backends and HTTP transports, including a WebGL `sendBeacon` transport (survives tab close); `AnalyticsFlushDriver` hooks it to the player loop, `WebGlPageLifecycle` flushes when the browser tab is hidden. | core |
 | `com.longleap.remoteconfig` | Typed remote parameters via Firebase Remote Config REST (no Firebase SDK), PlayerPrefs cache, A/B experiment info. | core |
 
 **Backends** — provider implementations, chosen by game code at construction
@@ -118,7 +118,6 @@ Consequences worth knowing before you add anything:
 
 | Package | What it is | Depends on |
 |---|---|---|
-| `com.longleap.platform.webgl` | `sendBeacon` transport for analytics (survives tab close) and a page-visibility hook that flushes analytics when the tab is hidden. | core, analytics |
 
 **Identity**
 
