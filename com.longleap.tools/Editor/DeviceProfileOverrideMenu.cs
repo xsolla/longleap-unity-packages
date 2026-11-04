@@ -3,10 +3,11 @@ using UnityEditor;
 namespace LongLeap.Tools.Editor
 {
     /// <summary>
-    /// Меню <c>Tools/Device Profile</c>: выбрать, каким устройством притворяется
-    /// редактор. Нужно, чтобы увидеть мобильный или веб-вариант окна без Device Simulator
-    /// и без сборки. Выбор хранится в EditorPrefs (у каждого разработчика свой, в репозиторий
-    /// не попадает) и действует со следующего создания окон — перезапусти Play Mode.
+    /// The <c>Tools/Device Profile</c> menu: choose which device the editor pretends to be.
+    /// Lets you see the mobile or web variant of a window without the Device Simulator and
+    /// without a build. The choice is stored in EditorPrefs (per developer and per project,
+    /// never committed) and applies from the next time windows are built — restart Play Mode.
+    /// While the choice is not Auto, entering Play Mode logs a warning.
     /// </summary>
     public static class DeviceProfileOverrideMenu
     {
@@ -17,45 +18,40 @@ namespace LongLeap.Tools.Editor
         private const string WebDesktopPath = Root + "Web Desktop";
         private const string WebMobilePath = Root + "Web Mobile";
 
-        private static int Current
-        {
-            get => EditorPrefs.GetInt(DeviceInfo.EditorOverrideKey, -1);
-            set => EditorPrefs.SetInt(DeviceInfo.EditorOverrideKey, value);
-        }
-
         [MenuItem(AutoPath, false, 2300)]
-        private static void SelectAuto() => Current = -1;
+        private static void SelectAuto() => DeviceInfo.EditorOverride = null;
 
         [MenuItem(AutoPath, true)]
-        private static bool ValidateAuto() => Check(AutoPath, -1);
+        private static bool ValidateAuto() => Check(AutoPath, null);
 
         [MenuItem(DesktopPath, false, 2301)]
-        private static void SelectDesktop() => Current = (int)DeviceProfile.Desktop;
+        private static void SelectDesktop() => DeviceInfo.EditorOverride = DeviceProfile.Desktop;
 
         [MenuItem(DesktopPath, true)]
-        private static bool ValidateDesktop() => Check(DesktopPath, (int)DeviceProfile.Desktop);
+        private static bool ValidateDesktop() => Check(DesktopPath, DeviceProfile.Desktop);
 
         [MenuItem(MobilePath, false, 2302)]
-        private static void SelectMobile() => Current = (int)DeviceProfile.Mobile;
+        private static void SelectMobile() => DeviceInfo.EditorOverride = DeviceProfile.Mobile;
 
         [MenuItem(MobilePath, true)]
-        private static bool ValidateMobile() => Check(MobilePath, (int)DeviceProfile.Mobile);
+        private static bool ValidateMobile() => Check(MobilePath, DeviceProfile.Mobile);
 
         [MenuItem(WebDesktopPath, false, 2303)]
-        private static void SelectWebDesktop() => Current = (int)DeviceProfile.WebDesktop;
+        private static void SelectWebDesktop() => DeviceInfo.EditorOverride = DeviceProfile.WebDesktop;
 
         [MenuItem(WebDesktopPath, true)]
-        private static bool ValidateWebDesktop() => Check(WebDesktopPath, (int)DeviceProfile.WebDesktop);
+        private static bool ValidateWebDesktop() => Check(WebDesktopPath, DeviceProfile.WebDesktop);
 
         [MenuItem(WebMobilePath, false, 2304)]
-        private static void SelectWebMobile() => Current = (int)DeviceProfile.WebMobile;
+        private static void SelectWebMobile() => DeviceInfo.EditorOverride = DeviceProfile.WebMobile;
 
         [MenuItem(WebMobilePath, true)]
-        private static bool ValidateWebMobile() => Check(WebMobilePath, (int)DeviceProfile.WebMobile);
+        private static bool ValidateWebMobile() => Check(WebMobilePath, DeviceProfile.WebMobile);
 
-        private static bool Check(string path, int value)
+        // Validate callback: ticks the item matching the current choice and keeps it enabled.
+        private static bool Check(string path, DeviceProfile? value)
         {
-            Menu.SetChecked(path, Current == value);
+            Menu.SetChecked(path, DeviceInfo.EditorOverride == value);
             return true;
         }
     }

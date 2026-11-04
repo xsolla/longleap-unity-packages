@@ -1,0 +1,20 @@
+{
+  "name": "LongLeap.Tools.Tests",
+  "rootNamespace": "",
+  "references": [
+    "LongLeap.Tools",
+    "LongLeap.Tools.UI",
+    "LongLeap.Tools.Editor",
+    "Unity.TextMeshPro",
+    "UnityEngine.UI",
+    "UnityEngine.TestRunner",
+    "NUnit.Framework"
+  ],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}
