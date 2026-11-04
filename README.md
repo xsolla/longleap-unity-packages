@@ -103,7 +103,7 @@ Consequences worth knowing before you add anything:
 | `com.longleap.dailyrewards` | Streaks, cycles (`Once`/`Loop`), grace period, UTC reset window, calendar view-model. | core |
 | `com.longleap.dailyquests` | JSON-defined quest pool, weighted daily set per UTC reset window, progress derived from stats (delta since issue), rewards claimed by the player. | core, stats |
 | `com.longleap.settings` | Typed settings (bool / int / float / enum) with auto-generated UI and per-group cloud persistence. | core, localization |
-| `com.longleap.analytics` | Pluggable analytics with GA4 Measurement Protocol, two-level batching, A/B experiment auto-tagging. Caller drives flush — no internal timer. | core |
+| `com.longleap.analytics` | GA4 Measurement Protocol analytics: validated events, batching with retry/backoff and a bounded queue, sessions and engagement time, consent switch, user ID/properties, A/B experiment tagging. Pluggable backends and HTTP transports; `AnalyticsFlushDriver` hooks it to the player loop. | core |
 | `com.longleap.remoteconfig` | Typed remote parameters via Firebase Remote Config REST (no Firebase SDK), PlayerPrefs cache, A/B experiment info. | core |
 
 **Backends** — provider implementations, chosen by game code at construction
@@ -125,7 +125,7 @@ from the Package Manager.
 | Package | What it is | Depends on |
 |---|---|---|
 | `com.longleap.platform.unity` | `PlayerPrefs` adapter, file and PlayerPrefs persistent storage, coroutine timer, Resources achievement loader. | core |
-| `com.longleap.platform.webgl` | GA4 backend over JS interop, as an alternative to `UnityWebRequest` on WebGL. | core, analytics |
+| `com.longleap.platform.webgl` | `sendBeacon` transport for analytics (survives tab close) and a page-visibility hook that flushes analytics when the tab is hidden. | core, analytics |
 
 **Identity**
 
@@ -363,7 +363,7 @@ editor code in `Editor/`, EditMode tests in `Tests/EditMode/`.
 - `CONTEXT.md` — the vocabulary: what each term means, which synonyms to avoid,
   invariants, and deliberate limits. Read this before naming anything.
 
-Current gaps: `gamepix` has neither, `devtools` has no `README.md`, and `analytics/README.md` is empty. `xsollaid/README.md` is
+Current gaps: `gamepix` has neither, `devtools` has no `README.md`. `xsollaid/README.md` is
 also the only package doc written in Russian.
 
 **Typed newtypes over raw strings.** A raw `string` crossing a package boundary
@@ -378,7 +378,7 @@ share one shape:
 | `RewardId` | dailyrewards | `None` sentinel |
 | `CloudSaveKey` | core | **throws** on `. $ # [ ] /` |
 | `StatPath` | stats | **throws**; `IsNone` for `default` |
-| `EventName` | analytics | falls back to `"invalid_event"` |
+| `EventName` | analytics | `None` sentinel + `IsValid`; logs an error, service drops the event |
 | `LocKey` | localization | **throws** when empty; `IsEmpty`, and the only one that is not a `readonly struct` |
 
 **Versions.** Everything is `0.1.0` except `com.longleap.remoteconfig` at

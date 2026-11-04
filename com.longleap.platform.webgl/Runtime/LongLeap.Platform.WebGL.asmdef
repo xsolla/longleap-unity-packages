@@ -4,8 +4,7 @@
   "references": [
     "LongLeap.Core",
     "LongLeap.Analytics",
-    "UnityEngine.CoreModule",
-    "Newtonsoft.Json"
+    "UnityEngine.CoreModule"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

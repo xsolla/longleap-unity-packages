@@ -1,209 +1,123 @@
-using System.Collections.Generic;
-using LongLeap.Analytics;
+using System;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
+using UnityEngine;
 using UnityEngine.TestTools;
 
-public class Ga4BackendTests
+namespace LongLeap.Analytics.Tests
 {
-    private sealed class TestGa4Config : IGa4Config
+    public class Ga4BackendTests
     {
-        public string MeasurementId => "G-TEST123";
-        public string ApiSecret => "test_secret";
-        public string ClientId => "test_client_123";
-        public string EndpointUrl => "https://www.google-analytics.com/mp/collect";
-    }
+        private FakeGa4Config _config;
+        private FakeTransport _transport;
 
-    private sealed class TestEvent : AnalyticsEventBase
-    {
-        public TestEvent(string name = "test_event") : base(new EventName(name)) { }
-        public void AddParam(string key, object value) => SetParam(key, value);
-    }
-
-    [SetUp]
-    public void SetUp()
-    {
-        LogAssert.ignoreFailingMessages = false;
-    }
-
-    [Test]
-    public void Constructor_NullConfig_Throws()
-    {
-        Assert.That(() => new Ga4MeasurementBackend(null), Throws.ArgumentNullException);
-    }
-
-    [Test]
-    public void BuildPayload_SingleEvent_HasCorrectStructure()
-    {
-        var config = new TestGa4Config();
-        var backend = new Ga4MeasurementBackend(config);
-        var e = new TestEvent();
-        e.AddParam("hero_id", "ronin");
-
-        var payload = backend.BuildPayload(new List<IAnalyticsEvent> { e });
-
-        Assert.AreEqual("test_client_123", payload["client_id"]);
-        var eventsList = (List<Dictionary<string, object>>)payload["events"];
-        Assert.AreEqual(1, eventsList.Count);
-
-        var evt = eventsList[0];
-        Assert.AreEqual("test_event", evt["name"]);
-        Assert.IsTrue(evt.ContainsKey("timestamp_micros"));
-
-        var prms = (Dictionary<string, object>)evt["params"];
-        Assert.AreEqual("ronin", prms["hero_id"]);
-    }
-
-    [Test]
-    public void BuildPayload_MultipleEvents_AllPresent()
-    {
-        var config = new TestGa4Config();
-        var backend = new Ga4MeasurementBackend(config);
-
-        var events = new List<IAnalyticsEvent>
+        [SetUp]
+        public void SetUp()
         {
-            new TestEvent("event_a"),
-            new TestEvent("event_b"),
-            new TestEvent("event_c")
-        };
+            _config = new FakeGa4Config();
+            _transport = new FakeTransport();
+        }
 
-        var payload = backend.BuildPayload(events);
-        var eventsList = (List<Dictionary<string, object>>)payload["events"];
+        private Ga4Backend Create() => new Ga4Backend(_config, "client_1", _transport);
 
-        Assert.AreEqual(3, eventsList.Count);
-        Assert.AreEqual("event_a", eventsList[0]["name"]);
-        Assert.AreEqual("event_b", eventsList[1]["name"]);
-        Assert.AreEqual("event_c", eventsList[2]["name"]);
-    }
+        // The fake transport completes synchronously, so the task is already done.
+        private static SendResult Run(Ga4Backend backend, int eventCount)
+        {
+            var task = backend.SendAsync(Envelopes.Many(eventCount));
+            Assert.IsTrue(task.IsCompleted);
+            return task.Result;
+        }
 
-    [Test]
-    public void BuildPayload_EventWithMultipleParams_AllSerialized()
-    {
-        var config = new TestGa4Config();
-        var backend = new Ga4MeasurementBackend(config);
-        var e = new TestEvent();
-        e.AddParam("string_key", "value");
-        e.AddParam("int_key", 42);
-        e.AddParam("float_key", 3.14f);
-        e.AddParam("bool_key", true);
+        [Test]
+        public void Constructor_InvalidArguments_Throw()
+        {
+            Assert.Throws<ArgumentNullException>(() => new Ga4Backend(null, "client", _transport));
+            Assert.Throws<ArgumentException>(() => new Ga4Backend(new FakeGa4Config { MeasurementId = "" }, "client", _transport));
+            Assert.Throws<ArgumentException>(() => new Ga4Backend(new FakeGa4Config { ApiSecret = null }, "client", _transport));
+            Assert.Throws<ArgumentException>(() => new Ga4Backend(_config, "", _transport));
+        }
 
-        var payload = backend.BuildPayload(new List<IAnalyticsEvent> { e });
-        var eventsList = (List<Dictionary<string, object>>)payload["events"];
-        var prms = (Dictionary<string, object>)eventsList[0]["params"];
+        [Test]
+        public void Send_Success_OneRequestPer25Events()
+        {
+            var result = Run(Create(), 30);
 
-        Assert.AreEqual("value", prms["string_key"]);
-        Assert.AreEqual(42, prms["int_key"]);
-        Assert.AreEqual(3.14f, prms["float_key"]);
-        Assert.AreEqual(true, prms["bool_key"]);
-    }
+            Assert.IsTrue(result.IsComplete);
+            Assert.AreEqual(2, _transport.Calls.Count);
+            StringAssert.StartsWith("https://www.google-analytics.com/mp/collect?", _transport.Calls[0].Url);
+        }
 
-    [Test]
-    public void BuildPayload_TimestampMicros_PresentAsNumber()
-    {
-        var config = new TestGa4Config();
-        var backend = new Ga4MeasurementBackend(config);
+        [Test]
+        public void Send_NetworkErrorOnSecondRequest_RetryLaterAfterFirst25()
+        {
+            _transport.Responses.Enqueue(new AnalyticsHttpResponse(204, "", null));
+            _transport.Responses.Enqueue(AnalyticsHttpResponse.NetworkError("offline"));
 
-        var e = new TestEvent();
-        e.TimestampMicros = 1234567890123456L;
+            var result = Run(Create(), 30);
 
-        var payload = backend.BuildPayload(new List<IAnalyticsEvent> { e });
-        var eventsList = (List<Dictionary<string, object>>)payload["events"];
-        var timestamp = eventsList[0]["timestamp_micros"];
+            Assert.IsFalse(result.IsComplete);
+            Assert.AreEqual(25, result.HandledCount);
+        }
 
-        Assert.IsTrue(timestamp is long);
-        Assert.Greater((long)timestamp, 0);
-    }
+        [TestCase(408)]
+        [TestCase(429)]
+        [TestCase(500)]
+        [TestCase(503)]
+        public void Send_TransientStatus_RetryLater(long status)
+        {
+            _transport.Responses.Enqueue(new AnalyticsHttpResponse(status, "", "error"));
 
-    [Test]
-    public void BuildUrl_ConstructsCorrectly()
-    {
-        var config = new TestGa4Config();
-        var backend = new Ga4MeasurementBackend(config);
+            var result = Run(Create(), 1);
 
-        var url = backend.BuildUrl();
+            Assert.IsFalse(result.IsComplete);
+            Assert.AreEqual(0, result.HandledCount);
+        }
 
-        Assert.AreEqual(
-            "https://www.google-analytics.com/mp/collect?measurement_id=G-TEST123&api_secret=test_secret",
-            url);
-    }
+        [Test]
+        public void Send_PermanentRejection_DroppedAndBatchContinues()
+        {
+            LogAssert.Expect(LogType.Error, new Regex("^Ga4Backend: GA4 rejected a request"));
+            _transport.Responses.Enqueue(new AnalyticsHttpResponse(400, "bad", "Bad Request"));
 
-    [Test]
-    public void SendBatch_EmptyBatch_DoesNotThrow()
-    {
-        LogAssert.ignoreFailingMessages = true;
-        var config = new TestGa4Config();
-        var backend = new Ga4MeasurementBackend(config);
+            var result = Run(Create(), 30);
 
-        Assert.DoesNotThrow(() => backend.SendBatch(new List<IAnalyticsEvent>()));
-    }
+            Assert.IsTrue(result.IsComplete);
+            Assert.AreEqual(2, _transport.Calls.Count);
+        }
 
-    [Test]
-    public void SendBatch_NullBatch_DoesNotThrow()
-    {
-        LogAssert.ignoreFailingMessages = true;
-        var config = new TestGa4Config();
-        var backend = new Ga4MeasurementBackend(config);
+        [Test]
+        public void Send_TransportThrows_RetryLater()
+        {
+            _transport.Throw = true;
 
-        Assert.DoesNotThrow(() => backend.SendBatch(null));
-    }
+            var result = Run(Create(), 1);
 
-    [Test]
-    public void SendBatch_30Events_SplitsIntoTwoChunks()
-    {
-        var config = new TestGa4Config();
-        var backend = new Ga4MeasurementBackend(config);
-        var events = new List<IAnalyticsEvent>();
+            Assert.IsFalse(result.IsComplete);
+            Assert.AreEqual(0, result.HandledCount);
+        }
 
-        for (int i = 0; i < 30; i++)
-            events.Add(new TestEvent($"event_{i}"));
+        [Test]
+        public void Send_ValidateOnly_UsesDebugEndpointAndLogsMessages()
+        {
+            _config.ValidateOnly = true;
+            _transport.Responses.Enqueue(new AnalyticsHttpResponse(200,
+                "{\"validationMessages\":[{\"fieldPath\":\"events\",\"description\":\"bad\",\"validationCode\":\"VALUE_INVALID\"}]}",
+                null));
+            LogAssert.Expect(LogType.Warning, new Regex("^Ga4Backend: validation: VALUE_INVALID"));
 
-        Assert.DoesNotThrow(() => backend.SendBatch(events));
-    }
+            var result = Run(Create(), 1);
 
-    [Test]
-    public void BuildPayload_IncludesSessionIdInParams()
-    {
-        var config = new TestGa4Config();
-        var backend = new Ga4MeasurementBackend(config);
-        var e = new TestEvent();
-        e.SessionId = 1690000000000L;
+            Assert.IsTrue(result.IsComplete);
+            StringAssert.Contains("/debug/mp/collect?", _transport.Calls[0].Url);
+        }
 
-        var payload = backend.BuildPayload(new List<IAnalyticsEvent> { e });
-        var eventsList = (List<Dictionary<string, object>>)payload["events"];
-        var prms = (Dictionary<string, object>)eventsList[0]["params"];
+        [Test]
+        public void Send_EmptyBatch_NoRequest()
+        {
+            var task = Create().SendAsync(Array.Empty<AnalyticsEnvelope>());
 
-        Assert.AreEqual(1690000000000L, prms["session_id"]);
-    }
-
-    [Test]
-    public void BuildPayload_MultipleEvents_DifferentTimestamps()
-    {
-        var config = new TestGa4Config();
-        var backend = new Ga4MeasurementBackend(config);
-        var e1 = new TestEvent("event_a");
-        var e2 = new TestEvent("event_b");
-        e1.TimestampMicros = 1000000;
-        e2.TimestampMicros = 2000000;
-
-        var payload = backend.BuildPayload(new List<IAnalyticsEvent> { e1, e2 });
-        var eventsList = (List<Dictionary<string, object>>)payload["events"];
-
-        Assert.AreEqual(1000000L, eventsList[0]["timestamp_micros"]);
-        Assert.AreEqual(2000000L, eventsList[1]["timestamp_micros"]);
-    }
-
-    [Test]
-    public void BuildPayload_ParamsNotCopied_OriginalMutable()
-    {
-        var config = new TestGa4Config();
-        var backend = new Ga4MeasurementBackend(config);
-        var e = new TestEvent();
-        e.AddParam("key", "value");
-
-        var payload = backend.BuildPayload(new List<IAnalyticsEvent> { e });
-        var eventsList = (List<Dictionary<string, object>>)payload["events"];
-        var prms = (Dictionary<string, object>)eventsList[0]["params"];
-
-        // Should reference the same dict (no copy)
-        Assert.AreEqual("value", prms["key"]);
+            Assert.IsTrue(task.Result.IsComplete);
+            Assert.IsEmpty(_transport.Calls);
+        }
     }
 }

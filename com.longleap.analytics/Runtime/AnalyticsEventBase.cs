@@ -1,49 +1,92 @@
-using System;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace LongLeap.Analytics
 {
-public abstract class AnalyticsEventBase : IAnalyticsEvent
-{
-    private static readonly Regex KeyPattern = new Regex(@"^[a-zA-Z_][a-zA-Z0-9_]{0,39}$", RegexOptions.Compiled);
-    private const int MaxParams = 25;
-    private const int MaxStringLength = 100;
-
-    private readonly Dictionary<string, object> _params = new Dictionary<string, object>();
-
-    public EventName EventName { get; }
-    public IReadOnlyDictionary<string, object> Params => _params;
-    public long TimestampMicros { get; set; } = 0;
-    public long SessionId { get; set; } = 0;
-
-    protected AnalyticsEventBase(EventName eventName)
+    // Base class for typed game events:
+    //
+    //     public sealed class LevelCompleted : AnalyticsEventBase
+    //     {
+    //         private static readonly EventName Name = new EventName("level_completed");
+    //
+    //         public LevelCompleted(int level, double seconds) : base(Name)
+    //         {
+    //             SetParam("level", level);
+    //             SetParam("duration_sec", seconds);
+    //         }
+    //     }
+    //
+    // SetParam validates against GA4 rules immediately, so mistakes show up in
+    // the console where the event is built, not as missing data in reports.
+    // Rejected params are logged as warnings and skipped; they never throw.
+    public abstract class AnalyticsEventBase : IAnalyticsEvent
     {
-        EventName = eventName;
+        private readonly Dictionary<string, object> _params = new Dictionary<string, object>();
+
+        protected AnalyticsEventBase(EventName name)
+        {
+            Name = name;
+        }
+
+        public EventName Name { get; }
+
+        public IReadOnlyDictionary<string, object> Params => _params;
+
+        // A null string removes the parameter.
+        protected void SetParam(string key, string value)
+        {
+            if (value == null)
+            {
+                RemoveParam(key);
+                return;
+            }
+
+            Store(key, value);
+        }
+
+        // int, short and byte bind here.
+        protected void SetParam(string key, long value) => Store(key, value);
+
+        // float binds here. NaN and infinities are rejected.
+        protected void SetParam(string key, double value) => Store(key, value);
+
+        // Sent as "true" / "false": GA4 has no boolean parameter type.
+        protected void SetParam(string key, bool value) => Store(key, value);
+
+        protected bool RemoveParam(string key) => key != null && _params.Remove(key);
+
+        private void Store(string key, object value)
+        {
+            if (!Ga4Rules.IsValidParamName(key, out var reason))
+            {
+                Debug.LogWarning($"{GetType().Name} '{Name}': parameter '{key}' skipped: {reason}.");
+                return;
+            }
+
+            if (Ga4Rules.IsServiceParam(key))
+            {
+                Debug.LogWarning($"{GetType().Name} '{Name}': parameter '{key}' skipped: it is set by AnalyticsService.");
+                return;
+            }
+
+            if (!Ga4Rules.TryNormalizeParamValue(value, out var normalized, out reason))
+            {
+                Debug.LogWarning($"{GetType().Name} '{Name}': parameter '{key}' skipped: {reason}.");
+                return;
+            }
+
+            if (reason != null)
+                Debug.LogWarning($"{GetType().Name} '{Name}': parameter '{key}': {reason}.");
+
+            if (!_params.ContainsKey(key) && _params.Count >= Ga4Rules.MaxCustomParams)
+            {
+                Debug.LogWarning(
+                    $"{GetType().Name} '{Name}': parameter '{key}' skipped: an event may carry at most " +
+                    $"{Ga4Rules.MaxCustomParams} parameters ({Ga4Rules.ReservedParamSlots} more are reserved for the service).");
+                return;
+            }
+
+            _params[key] = normalized;
+        }
     }
-
-    public void SetParam(string key, object value)
-    {
-        if (string.IsNullOrEmpty(key) || !KeyPattern.IsMatch(key))
-        {
-            Debug.LogWarning($"AnalyticsEventBase: недопустимый ключ параметра '{key}'.");
-            return;
-        }
-
-        if (_params.Count >= MaxParams)
-        {
-            Debug.LogWarning($"AnalyticsEventBase: превышен лимит параметров ({MaxParams}). Параметр '{key}' пропущен.");
-            return;
-        }
-
-        if (value is string str && str.Length > MaxStringLength)
-        {
-            Debug.LogWarning($"AnalyticsEventBase: значение параметра '{key}' превышает {MaxStringLength} символов. Будет обрезано.");
-            value = str.Substring(0, MaxStringLength);
-        }
-
-        _params[key] = value;
-    }
-}
 }

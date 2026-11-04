@@ -48,7 +48,7 @@ Edit `Assets/Resources/Backend/FirebaseConfig.asset` in the Inspector. Three fie
 1. Go to **Firebase Console → Remote Config → A/B Testing**
 2. Create an experiment targeting one or more parameters
 3. Each variant gets an index (0, 1, 2, …)
-4. When the experiment is active, `AnalyticsService.Send()` automatically appends `exp_{experimentId}={variantIndex}` to every event
+4. When the experiment is active and analytics has an `ExperimentEnricher` for this service, every event gets `exp_{experimentId}={variantIndex}`
 
 ## Public API
 
@@ -106,7 +106,7 @@ The bootstrapper:
 - Creates a `RemoteConfigService` instance
 - Calls `FetchAsync()` with timeout polling; on timeout, disposes the service and continues with cache/defaults
 - Assigns `Service` (public property, exposed as `IRemoteConfigService`)
-- The GameBootstrapper then wires the service into `AnalyticsService.SetExperimentInfoProvider()`
+- The GameBootstrapper then wires the service into analytics: `analytics.AddEnricher(new ExperimentEnricher(service))`
 
 Access from game code:
 ```csharp
@@ -177,7 +177,7 @@ Concurrent calls to `FetchAsync()` are collapsed — the second caller awaits th
 
 ### Experiment auto-tagging
 
-`RemoteConfigService` implements `IExperimentInfoProvider`. When `AnalyticsService.Send()` fires, it reads `ActiveExperiments` and appends `exp_{id}={variantIndex}` to the event params. No game code involved.
+`RemoteConfigService` implements `IExperimentInfoProvider`. Register `new ExperimentEnricher(remoteConfigService)` on the analytics service once; from then on every sent event gets `exp_{id}={variantIndex}` from the current `ActiveExperiments`. See `com.longleap.analytics`.
 
 ### Timeout
 
