@@ -1,7 +1,11 @@
 using System;
 
-namespace LongLeap.DailyRewards
+namespace LongLeap.Core
 {
+    /// <summary>
+    /// Reward key: what to grant. Packages (daily rewards, quests) do not interpret
+    /// the key — the game decides what "soft" is (a currency, an item, a booster).
+    /// </summary>
     public readonly struct RewardKey : IEquatable<RewardKey>
     {
         private readonly string _value;
@@ -9,7 +13,7 @@ namespace LongLeap.DailyRewards
         public RewardKey(string value)
         {
             if (value != null && value.Length == 0)
-                throw new ArgumentException("RewardKey: значение не может быть пустым.", nameof(value));
+                throw new ArgumentException("RewardKey: value cannot be empty.", nameof(value));
             _value = value;
         }
 

@@ -1,6 +1,6 @@
 {
   "name": "com.longleap.core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "LongLeap Core",
   "description": "Core interfaces and service implementations for LongLeap packages. Contains shared types, service contracts, and backend-agnostic service logic.",
   "unity": "6000.0",

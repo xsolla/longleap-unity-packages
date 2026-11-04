@@ -3,6 +3,7 @@
   "rootNamespace": "",
   "references": [
     "LongLeap.DailyRewards",
+    "LongLeap.Core",
     "UnityEngine.TestRunner",
     "NUnit.Framework"
   ],

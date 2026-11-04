@@ -1,12 +1,12 @@
 using System;
 
-namespace LongLeap.DailyQuests
+namespace LongLeap.Core
 {
     /// <summary>
-    /// When the set changes: a period lasts a day and starts at
+    /// Daily reset schedule (daily quests, daily rewards): a period lasts a day and starts at
     /// <see cref="ResetHourUtc"/>. Hours outside 0..23 wrap around (25 → 1, −1 → 23).
     /// </summary>
-    internal sealed class ResetSchedule
+    public sealed class ResetSchedule
     {
         public int ResetHourUtc { get; }
 

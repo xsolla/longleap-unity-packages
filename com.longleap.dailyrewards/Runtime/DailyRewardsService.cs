@@ -1,61 +1,113 @@
 using System;
-using System.Linq;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using LongLeap.Core;
 using UnityEngine;
 
 namespace LongLeap.DailyRewards
 {
-    public sealed class DailyRewardsService : IDailyRewardsService
+    /// <summary>
+    /// Daily rewards calendar. The rules (what can be claimed, how the streak and the
+    /// cycle change) live in <see cref="DailyRewardsRules"/>; this class loads and saves state,
+    /// owns the clock and events, and grants rewards through the bridge.
+    /// </summary>
+    public sealed class DailyRewardsService : IDailyRewardsService, IDailyRewardsDebug
     {
         private readonly IDailyRewardsConfig _config;
         private readonly IDailyRewardsStateStore _store;
         private readonly IDailyRewardsGameBridge _bridge;
+        private readonly Func<DateTime> _utcNow;
         private DailyRewardsState _state;
+        private DailyRewardDay[] _days = Array.Empty<DailyRewardDay>();
+        private DailyRewardsRules _rules;
         private bool _disabled;
+        private bool _claiming;
+        private long _windowStartTicks;
+        private Task<bool> _saving = Task.FromResult(true);
 
+        public event Action Changed;
+
+        /// <param name="utcNow">Clock. Defaults to <see cref="DateTime.UtcNow"/>; replaced in tests,
+        /// and the game can pass server time here.</param>
         public DailyRewardsService(
             IDailyRewardsConfig config,
             IDailyRewardsStateStore store,
-            IDailyRewardsGameBridge bridge)
+            IDailyRewardsGameBridge bridge,
+            Func<DateTime> utcNow = null)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
+            _utcNow = utcNow ?? (() => DateTime.UtcNow);
         }
 
         public async Task InitializeAsync()
         {
-            _state = await _store.LoadAsync();
-            if (_config.DayCount <= 0)
+            _state = null;
+
+            // Validate the config and snapshot it once: the service works with the copy,
+            // so editing the asset mid-game cannot reshape the calendar under the saved state.
+            LogValidation(DailyRewardsConfigValidator.Validate(_config));
+            _days = SnapshotDays(_config.Days);
+            _rules = new DailyRewardsRules(_days.Length, _config.CyclePolicy, _config.GracePeriod,
+                new ResetSchedule(_config.ResetHourUtc));
+
+            var loaded = await _store.LoadAsync();
+            var now = _utcNow();
+            DailyRewardsState state;
+            var dirty = false;
+
+            switch (loaded.Status)
+            {
+                case DailyRewardsStateLoadStatus.Loaded:
+                    state = loaded.State;
+                    break;
+
+                case DailyRewardsStateLoadStatus.Empty:
+                    state = DailyRewardsState.Empty();
+                    break;
+
+                case DailyRewardsStateLoadStatus.Unreadable:
+                    // A save exists but cannot be read: whether today's day was claimed
+                    // is unknown. Start the calendar over, but treat today's window
+                    // as used — otherwise the reward could be claimed twice.
+                    // Save right away so the next launch does not end up here again.
+                    Debug.LogWarning("DailyRewardsService: save is unreadable — the calendar starts over from the next reset.");
+                    state = DailyRewardsState.Empty();
+                    state.LastClaimUtcTicks = now.Ticks;
+                    dirty = true;
+                    break;
+
+                default:
+                    // The store did not answer. Starting from scratch is not an option: an already
+                    // claimed day would be granted again.
+                    Debug.LogError("DailyRewardsService: state failed to load — daily rewards are disabled until restart.");
+                    return;
+            }
+
+            _state = state;
+            _windowStartTicks = _rules.Schedule.PeriodStart(now).Ticks;
+
+            if (_days.Length == 0)
             {
                 _disabled = true;
-                Debug.LogWarning("DailyRewardsService: DayCount = 0, отключаю ежедневные награды.");
+                Debug.LogWarning("DailyRewardsService: the calendar has no days, disabling daily rewards.");
             }
+
+            if (dirty)
+                await Save(_state);
         }
 
-        public bool CanClaimToday
-        {
-            get
-            {
-                if (_disabled || _state == null) return false;
-                if (IsCycleComplete) return false;
-                return IsNewResetWindow();
-            }
-        }
+        public bool IsReady => _state != null && !_disabled;
+
+        public bool CanClaimToday => IsReady && !_claiming && _rules.CanClaim(_state, _utcNow());
 
         public bool IsCycleComplete
         {
             get
             {
                 if (_disabled) return true;
-                if (_config.CyclePolicy == DailyRewardCyclePolicy.Once)
-                {
-                    var dayCount = _config.DayCount;
-                    if (dayCount <= 0) return true;
-                    var claimedCount = _state?.ClaimedDayIndices?.Length ?? 0;
-                    return claimedCount >= dayCount;
-                }
-                return false;
+                return _state != null && _rules.IsCycleComplete(_state);
             }
         }
 
@@ -63,192 +115,169 @@ namespace LongLeap.DailyRewards
 
         public int MaxConsecutiveStreak => _state?.MaxConsecutiveStreak ?? 0;
 
-        public bool Claim()
+        public TimeSpan TimeUntilNextClaim
         {
-            if (_disabled || _state == null) return false;
+            get
+            {
+                if (!IsReady || CanClaimToday || IsCycleComplete) return TimeSpan.Zero;
+                return _rules.Schedule.TimeUntilReset(_utcNow());
+            }
+        }
+
+        public void Tick()
+        {
+            if (!IsReady) return;
+
+            var windowStart = _rules.Schedule.PeriodStart(_utcNow()).Ticks;
+            if (windowStart == _windowStartTicks) return;
+
+            _windowStartTicks = windowStart;
+            RaiseChanged();
+        }
+
+        public async Task<bool> ClaimAsync()
+        {
             if (!CanClaimToday) return false;
 
-            var now = DateTime.UtcNow;
-
-            if (_state.Streak > 0)
-            {
-                var lastClaim = new DateTime(_state.LastClaimUtcTicks, DateTimeKind.Utc);
-                if (lastClaim < LastResetUtc(now).Subtract(_config.GracePeriod))
-                {
-                    _state.Streak = 0;
-                    _bridge.OnStreakReset();
-                }
-            }
-
-            var nextIndex = GetNextDayIndex();
-            if (nextIndex < 0)
+            var previous = _state;
+            if (!_rules.TryClaim(previous, _utcNow(), out var next, out var outcome))
                 return false;
 
-            var indices = _state.ClaimedDayIndices?.ToList() ?? new System.Collections.Generic.List<int>();
-            indices.Add(nextIndex);
-            _state.ClaimedDayIndices = indices.ToArray();
+            // Save the claimed day first, then grant the reward: if the save fails there is
+            // no reward, otherwise the same day could be claimed again after a restart.
+            // If the game crashes between the save and the grant, the player loses one reward
+            // but never gets it twice. While the save is in flight CanClaimToday is false,
+            // so a second press gets false.
+            bool saved;
+            _claiming = true;
+            try { saved = await Save(next); }
+            finally { _claiming = false; }
 
-            _state.Streak++;
-            if (_state.Streak > _state.MaxConsecutiveStreak)
-                _state.MaxConsecutiveStreak = _state.Streak;
+            if (!saved)
+                return false;
 
-            _state.LastClaimUtcTicks = now.Ticks;
-
-            try { _bridge.OnStreakChanged(_state.Streak, _state.MaxConsecutiveStreak); }
-            catch (Exception e) { Debug.LogError($"DailyRewardsService: ошибка в OnStreakChanged: {e.Message}"); }
-
-            var dayIndex = nextIndex;
-
-            if (indices.Count >= _config.DayCount)
-            {
-                _state.CurrentCycleNumber++;
-                try { _bridge.OnCycleCompleted(_state.CurrentCycleNumber); }
-                catch (Exception e) { Debug.LogError($"DailyRewardsService: ошибка в OnCycleCompleted: {e.Message}"); }
-
-                if (_config.CyclePolicy == DailyRewardCyclePolicy.Loop)
-                {
-                    _state.ClaimedDayIndices = Array.Empty<int>();
-                }
-            }
+            // A debug command may have reset the state during the save — do not overwrite it.
+            if (ReferenceEquals(_state, previous))
+                _state = next;
 
             var result = new DailyRewardClaimResult
             {
-                Day = GetDayForIndex(dayIndex),
-                Streak = _state.Streak,
-                MaxStreak = _state.MaxConsecutiveStreak,
-                IsCycleComplete = IsCycleComplete
+                Day = _days[outcome.DayIndex],
+                Streak = next.Streak,
+                MaxStreak = next.MaxConsecutiveStreak,
+                StreakWasReset = outcome.StreakWasReset,
+                CompletedCycle = outcome.CompletedCycle,
+                CycleNumber = next.CurrentCycleNumber,
+                IsCycleComplete = _rules.IsCycleComplete(next)
             };
 
+            // A game-side error does not roll the claim back: the day is already saved.
             try
             {
                 _bridge.ApplyReward(result);
             }
             catch (Exception ex)
             {
-                Debug.LogError($"DailyRewardsService: Ошибка при ApplyReward: {ex.Message}");
+                Debug.LogError($"DailyRewardsService: ApplyReward failed: {ex}");
             }
 
-            SaveStateAsync();
-
+            RaiseChanged();
             return true;
         }
 
         public CalendarDay[] GetCalendar()
         {
-            if (_disabled || _state == null)
+            if (!IsReady)
                 return Array.Empty<CalendarDay>();
 
-            var claimed = _state.ClaimedDayIndices?.ToHashSet() ?? new System.Collections.Generic.HashSet<int>();
-            var nextIndex = GetNextDayIndex();
+            var claimed = _rules.ClaimedInCycle(_state, _utcNow());
             var canClaim = CanClaimToday;
-            var days = new CalendarDay[_config.DayCount];
+            var days = new CalendarDay[_days.Length];
 
-            for (int i = 0; i < _config.DayCount; i++)
+            for (int i = 0; i < days.Length; i++)
             {
-                var day = GetDayForIndex(i);
-                CalendarDayState state;
-
-                if (claimed.Contains(i))
-                {
-                    state = CalendarDayState.Claimed;
-                }
-                else if (i == nextIndex)
-                {
-                    state = canClaim ? CalendarDayState.Claimable : CalendarDayState.Locked;
-                }
-                else
-                {
-                    state = CalendarDayState.Future;
-                }
-
                 days[i] = new CalendarDay
                 {
-                    Day = day,
-                    State = state
+                    Day = _days[i],
+                    State = DailyRewardsRules.DayState(i, claimed, canClaim)
                 };
             }
 
             return days;
         }
 
-        public void Reset()
+        void IDailyRewardsDebug.ResetState()
         {
             if (_state == null) return;
 
-            _state.ClaimedDayIndices = Array.Empty<int>();
-            _state.Streak = 0;
-            _state.MaxConsecutiveStreak = 0;
-            _state.LastClaimUtcTicks = 0;
-            _state.CurrentCycleNumber = 0;
-
-            SaveStateAsync();
+            _state = DailyRewardsState.Empty();
+            _ = Save(_state);
+            RaiseChanged();
         }
 
-        public void DebugSkipToNextResetWindow()
+        void IDailyRewardsDebug.SkipToNextResetWindow()
         {
-            if (_disabled || _state == null) return;
+            if (!IsReady) return;
 
-            var lastReset = LastResetUtc(DateTime.UtcNow);
-            _state.LastClaimUtcTicks = lastReset.AddTicks(-1).Ticks;
+            var next = _state.Clone();
+            next.LastClaimUtcTicks = _rules.Schedule.PeriodStart(_utcNow()).Ticks - 1;
+            _state = next;
+            RaiseChanged();
         }
 
-        private int GetNextDayIndex()
+        // Copy of the days indexed by position; a missing day becomes a day without rewards.
+        private static DailyRewardDay[] SnapshotDays(IReadOnlyList<DailyRewardDay> source)
         {
-            var claimed = _state.ClaimedDayIndices;
-            var count = _config.DayCount;
-            if (count <= 0) return -1;
+            if (source == null || source.Count == 0)
+                return Array.Empty<DailyRewardDay>();
 
-            var claimedSet = claimed?.ToHashSet() ?? new System.Collections.Generic.HashSet<int>();
-            for (int i = 0; i < count; i++)
+            var days = new DailyRewardDay[source.Count];
+            for (int i = 0; i < days.Length; i++)
             {
-                if (!claimedSet.Contains(i))
-                    return i;
+                var day = source[i];
+                days[i] = day != null && day.DayIndex == i && day.Rewards != null
+                    ? day
+                    : new DailyRewardDay
+                    {
+                        DayIndex = i,
+                        Rewards = day?.Rewards ?? Array.Empty<RewardEntry>()
+                    };
             }
 
-            return -1;
+            return days;
         }
 
-        private bool IsNewResetWindow()
+        private static void LogValidation(DailyRewardsConfigValidationResult result)
         {
-            var lastReset = LastResetUtc(DateTime.UtcNow);
-            return _state.LastClaimUtcTicks < lastReset.Ticks;
+            foreach (var error in result.Errors)
+                Debug.LogError($"DailyRewardsService: {error}");
+            foreach (var warning in result.Warnings)
+                Debug.LogWarning($"DailyRewardsService: {warning}");
         }
 
-        private static DateTime LastResetUtc(DateTime now, int resetHourUtc)
+        private void RaiseChanged()
         {
-            var reset = now.Date.AddHours(resetHourUtc % 24);
-            if (now < reset)
-                reset = reset.AddDays(-1);
-            return reset;
+            try { Changed?.Invoke(); }
+            catch (Exception ex) { Debug.LogError($"DailyRewardsService: a Changed subscriber failed: {ex}"); }
         }
 
-        private DateTime LastResetUtc(DateTime now)
-        {
-            return LastResetUtc(now, _config.ResetHourUtc);
-        }
+        // Saves run strictly one after another — each waits for the previous one, otherwise an
+        // older state could land on top of a newer one. false — the save failed (already logged).
+        private Task<bool> Save(DailyRewardsState state) => _saving = SaveAfter(_saving, state);
 
-        private DailyRewardDay GetDayForIndex(int index)
+        private async Task<bool> SaveAfter(Task previous, DailyRewardsState state)
         {
-            var days = _config.Days;
-            if (days != null && index >= 0 && index < days.Length && days[index] != null)
-                return days[index];
+            await previous;
 
-            return new DailyRewardDay
-            {
-                DayIndex = index,
-                Rewards = Array.Empty<RewardEntry>()
-            };
-        }
-
-        private async void SaveStateAsync()
-        {
             try
             {
-                await _store.SaveAsync(_state);
+                await _store.SaveAsync(state);
+                return true;
             }
             catch (Exception ex)
             {
-                Debug.LogError($"DailyRewardsService: Ошибка сохранения состояния: {ex.Message}");
+                Debug.LogError($"DailyRewardsService: failed to save state: {ex}");
+                return false;
             }
         }
     }

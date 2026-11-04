@@ -14,17 +14,17 @@ namespace LongLeap.UI
     public class DailyRewardDayView : MonoBehaviour, IPointerClickHandler, ISubmitHandler, IOwnClickSound
     {
         /// <summary>
-        /// Картинка награды по её ключу (RewardEntry.Key). Задаёт окно наград — из того,
-        /// что отдала игра. Нет картинки — null.
+        /// Reward picture by its key (RewardEntry.Key). Set by the rewards window from what
+        /// the game provided. No picture — null.
         /// </summary>
         public Func<string, Sprite> RewardIcon { get; set; }
 
         [Header("States")]
-        [Tooltip("Рут открытой карточки: день доступен для получения или уже забран.")]
+        [Tooltip("Open card root: the day is claimable or already claimed.")]
         [SerializeField] private GameObject _openRoot;
-        [Tooltip("Рут закрытой карточки: день ещё недоступен.")]
+        [Tooltip("Closed card root: the day is not available yet.")]
         [SerializeField] private GameObject _closedRoot;
-        [Tooltip("Объект-отметка о том, что награда уже забрана.")]
+        [Tooltip("Mark object shown once the reward has been claimed.")]
         [SerializeField] private GameObject _claimedMark;
 
         [Header("References")]
@@ -179,7 +179,7 @@ namespace LongLeap.UI
 
         public IEnumerator RevealClaimed()
         {
-            // Commit the displayed result too: the service may start a new cycle on the last day.
+            // Commit the displayed result right away, without waiting for the screen to re-read the calendar.
             _day = new CalendarDay { Day = _day.Day, State = CalendarDayState.Claimed };
             _revealing = true;
             if (_button != null) _button.interactable = false;
@@ -300,11 +300,11 @@ namespace LongLeap.UI
                 _statusLabel.text = BuildRewardText();
         }
 
-        /// <summary>Текст награды дня: строка «+50» на каждую запись награды.</summary>
+        /// <summary>The day's reward text: a "+50" line per reward entry.</summary>
         string BuildRewardText()
         {
             var rewards = _day.Day?.Rewards;
-            if (rewards == null || rewards.Length == 0)
+            if (rewards == null || rewards.Count == 0)
                 return string.Empty;
 
             var sb = new StringBuilder();
@@ -318,7 +318,7 @@ namespace LongLeap.UI
 
                 sb.Append('+').Append(reward.Amount);
 
-                // Валюту и так видно по картинке — подпись нужна, только если её нет.
+                // The picture already shows the currency — a label is needed only without one.
                 if (FindIcon(reward.Key.Value) == null)
                     sb.Append(' ').Append(reward.Key.Value);
             }
@@ -328,8 +328,8 @@ namespace LongLeap.UI
 
         Sprite FindIcon(string key) => RewardIcon != null ? RewardIcon(key) : null;
 
-        // Картинку берём по ключу первой награды, у которой она вообще есть
-        // (см. RewardIcon): на карточке место под одну иконку.
+        // Take the picture by the key of the first reward that has one at all
+        // (see RewardIcon): the card has room for a single icon.
         Sprite ResolveIcon()
         {
             var rewards = _day.Day?.Rewards;

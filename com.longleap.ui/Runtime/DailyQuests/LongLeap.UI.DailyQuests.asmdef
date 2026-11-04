@@ -6,6 +6,7 @@
     "UnityEngine.UI",
     "Unity.TextMeshPro",
     "LongLeap.DailyQuests",
+    "LongLeap.Core",
     "LongLeap.Localization"
   ],
   "includePlatforms": [],

@@ -374,7 +374,8 @@ share one shape:
 |---|---|---|
 | `UserId`, `IdToken` | core | `None` sentinel + `IsValid` |
 | `BoardId` | core | `None` sentinel, regex-validated |
-| `RewardKey`, `RewardId` | dailyrewards | `None` sentinel |
+| `RewardKey` | core | `None` sentinel; throws on `""` |
+| `RewardId` | dailyrewards | `None` sentinel |
 | `CloudSaveKey` | core | **throws** on `. $ # [ ] /` |
 | `StatPath` | stats | **throws**; `IsNone` for `default` |
 | `EventName` | analytics | falls back to `"invalid_event"` |

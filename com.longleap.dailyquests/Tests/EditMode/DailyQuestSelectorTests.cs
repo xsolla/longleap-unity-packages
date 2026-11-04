@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using NUnit.Framework;
+using LongLeap.Core;
 
 namespace LongLeap.DailyQuests.Tests
 {
@@ -16,7 +17,7 @@ namespace LongLeap.DailyQuests.Tests
                 Difficulty = difficulty,
                 Categories = categories,
                 Objectives = new[] { new QuestObjective { Id = new QuestObjectiveId("o0"), StatPath = "grind", StatTarget = 1 } },
-                Rewards = new[] { new QuestReward { Key = new QuestRewardKey("soft"), Amount = 1 } }
+                Rewards = new[] { new QuestReward { Key = new RewardKey("soft"), Amount = 1 } }
             };
 
         private static DailyQuestSettings Rules(int count, bool unique = false, bool hardestLast = false, params int[] slots) =>

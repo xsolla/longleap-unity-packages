@@ -10,15 +10,15 @@ using UnityEngine.UI;
 namespace LongLeap.UI
 {
     /// <summary>
-    /// Окно ежедневных наград — страница главного меню: открывается кнопкой в меню
-    /// или само, один раз за запуск, если сегодняшняя награда ещё не забрана
-    /// (решает главное меню игры). Доступная карта получает награду при нажатии,
-    /// а Continue возвращает в меню после просмотра результата.
+    /// Daily rewards window — a main menu page: opened by a menu button
+    /// or automatically, once per launch, if today's reward has not been claimed yet
+    /// (the game's main menu decides). A claimable card grants the reward when pressed,
+    /// and Continue returns to the menu after the result has been shown.
     ///
-    /// Сервис наград окну приносит загрузка игры (через
-    /// <see cref="IWindowService.OnCreated{TWindow}"/> — на каждый созданный экземпляр:
-    /// окно выгружается при закрытии). Не принесла — окно покажет загрузку, а кнопка
-    /// наград в меню спрячется.
+    /// The rewards service is handed to the window by the game loading (via
+    /// <see cref="IWindowService.OnCreated{TWindow}"/> — for every created instance:
+    /// the window is unloaded on close). If it does not, the window shows loading and the
+    /// rewards button in the menu is hidden.
     /// </summary>
     public sealed class DailyRewardsScreen : MenuPageWindow
     {
@@ -27,15 +27,15 @@ namespace LongLeap.UI
         [SerializeField] private DailyRewardDayView _dayPrefab;
 
         [Header("Loading")]
-        [Tooltip("Рут «загрузка» внутри окна: включается, когда календарь рисовать " +
-            "нечем — сервис наград не поднялся либо его хранилище не ответило и дней " +
-            "пришло 0. Гаснет, как только дни приехали. Не назначен — окно просто " +
-            "останется пустым.")]
+        [Tooltip("\"Loading\" root inside the window: shown when there is nothing to draw " +
+            "the calendar with — the rewards service did not come up or its store did not answer " +
+            "and 0 days arrived. Hidden as soon as the days arrive. Not assigned — the window just " +
+            "stays empty.")]
         [SerializeField] private GameObject _loadingRoot;
 
-        [Tooltip("Сколько секунд ждать дни под рутом загрузки. Не дождались — рут " +
-            "остаётся на экране (показывать всё равно нечего), а в лог уходит " +
-            "ошибка; выйти игрок может кнопкой «назад». 0 — ждать без ограничения.")]
+        [Tooltip("How many seconds to wait for the days under the loading root. On timeout the root " +
+            "stays on screen (there is nothing to show anyway) and an error goes " +
+            "to the log; the player can leave with the back button. 0 — wait without a limit.")]
         [Min(0f)]
         [SerializeField] private float _daysLoadTimeoutSec = 10f;
 
@@ -49,30 +49,32 @@ namespace LongLeap.UI
         private bool _revealing;
         private bool _leaving;
 
-        // Reveal the existing view without rebuilding it or losing the final cycle's reward.
+        // Cards live between redraws: the reward reveal plays on an already created card.
         private readonly List<DailyRewardDayView> _dayViews = new List<DailyRewardDayView>();
 
         private Coroutine _revealRoutine;
 
-        // Ожидание дней под рутом загрузки. Опрашиваем сервис, а не подписываемся:
-        // события «я доинициализировался» у него нет, а календарь он отдаёт пустым
-        // ровно до тех пор, пока не приехало состояние.
+        // Timeout for waiting for the days under the loading root. The days themselves arrive via
+        // IDailyRewardsService.Changed — the window is rebuilt in OnServiceChanged.
         private Coroutine _waitDaysRoutine;
 
-        // Как часто спрашивать календарь, пока висит загрузка. Раз в кадр незачем:
-        // GetCalendar каждый раз собирает массив заново.
-        private const float DaysPollIntervalSec = 0.25f;
-
         /// <summary>
-        /// Отдать окну сервис наград. Зовёт загрузка, когда сервис поднят.
+        /// Hand the rewards service to the window. Called by the game loading once the service is up.
         /// </summary>
-        /// <param name="sounds">Звуки получения и «закрыто». Необязательны.</param>
-        /// <param name="rewardIcon">Картинка награды по её ключу. Необязательна: без неё
-        /// на карточке только подпись.</param>
+        /// <param name="sounds">"Claimed" and "locked" sounds. Optional.</param>
+        /// <param name="rewardIcon">Reward picture by its key. Optional: without it
+        /// the card shows only a label.</param>
         public void Bind(IDailyRewardsService service, IUiSounds sounds = null,
             Func<string, Sprite> rewardIcon = null)
         {
+            if (_service != null)
+                _service.Changed -= OnServiceChanged;
+
             _service = service;
+
+            if (_service != null)
+                _service.Changed += OnServiceChanged;
+
             _sounds = sounds;
             _rewardIcon = rewardIcon;
             _presentation?.Bind(service, sounds, rewardIcon);
@@ -100,8 +102,8 @@ namespace LongLeap.UI
         public override async Task CloseAsync()
         {
             _presentation?.OnClosed();
-            // Ожидание дней закрытое окно не переживает: иначе оно домолчало бы до
-            // таймаута уже из меню и оставило рут включённым к следующему показу.
+            // Waiting for the days does not survive closing: otherwise it would sit silently until
+            // the timeout in the menu and leave the root on for the next showing.
             StopWaitingForDays();
             StopRevealRoutine();
             ShowLoading(false);
@@ -125,14 +127,21 @@ namespace LongLeap.UI
                 backdrop.color = RuntimeUi.Backdrop;
             }
 
-            // Рут загрузки может лежать и вне Root — гасим его отдельно, иначе
-            // он висел бы на экране с первого кадра, до всякого показа.
+            // The loading root may live outside Root — hide it separately, otherwise
+            // it would hang on screen from the first frame, before any showing.
             ShowLoading(false);
 
             if (_continueButton != null)
             {
                 _continueButton.onClick.AddListener(OnContinueClicked);
             }
+        }
+
+        /// <summary>While the window is open, watch for the daily reset — the new day becomes claimable.</summary>
+        private void Update()
+        {
+            if (IsOpen)
+                _service?.Tick();
         }
 
         private void OnDisable()
@@ -147,12 +156,15 @@ namespace LongLeap.UI
         {
             base.OnDestroy();
 
+            if (_service != null)
+                _service.Changed -= OnServiceChanged;
+
             if (_continueButton != null)
                 _continueButton.onClick.RemoveListener(OnContinueClicked);
         }
 
         // =========================================================
-        // КАЛЕНДАРЬ
+        // CALENDAR
         // =========================================================
 
         private void Rebuild()
@@ -165,21 +177,21 @@ namespace LongLeap.UI
             ClearDays();
             StopWaitingForDays();
 
-            // Окно не размечено — рисовать календарь нечем и не станет. Рут загрузки
-            // всё равно поднимаем: пустое окно игрок читает как поломку, а причину
-            // разметки видно в логе.
+            // The window is not set up — there is nothing to draw the calendar with. Show the loading
+            // root anyway: the player reads an empty window as broken, and the setup
+            // problem is visible in the log.
             if (_dayPrefab == null || _daysParent == null)
             {
-                Debug.LogError("[DailyRewards] у окна не назначены Day Prefab или Days Parent.", this);
+                Debug.LogError("[DailyRewards] the window has no Day Prefab or Days Parent assigned.", this);
                 ShowLoading(true);
                 UpdateContinueButton();
                 return;
             }
 
-            // Сервиса нет вовсе — календарю приехать неоткуда, ждать нечего.
+            // No service at all — the calendar has nowhere to come from, nothing to wait for.
             if (_service == null)
             {
-                Debug.LogError("[DailyRewards] окно открыли без сервиса наград — показывать нечего.", this);
+                Debug.LogError("[DailyRewards] the window was opened without a rewards service — nothing to show.", this);
                 ShowLoading(true);
                 UpdateContinueButton();
                 return;
@@ -187,16 +199,16 @@ namespace LongLeap.UI
 
             var calendar = _service.GetCalendar();
 
-            // Дней нет: хранилище не ответило и состояние пустое — на пустом
-            // состоянии сервис закрывает календарь целиком. Дни при этом могут
-            // приехать: остаёмся на загрузке и ждём их.
+            // No days: the service is not ready (e.g. the store did not answer) and returns
+            // an empty calendar. The days may still arrive: stay on the loading root
+            // and wait for them.
             if (calendar == null || calendar.Length == 0)
             {
                 ShowLoading(true);
                 UpdateContinueButton();
 
-                // Окно может быть ещё выключено (Bind до показа) — корутину на
-                // неактивном объекте не запустить, её запустит OpenAsync.
+                // The window may still be inactive (Bind before showing) — a coroutine cannot
+                // start on an inactive object; OpenAsync will start it.
                 if (isActiveAndEnabled)
                     _waitDaysRoutine = StartCoroutine(WaitForDays());
 
@@ -218,42 +230,38 @@ namespace LongLeap.UI
             UpdateContinueButton();
         }
 
-        // Досидеть под рутом загрузки до появления дней. Как только календарь ответил
-        // непустым — пересобираем окно целиком: Rebuild и карточки создаст, и рут
-        // погасит.
+        // The service changed something: a day was claimed, the day rolled over, progress was reset.
+        // While a claimed reward is being revealed, leave the cards alone so as not to cut
+        // the animation short; RevealReward re-reads the calendar itself when the reveal ends.
+        // A custom presentation (_presentation) subscribes to the service itself.
+        private void OnServiceChanged()
+        {
+            if (this == null || !IsOpen || _presentation != null || _revealing)
+                return;
+
+            if (_dayViews.Count == 0)
+                Rebuild();
+            else
+                RefreshDays();
+        }
+
+        // Stay under the loading root until the days appear. When they arrive, Changed
+        // rebuilds the window and stops this wait; if they do not arrive in time — log it.
         private IEnumerator WaitForDays()
         {
-            float elapsed = 0f;
+            if (_daysLoadTimeoutSec <= 0f)
+                yield break;
 
-            while (true)
-            {
-                // Realtime: окно открывают из меню, где время может стоять
-                // (Time.timeScale = 0) — на обычном ожидании корутина не тикала бы.
-                yield return new WaitForSecondsRealtime(DaysPollIntervalSec);
+            // Realtime: the window is opened from the menu, where time may be stopped
+            // (Time.timeScale = 0) — a regular wait would never tick.
+            yield return new WaitForSecondsRealtime(_daysLoadTimeoutSec);
 
-                elapsed += DaysPollIntervalSec;
+            _waitDaysRoutine = null;
 
-                var calendar = _service?.GetCalendar();
-                if (calendar != null && calendar.Length > 0)
-                {
-                    // Обнуляем ДО Rebuild: он снимает это же ожидание, и без обнуления
-                    // корутина остановила бы саму себя посреди работы.
-                    _waitDaysRoutine = null;
-                    Rebuild();
-                    yield break;
-                }
-
-                if (_daysLoadTimeoutSec > 0f && elapsed >= _daysLoadTimeoutSec)
-                {
-                    // Рут загрузки НЕ гасим: показать по-прежнему нечего, а пустое окно
-                    // хуже, чем «грузится». Выход у игрока есть — кнопка «назад».
-                    Debug.LogError("[DailyRewards] дни календаря не приехали за " +
-                        $"{_daysLoadTimeoutSec:0.#} с — окно осталось на загрузке.", this);
-
-                    _waitDaysRoutine = null;
-                    yield break;
-                }
-            }
+            // Do NOT hide the loading root: there is still nothing to show, and an empty window
+            // is worse than "loading". The player can still leave with the back button.
+            Debug.LogError("[DailyRewards] calendar days did not arrive within " +
+                $"{_daysLoadTimeoutSec:0.#} s — the window stays on loading.", this);
         }
 
         private void StopWaitingForDays()
@@ -271,9 +279,9 @@ namespace LongLeap.UI
                 _loadingRoot.SetActive(visible);
         }
 
-        // Перечитать состояния дней уже созданными карточками: у забранного дня
-        // включится отметка «получено». Если календарь внезапно другой длины —
-        // честно пересобираем список.
+        // Re-read day states into the existing cards: a claimed day
+        // gets its "claimed" mark. If the calendar suddenly has a different length,
+        // rebuild the list from scratch.
         private void RefreshDays()
         {
             var calendar = _service?.GetCalendar();
@@ -342,19 +350,32 @@ namespace LongLeap.UI
             if (_service == null || _revealing || _leaving || !view.IsClaimable) return;
             _revealing = true;
             UpdateContinueButton();
+            Forget(ClaimAsync(view));
+        }
+
+        private async Task ClaimAsync(DailyRewardDayView view)
+        {
             bool claimed;
-            try { claimed = _service.Claim(); }
+            try { claimed = await _service.ClaimAsync(); }
             catch (System.Exception exception)
             {
                 _revealing = false;
-                UpdateContinueButton();
                 Debug.LogException(exception, this);
+                if (this != null) UpdateContinueButton();
                 return;
             }
+
+            // The window may have been closed or unloaded while the save was in flight.
+            if (this == null || !isActiveAndEnabled || view == null)
+            {
+                _revealing = false;
+                return;
+            }
+
             if (!claimed)
             {
                 _revealing = false;
-                Debug.LogWarning("[DailyRewards] Claim вернул false — награда не выдана.", this);
+                Debug.LogWarning("[DailyRewards] ClaimAsync returned false — no reward granted.", this);
                 RefreshDays();
                 UpdateContinueButton();
                 return;
@@ -375,6 +396,8 @@ namespace LongLeap.UI
             yield return view.RevealClaimed();
             _revealRoutine = null;
             _revealing = false;
+            // Changed was skipped during the reveal: the next day must become "locked until tomorrow".
+            RefreshDays();
             UpdateContinueButton();
         }
 
