@@ -13,9 +13,9 @@ namespace LongLeap.XsollaId.Tests
         // The three addresses this derivation exists for: each would otherwise
         // require editing the asset before a build.
         [TestCase("http://127.0.0.1:8081/index.html", "http://127.0.0.1:8081/xid-callback.html")]
-        [TestCase("https://blood-red-snow.pages.dev/index.html", "https://blood-red-snow.pages.dev/xid-callback.html")]
-        [TestCase("https://bloodredsnow.hel1.your-objectstorage.com/index.html",
-            "https://bloodredsnow.hel1.your-objectstorage.com/xid-callback.html")]
+        [TestCase("https://game.example.com/index.html", "https://game.example.com/xid-callback.html")]
+        [TestCase("https://bucket.storage.example.com/index.html",
+            "https://bucket.storage.example.com/xid-callback.html")]
         public void Derives_CallbackNextToTheGame(string pageUrl, string expected)
         {
             Assert.AreEqual(expected, XsollaIdRedirect.TryDerive(pageUrl, out string problem));

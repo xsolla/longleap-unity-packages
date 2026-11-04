@@ -11,6 +11,7 @@ callback page.
 | `Runtime/` | contracts and orchestration, without a single network call |
 | `Runtime.Web/` | HTTP, the browser window and `XsollaId.jslib`. Compiled only under the `XSOLLA_ID` define |
 | `Runtime.UI/` | the account block widget |
+| `Runtime.Accounts/` | the startup account flow: account or guest, and the guest-to-account save merge (see [below](#startup-account-flow)) |
 | `UI/` | the widget prefab and sprites (see `UI/README.md`) |
 | `Editor/` | the `Xsolla ID` menu and `xid-callback.html` |
 
@@ -87,3 +88,231 @@ default font (`TMP Settings` → Default Font Asset). To use another font, set
 **Font Override** on the widget instance: it is applied to every label in the
 widget, including those in states that are currently hidden. Per-label overrides
 on the prefab instance keep working as well.
+
+## Startup account flow
+
+Assembly `LongLeap.XsollaId.Accounts`. The player picks **Xsolla ID** or
+**guest** before the save service starts, and guest progress is merged into the
+account on sign-in.
+
+It decides **who plays this launch** and **whose save they play on**, once, at
+startup. It draws no UI: the startup screen is the game's, behind
+`IAccountScreen`. Vocabulary and invariants are in [CONTEXT.md](CONTEXT.md).
+
+### What's inside
+
+| Type | Role |
+|---|---|
+| `AccountGate` | Waits for the silent session restore; shows the startup screen only when there is no session; reads the account save. Returns `AccountGateResult`. |
+| `AccountGateResult` | `AccountId` (`null` for a guest), `AccountEntries` (the account save; `null` if not read), `IsGuest`. |
+| `IAccountScreen`, `AccountScreenBusy` | The startup screen, drawn by the game. |
+| `SaveSwitch` | Run before `CloudSaveService.InitializeAsync`. Clears another owner's local save, uploads a local save the server lost, merges guest progress into the account. Returns `SaveSwitchOutcome`. |
+| `SaveMergeRules`, `SaveMergeRule` | Per-key merge table: glob pattern → `Max`, `Min`, `Or`, `Union`, `PreferAccount`, `PreferLocal` or a custom `SaveMergeFunc`. The only game-specific part. |
+
+### Setup
+
+1. **Assembly.** Reference `LongLeap.XsollaId.Accounts` from the game's
+   assembly definition. It compiles without the define.
+2. **Define.** `XsollaCloudSaveScope` and `XsollaCloudSaveProvider` live in
+   `LongLeap.XsollaId.Web`, which compiles only with the `XSOLLA_ID` define.
+   Without it there is no sign-in in the build: skip the gate and play as a
+   guest on the null provider.
+3. **Startup screen.** Implement `IAccountScreen` (see the contract below).
+4. **Merge rules.** Describe how each of your save keys merges.
+
+### Using it in a game
+
+```csharp
+using LongLeap.Core.CloudSaves;
+using LongLeap.Null;
+using LongLeap.XsollaId;
+using LongLeap.XsollaId.Accounts;
+using LongLeap.XsollaId.Web; // XSOLLA_ID only
+
+// 1. Before the save service: who plays.
+var scope = new XsollaCloudSaveScope(baseUrl, gameId, prefs, savesPath: savesPath);
+var gate = new AccountGate(auth, scope, scope.TryPeekAccountAsync, () => MyStartupScreen.Create());
+AccountGateResult who = await gate.RunAsync(cancellationToken);
+
+// 2. The provider follows the answer and never changes while the game runs.
+ICloudSaveProvider provider = who.IsGuest
+    ? new NullCloudSaveProvider()
+    : new XsollaCloudSaveProvider(baseUrl, gameId, who.AccountId, savesPath: savesPath);
+var saves = new CloudSaveService(provider, prefs);
+
+// 3. Bring the local save in line with the owner, then initialize.
+var rules = new SaveMergeRules(SaveMergeRule.PreferAccount)
+    .Add("stat_*", SaveMergeRule.Max)
+    .Add("ach_*_unlocked", SaveMergeRule.Or);
+SaveSwitchOutcome outcome = await new SaveSwitch(saves, scope, rules)
+    .RunAtStartupAsync(who.AccountId, who.AccountEntries);
+
+// 4. The switch failed: the local save is not the account's yet, so don't sync
+//    it with the account's cloud save. This launch plays on this device only.
+if (outcome.IsFailure() && !who.IsGuest)
+{
+    saves.Dispose();
+    saves = new CloudSaveService(new NullCloudSaveProvider(), prefs);
+}
+
+await saves.InitializeAsync();
+```
+
+Create the scope even when the gate is skipped (sign-in unavailable, no save
+server): a guest launch must clear an account's local save rather than play on
+it, and only the scope knows whose save it is.
+
+**An account change restarts the game.** Sign-in or sign-out during the game
+must go through a restart, so the gate and the switch run again. For a
+"Sign in" button inside the game, call `AccountGate.ForgetGuestChoice()` first —
+otherwise the gate remembers the guest choice for the app session and the
+startup screen does not appear.
+
+### AccountGate
+
+The order:
+
+1. Sign-in unavailable (`IXsollaIdAuth.IsAvailable == false`) → guest, no screen.
+2. Wait for the silent session restore (`IsReady`), up to **12 s**. On timeout
+   the startup screen is shown anyway; a late session is still picked up.
+3. If availability turns off during the restore (some platforms, such as
+   GamePix outside its player, report it only then) → guest, no screen.
+4. **Session present** → read the account save (`tryPeek`, up to **15 s**).
+   - Read, or not read but the local save already belongs to this account
+     (`SaveSwitch.CanUseAccount`) → the account plays.
+   - Otherwise → `ShowServerError()`: "Try again" repeats the read, "Play as
+     guest" plays this launch as a guest (the session stays; the next launch
+     tries again).
+5. **No session**, and the guest was already chosen in this app session → guest.
+6. **No session** → `ShowChoice(lastError)`: "Sign in" opens the Xsolla ID
+   window and returns to step 4 on success; "Play as guest" → guest. A sign-in
+   that throws, returns nothing, or succeeds without an account id comes back
+   as `ShowChoice(InvalidState)`.
+
+The screen is created lazily: a relaunch with a valid session and a readable
+save never shows it. It is closed when `RunAsync` returns, throws or is
+cancelled.
+
+`tryPeek` must return `null` when the save could not be read and an empty
+dictionary when the server has nothing — use
+`XsollaCloudSaveScope.TryPeekAccountAsync`, not `PeekAccountAsync`, which
+returns an empty dictionary for both.
+
+### IAccountScreen contract
+
+- **Invoke `SignInClicked` synchronously from the button's `onClick`** — no
+  coroutine, no `await` in between. The gate calls `SignInAsync` inside the
+  handler, and the browser blocks a popup opened outside a user gesture.
+- The gate sets `SignInClicked`, `GuestClicked` and `RetryClicked` before every
+  `Show*` call. A `null` handler means that button is not offered now: in
+  `ShowChoice`, `RetryClicked` is `null`; in `ShowServerError`, `SignInClicked`
+  is `null`.
+- `ShowBusy` keeps the previous handlers set — the screen itself must make the
+  buttons non-interactive.
+- `ShowChoice(lastError)`: `lastError` is why the previous sign-in failed
+  (for example `PopupBlocked`, `Network`); `null` means show the normal hint.
+  `Cancelled` and `SessionExpired` are never passed — they are not errors.
+- `Close()` is called once; destroy the screen there.
+- The screen makes no decisions and picks all texts and their language itself.
+
+### SaveSwitch
+
+Run it **before** `CloudSaveService.InitializeAsync`: initialization merges the
+local save with the cloud by timestamps, and after that there is nothing left to
+compare.
+
+| Local save belongs to | This launch | Result |
+|---|---|---|
+| guest | guest | `Unchanged` |
+| an account | guest | local save cleared → `ClearedForGuest` (the account's cloud save is untouched) |
+| this account | this account | `Unchanged`; if the server has nothing, the local save is uploaded → `UploadedLocal` |
+| another account | this account | local save cleared → `ClearedForOtherAccount` |
+| guest | an account | merged by the rules → `Merged` |
+
+**The scope is switched last**, only once the local save really holds the new
+owner's data: the reset finished, or every merged key was written. Any failure
+before that — reading the local save, the reset, a write, a timeout, the
+account save unknown — returns `Failed` and leaves the scope as it was, so the
+next launch sees the same situation and does the work again. Repeating a merge
+is safe: every built-in rule gives the same result a second time.
+
+**On `Failed` with an account, play the launch on a local-only save**
+(`outcome.IsFailure()`, step 4 of the example). The local save is not the
+account's yet; initializing the account's cloud save on it would push it into
+the account by timestamps, without the merge rules. A guest needs nothing — its
+saves are local anyway.
+
+`RunAtStartupAsync` never throws. `CanUseAccount` is the same check the gate
+uses to decide whether an account can be played.
+
+`new SaveSwitch(saves, scope, rules)` takes the `CloudSaveService` once. The
+five-argument constructor takes the writer, the snapshot source and the local
+reset separately, for fakes in tests.
+
+Merging writes only keys that change: a key that already has the target value
+on both sides, or that is missing locally and equals the account value
+(initialization pulls it), is skipped. Written values get a fresh timestamp, so
+they win when initialization reconciles the local save with the cloud.
+
+Timeouts: **5 s** for reading or clearing the local save; writing the merge gets
+0.1 s per key, between **10 s** and **60 s**. A timeout does not cancel the
+writes — they still land in the local save — but the switch reports `Failed`,
+because it can't tell when they finish.
+
+### SaveMergeRules
+
+```csharp
+var rules = new SaveMergeRules(SaveMergeRule.PreferAccount)   // default for unmatched keys
+    .Add("stat_best", SaveMergeRule.Max)                      // specific first
+    .Add("stat_*", SaveMergeRule.PreferLocal)
+    .Add("skins", SaveMergeRule.Union, listSeparator: ',')
+    .Add("today_score", (key, input) =>                       // custom: sees both saves
+        input.LocalValue("day") == input.AccountValue("day")
+            ? SaveMergeRules.Apply(SaveMergeRule.Max, input.LocalValue(key), input.AccountValue(key))
+            : input.AccountValue(key));
+```
+
+| Rule | Result |
+|---|---|
+| `PreferAccount` | The account's value; the guest's if the account has none. For state that can't be combined: equipped items, settings, reward calendars. |
+| `PreferLocal` | The guest's value; the account's if the guest has none. |
+| `Max` | The larger number. Unparsable counts as missing; if neither parses, the account's raw value is kept. Two integers are compared exactly, beyond `double` precision. |
+| `Min` | The smaller **positive** number — zero and negatives mean "unknown" (for "unlocked at" timestamps). |
+| `Or` | Set if set in either save (`"1"` or `"true"`, case-insensitive). |
+| `Union` | Items of both lists, account items first, duplicates and empty items removed. Separator `'\n'` by default. |
+
+- Patterns are globs where `*` matches any run of characters; no other
+  wildcards. Matching is case-sensitive.
+- **The first matching pattern wins** — put specific patterns before general
+  ones.
+- A custom rule returns the merged value, or `null` to delete the key.
+- Numbers are parsed with the invariant culture.
+
+### Notes
+
+- All waits are frame-based (`Task.Yield` + `Stopwatch`), so every timeout
+  works under WebGL, where `System.Threading` timers never fire.
+- The guest choice is a static; it is reset on `SubsystemRegistration`, so it
+  also works with domain reload disabled.
+- Logs never include the account id.
+
+## Tests
+
+EditMode tests, one assembly per runtime assembly:
+
+| Assembly | Covers | Needs |
+|---|---|---|
+| `LongLeap.XsollaId.Tests` | sign-in flow, PKCE, origin guard, redirect derivation, session store, value types | — |
+| `LongLeap.XsollaId.Web.Tests` | discovery, token client, avatar loader, leaderboard and league providers | `XSOLLA_ID` |
+| `LongLeap.XsollaId.UI.Tests` | account widget state logic | — |
+| `LongLeap.XsollaId.Accounts.Tests` | startup gate, save switch, merge rules | — |
+
+Unity runs package tests only for packages listed in the project's
+`Packages/manifest.json` under `testables`:
+
+```json
+"testables": [ "com.longleap.xsollaid" ]
+```
+
+All fakes are hand-written (no mocking library); the shared ones live in
+`Tests/EditMode/Fakes.cs` and `Tests/EditMode.Web/Fakes.cs`.

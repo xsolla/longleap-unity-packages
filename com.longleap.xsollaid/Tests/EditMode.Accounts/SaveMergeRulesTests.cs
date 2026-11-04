@@ -2,8 +2,9 @@ using System.Collections.Generic;
 using LongLeap.Core.CloudSaves;
 using NUnit.Framework;
 
-namespace LongLeap.Accounts.Tests
+namespace LongLeap.XsollaId.Accounts.Tests
 {
+    [TestFixture]
     public class SaveMergeRulesTests
     {
         private static Dictionary<string, CloudSaveEntry> Save(params (string key, string value)[] pairs)
@@ -31,6 +32,14 @@ namespace LongLeap.Accounts.Tests
             Assert.AreEqual("4", SaveMergeRules.Apply(SaveMergeRule.Max, "4", null));
             Assert.AreEqual("4", SaveMergeRules.Apply(SaveMergeRule.Max, "junk", "4"));
             Assert.AreEqual("junk", SaveMergeRules.Apply(SaveMergeRule.Max, "other", "junk"), "neither parses — keep the account's");
+        }
+
+        [Test]
+        public void MaxMin_CompareLargeIntegersExactly()
+        {
+            // 2^53 + 1 and 2^53 are the same double.
+            Assert.AreEqual("9007199254740993", SaveMergeRules.Apply(SaveMergeRule.Max, "9007199254740993", "9007199254740992"));
+            Assert.AreEqual("9007199254740992", SaveMergeRules.Apply(SaveMergeRule.Min, "9007199254740993", "9007199254740992"));
         }
 
         [Test]

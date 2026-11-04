@@ -5,39 +5,54 @@ using System.Text;
 using System.Text.RegularExpressions;
 using LongLeap.Core.CloudSaves;
 
-namespace LongLeap.Accounts
+namespace LongLeap.XsollaId.Accounts
 {
-    // How one save key is merged when guest progress meets an account save.
+    /// <summary>
+    /// How one save key is merged when guest progress meets an account save.
+    /// </summary>
     public enum SaveMergeRule
     {
-        // The account's value; the guest's only if the account has none. For
-        // state that can't be combined meaningfully: equipped items, settings,
-        // calendars that would pay a reward twice.
+        /// <summary>
+        /// The account's value; the guest's only if the account has none. For
+        /// state that can't be combined meaningfully: equipped items, settings,
+        /// calendars that would pay a reward twice.
+        /// </summary>
         PreferAccount,
 
-        // The guest's value; the account's only if the guest has none.
+        /// <summary>The guest's value; the account's only if the guest has none.</summary>
         PreferLocal,
 
-        // The larger number. Never inflates progress: the result is a value one
-        // of the two saves really had.
+        /// <summary>
+        /// The larger number. Never inflates progress: the result is a value one
+        /// of the two saves really had.
+        /// </summary>
         Max,
 
-        // The smaller positive number. Zero and negatives mean "unknown" (see
-        // CloudSaveEntry) and are ignored — for "unlocked at" timestamps.
+        /// <summary>
+        /// The smaller positive number. Zero and negatives mean "unknown" (see
+        /// <see cref="CloudSaveEntry"/>) and are ignored — for "unlocked at"
+        /// timestamps.
+        /// </summary>
         Min,
 
-        // A flag: set if it is set in either save ("1" or "true").
+        /// <summary>A flag: set if it is set in either save (<c>"1"</c> or <c>"true"</c>).</summary>
         Or,
 
-        // A list of items joined by a separator: the union of both, account
-        // items first, in their original order.
+        /// <summary>
+        /// A list of items joined by a separator: the union of both, account
+        /// items first, in their original order.
+        /// </summary>
         Union
     }
 
-    // Both saves, for custom rules that need to look at other keys — e.g. a
-    // "today's score" value is only meaningful together with its day.
+    /// <summary>
+    /// Both saves, for custom rules that need to look at other keys — e.g. a
+    /// "today's score" value is only meaningful together with its day.
+    /// </summary>
     public sealed class SaveMergeInput
     {
+        /// <param name="local">The guest save; <c>null</c> is treated as empty.</param>
+        /// <param name="account">The account save; <c>null</c> is treated as empty.</param>
         public SaveMergeInput(
             IReadOnlyDictionary<string, CloudSaveEntry> local,
             IReadOnlyDictionary<string, CloudSaveEntry> account)
@@ -46,45 +61,59 @@ namespace LongLeap.Accounts
             Account = account ?? new Dictionary<string, CloudSaveEntry>();
         }
 
+        /// <summary>The guest save (the local mirror).</summary>
         public IReadOnlyDictionary<string, CloudSaveEntry> Local { get; }
 
+        /// <summary>The account save as read from the server.</summary>
         public IReadOnlyDictionary<string, CloudSaveEntry> Account { get; }
 
+        /// <summary>The guest's value of <paramref name="key"/>, or <c>null</c>.</summary>
         public string LocalValue(string key) => Value(Local, key);
 
+        /// <summary>The account's value of <paramref name="key"/>, or <c>null</c>.</summary>
         public string AccountValue(string key) => Value(Account, key);
 
         private static string Value(IReadOnlyDictionary<string, CloudSaveEntry> source, string key) =>
             source.TryGetValue(key, out CloudSaveEntry entry) ? entry.Value : null;
     }
 
-    // A custom rule: return the merged value, or null to drop the key.
+    /// <summary>
+    /// A custom rule: return the merged value, or <c>null</c> to drop the key.
+    /// </summary>
     public delegate string SaveMergeFunc(string key, SaveMergeInput input);
 
-    // A table of key patterns and how to merge each key.
-    //
-    // The table is the only game-specific part of merging: the save switch
-    // knows nothing about coins or stats, it asks this table key by key.
-    // Patterns are globs where '*' matches any run of characters
-    // ("stat_*", "ach_*_unlocked"). The first matching pattern wins, so put
-    // specific patterns before general ones. Keys no pattern matches use the
-    // default rule.
+    /// <summary>
+    /// A table of key patterns and how to merge each key.
+    /// </summary>
+    /// <remarks>
+    /// The table is the only game-specific part of merging: the save switch
+    /// knows nothing about coins or stats, it asks this table key by key.
+    /// Patterns are globs where <c>*</c> matches any run of characters
+    /// (<c>"stat_*"</c>, <c>"ach_*_unlocked"</c>); no other wildcards, and
+    /// matching is case-sensitive. The first matching pattern wins, so put
+    /// specific patterns before general ones. Keys no pattern matches use the
+    /// default rule.
+    /// </remarks>
     public sealed class SaveMergeRules
     {
         private readonly List<Entry> _entries = new List<Entry>();
         private readonly SaveMergeRule _defaultRule;
 
+        /// <param name="defaultRule">The rule for keys no pattern matches.</param>
         public SaveMergeRules(SaveMergeRule defaultRule = SaveMergeRule.PreferAccount)
         {
             _defaultRule = defaultRule;
         }
 
+        /// <summary>Merge keys matching <paramref name="pattern"/> by a built-in rule.</summary>
+        /// <param name="listSeparator">The item separator for <see cref="SaveMergeRule.Union"/>.</param>
         public SaveMergeRules Add(string pattern, SaveMergeRule rule, char listSeparator = '\n')
         {
             _entries.Add(new Entry(pattern, rule, null, listSeparator));
             return this;
         }
 
+        /// <summary>Merge keys matching <paramref name="pattern"/> by a custom function.</summary>
         public SaveMergeRules Add(string pattern, SaveMergeFunc custom)
         {
             if (custom == null)
@@ -94,8 +123,10 @@ namespace LongLeap.Accounts
             return this;
         }
 
-        // Merge two saves. The result has every key of either save; a null
-        // value means the key must not exist after the merge.
+        /// <summary>
+        /// Merge two saves. The result has every key of either save; a
+        /// <c>null</c> value means the key must not exist after the merge.
+        /// </summary>
         public Dictionary<string, string> Merge(
             IReadOnlyDictionary<string, CloudSaveEntry> local,
             IReadOnlyDictionary<string, CloudSaveEntry> account)
@@ -117,6 +148,7 @@ namespace LongLeap.Accounts
             return result;
         }
 
+        /// <summary>Merge one key by the first matching pattern, or the default rule.</summary>
         public string MergeKey(string key, SaveMergeInput input)
         {
             Entry entry = Find(key);
@@ -130,6 +162,12 @@ namespace LongLeap.Accounts
             return Apply(rule, input.LocalValue(key), input.AccountValue(key), separator);
         }
 
+        /// <summary>
+        /// Apply a built-in rule to two raw values. Useful inside custom rules.
+        /// Numbers are parsed with the invariant culture.
+        /// </summary>
+        /// <param name="local">The guest's value, or <c>null</c>.</param>
+        /// <param name="account">The account's value, or <c>null</c>.</param>
         public static string Apply(SaveMergeRule rule, string local, string account, char listSeparator = '\n')
         {
             switch (rule)
@@ -172,12 +210,18 @@ namespace LongLeap.Accounts
         // format we don't understand is not destroyed.
         private static string PickNumber(string local, string account, bool preferLarger, bool ignoreNonPositive)
         {
-            bool hasLocal = TryNumber(local, out double l) && (!ignoreNonPositive || l > 0);
-            bool hasAccount = TryNumber(account, out double a) && (!ignoreNonPositive || a > 0);
+            bool hasLocal = TryNumber(local, out double l, out long? lWhole) && (!ignoreNonPositive || l > 0);
+            bool hasAccount = TryNumber(account, out double a, out long? aWhole) && (!ignoreNonPositive || a > 0);
 
             if (hasLocal && hasAccount)
             {
-                bool takeLocal = preferLarger ? l > a : l < a;
+                // Two integers are compared exactly: a double holds only 53 bits,
+                // and large ids or millisecond timestamps would compare as equal.
+                int order = lWhole.HasValue && aWhole.HasValue
+                    ? lWhole.Value.CompareTo(aWhole.Value)
+                    : l.CompareTo(a);
+
+                bool takeLocal = preferLarger ? order > 0 : order < 0;
                 return takeLocal ? local : account;
             }
 
@@ -187,20 +231,24 @@ namespace LongLeap.Accounts
             return account ?? local;
         }
 
-        private static bool TryNumber(string value, out double number)
+        // whole — the exact value when the string is an integer.
+        private static bool TryNumber(string value, out double number, out long? whole)
         {
             number = 0;
+            whole = null;
 
             if (string.IsNullOrWhiteSpace(value))
                 return false;
 
-            if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long whole))
+            if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsed))
             {
-                number = whole;
+                whole = parsed;
+                number = parsed;
                 return true;
             }
 
-            return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number);
+            return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number)
+                && !double.IsNaN(number);
         }
 
         private static bool IsSet(string value) =>

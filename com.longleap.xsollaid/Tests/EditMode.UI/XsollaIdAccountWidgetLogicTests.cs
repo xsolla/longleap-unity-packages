@@ -85,10 +85,9 @@ namespace LongLeap.XsollaId.UI.Tests
             Assert.AreEqual(AccountWidgetState.SigningIn, Resolve(signInPending: true));
         }
 
-        // REGRESSION. Adopt in XsollaIdAuth raises SignedIn BEFORE the SignInAsync
-        // task completes, so both flags are true for a while. If signInPending
-        // took priority, the label would flash back to "Signing in..." after a
-        // successful sign-in.
+        // Regression: XsollaIdAuth raises SignedIn before the SignInAsync task
+        // completes, so both flags are true for a while. If signInPending won,
+        // the label would flash back to "Signing in..." after a successful sign-in.
         [Test]
         public void SignedInWhileTheTaskIsStillRunning_ShowsSignedIn()
         {
@@ -135,14 +134,10 @@ namespace LongLeap.XsollaId.UI.Tests
 
         // ---- ShortName ----
 
+        // How the domain is cut is DisplayNameFormat.LocalPart's job and is tested
+        // there; here only that ShortName uses it, and that having nothing to show
+        // is null, so the widget substitutes a fallback.
         [TestCase("user@mail.com", ExpectedResult = "user")]
-        [TestCase("user", ExpectedResult = "user")]
-        [TestCase("user@mail.com@x", ExpectedResult = "user")]
-        // An empty local part is not an address but garbage, and it reaches the
-        // screen as is: an odd name is better than an empty one. The decision
-        // lives in DisplayNameFormat.LocalPart and is tested there.
-        [TestCase("@mail.com", ExpectedResult = "@mail.com")]
-        // But having NOTHING to show is null: the widget substitutes a fallback.
         [TestCase(null, ExpectedResult = null)]
         [TestCase("", ExpectedResult = null)]
         [TestCase("   ", ExpectedResult = null)]
@@ -184,15 +179,6 @@ namespace LongLeap.XsollaId.UI.Tests
         // ---- ErrorKey ----
 
         [Test]
-        public void ErrorKey_SilentCodesSayNothing()
-        {
-            // The player closing the window, or a session expiring after 30 days,
-            // is no reason to show an error on screen.
-            Assert.IsNull(XsollaIdAccountWidgetLogic.ErrorKey(XsollaIdErrorCode.Cancelled));
-            Assert.IsNull(XsollaIdAccountWidgetLogic.ErrorKey(XsollaIdErrorCode.SessionExpired));
-        }
-
-        [Test]
         public void ErrorKey_MapsTheTalkativeCodes()
         {
             Assert.AreEqual(
@@ -216,20 +202,31 @@ namespace LongLeap.XsollaId.UI.Tests
                 XsollaIdAccountWidgetLogic.ErrorKey(XsollaIdErrorCode.TokenExchangeFailed));
         }
 
-        // ---- expanded card ----
-
-        // Expansion is orthogonal to the state: SigningOut does not collapse it,
-        // otherwise the card would flicker while the token revocation is in flight.
+        // Covers every code, including ones added later: a new code either gets a
+        // key or is silent on purpose — never an empty space where the reason
+        // should be. Cancelled (the player closed the window) and SessionExpired
+        // are not errors.
         [Test]
-        public void ShowsExpandedPanel_OnlyWhileSignedIn()
+        public void ErrorKey_EveryCodeIsEitherSilentOnPurposeOrHasAKey()
         {
-            Assert.IsTrue(
-                XsollaIdAccountWidgetLogic.ShowsExpandedPanel(AccountWidgetState.SignedIn, expanded: true));
+            foreach (XsollaIdErrorCode code in (XsollaIdErrorCode[])Enum.GetValues(typeof(XsollaIdErrorCode)))
+            {
+                string key = XsollaIdAccountWidgetLogic.ErrorKey(code);
 
-            Assert.IsTrue(
-                XsollaIdAccountWidgetLogic.ShowsExpandedPanel(AccountWidgetState.SigningOut, expanded: true),
-                "a sign-out in flight must not collapse the card");
+                bool silentOnPurpose =
+                    code == XsollaIdErrorCode.Cancelled || code == XsollaIdErrorCode.SessionExpired;
+
+                if (silentOnPurpose)
+                {
+                    Assert.IsNull(key, $"{code} must stay silent");
+                    continue;
+                }
+
+                Assert.IsFalse(string.IsNullOrEmpty(key), $"{code} has no localization key");
+            }
         }
+
+        // ---- expanded card ----
 
         [Test]
         public void ShowsExpandedPanel_CollapsedFlagAlwaysWins()
@@ -242,9 +239,10 @@ namespace LongLeap.XsollaId.UI.Tests
             }
         }
 
-        // COMPLETENESS test: the card with someone's name and username must not be
-        // shown in any state other than the two "signed in" ones. Forgetting to
-        // collapse it on sign-out is a bug visible only on the next sign-in.
+        // Covers every state: the card with the player's name and username shows
+        // only while signed in — including SigningOut, so the card does not
+        // flicker while the token is being revoked. Forgetting to collapse it on
+        // sign-out is a bug visible only on the next sign-in.
         [Test]
         public void ShowsExpandedPanel_HiddenInEveryStateButSignedIn()
         {
@@ -266,7 +264,7 @@ namespace LongLeap.XsollaId.UI.Tests
         public void Shorten_KeepsUsernameWhole_AndDoesNotCutAtAtSign()
         {
             // Exactly why ShortName does not fit here: '@' is not a separator.
-            Assert.AreEqual("id19334455", XsollaIdAccountWidgetLogic.Shorten("id19334455", 18));
+            Assert.AreEqual("id12345678", XsollaIdAccountWidgetLogic.Shorten("id12345678", 18));
             Assert.AreEqual("a@b.c", XsollaIdAccountWidgetLogic.Shorten("a@b.c", 18));
         }
 
@@ -276,30 +274,6 @@ namespace LongLeap.XsollaId.UI.Tests
             Assert.AreEqual("id1234567…", XsollaIdAccountWidgetLogic.Shorten("id1234567890123", 10));
             Assert.IsNull(XsollaIdAccountWidgetLogic.Shorten(null, 18));
             Assert.IsNull(XsollaIdAccountWidgetLogic.Shorten("   ", 18));
-        }
-
-        // COMPLETENESS test. When the package gets a new error code, this test
-        // either stays green (if the code deliberately falls into default) or
-        // shows it was forgotten, instead of the player seeing an empty space
-        // where the reason should be.
-        [Test]
-        public void ErrorKey_EveryCodeIsEitherSilentOnPurposeOrHasAKey()
-        {
-            foreach (XsollaIdErrorCode code in (XsollaIdErrorCode[])Enum.GetValues(typeof(XsollaIdErrorCode)))
-            {
-                string key = XsollaIdAccountWidgetLogic.ErrorKey(code);
-
-                bool silentOnPurpose =
-                    code == XsollaIdErrorCode.Cancelled || code == XsollaIdErrorCode.SessionExpired;
-
-                if (silentOnPurpose)
-                {
-                    Assert.IsNull(key, $"{code} must stay silent");
-                    continue;
-                }
-
-                Assert.IsFalse(string.IsNullOrEmpty(key), $"{code} has no localization key");
-            }
         }
     }
 }

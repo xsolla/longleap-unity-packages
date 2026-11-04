@@ -8,7 +8,7 @@ namespace LongLeap.XsollaId.Tests
         private static readonly string[] Allowed =
         {
             "http://127.0.0.1:8081",
-            "https://blood-red-snow.pages.dev"
+            "https://game.example.com"
         };
 
         [Test]
@@ -31,7 +31,7 @@ namespace LongLeap.XsollaId.Tests
                 "http://127.0.0.1:8081/index.html", Allowed, out _));
 
             Assert.IsTrue(OriginGuard.IsAllowed(
-                "https://blood-red-snow.pages.dev/some/deep/path", Allowed, out _));
+                "https://game.example.com/some/deep/path", Allowed, out _));
         }
 
         [Test]
@@ -43,7 +43,7 @@ namespace LongLeap.XsollaId.Tests
         [Test]
         public void DifferentScheme_IsNotAllowed()
         {
-            Assert.IsFalse(OriginGuard.IsAllowed("http://blood-red-snow.pages.dev/", Allowed, out _));
+            Assert.IsFalse(OriginGuard.IsAllowed("http://game.example.com/", Allowed, out _));
         }
 
         [Test]
@@ -51,10 +51,10 @@ namespace LongLeap.XsollaId.Tests
         {
             // Portal build: the portal serves the game, while the callback page
             // lives on our own domain. Requiring the origins to match is wrong.
-            string[] withPortal = { "https://play.gamepix.com", "https://blood-red-snow.pages.dev" };
+            string[] withPortal = { "https://portal.example.com", "https://game.example.com" };
 
             Assert.IsTrue(OriginGuard.IsAllowed(
-                "https://play.gamepix.com/games/blood-red-snow/index.html", withPortal, out _));
+                "https://portal.example.com/games/demo/index.html", withPortal, out _));
         }
 
         [Test]

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using LongLeap.Core.Leagues;
 using Newtonsoft.Json.Linq;
@@ -11,8 +10,8 @@ namespace LongLeap.XsollaId.Web.Tests
     public class XsollaLeagueProviderTests
     {
         private const string BaseUrl = "http://127.0.0.1:5066";
-        private const string GameId = "Darksliders";
-        private const string AccountId = "eea78aad-3764-4f71-b4d6-a4d8f591f62d";
+        private const string GameId = "test_game";
+        private const string AccountId = "account-1";
         private const string League = "dev_weekly";
 
         // A reply as RewardService sends it: joined, in a group of three,
@@ -39,26 +38,6 @@ namespace LongLeap.XsollaId.Web.Tests
             ]
         }";
 
-        private sealed class FakeTransport
-        {
-            private readonly Queue<HttpReply> _replies = new Queue<HttpReply>();
-
-            public readonly List<HttpCall> Calls = new List<HttpCall>();
-
-            public FakeTransport(params HttpReply[] replies)
-            {
-                foreach (HttpReply reply in replies)
-                    _replies.Enqueue(reply);
-            }
-
-            public XsollaIdHttp AsHttp() => new XsollaIdHttp(call =>
-            {
-                Calls.Add(call);
-
-                return Task.FromResult(_replies.Count > 0 ? _replies.Dequeue() : HttpReply.Status(500));
-            });
-        }
-
         private static XsollaLeagueProvider Create(FakeTransport transport) =>
             new XsollaLeagueProvider(BaseUrl + "/", GameId, AccountId, transport.AsHttp());
 
@@ -71,7 +50,7 @@ namespace LongLeap.XsollaId.Web.Tests
 
             Assert.AreEqual("GET", transport.Calls[0].Method);
             Assert.AreEqual(
-                BaseUrl + "/leagues/dev_weekly?gameId=Darksliders&xsollaId=" + AccountId,
+                BaseUrl + "/leagues/dev_weekly?gameId=test_game&xsollaId=" + AccountId,
                 transport.Calls[0].Url);
 
             Assert.AreEqual("sidewalk", state.TierId);

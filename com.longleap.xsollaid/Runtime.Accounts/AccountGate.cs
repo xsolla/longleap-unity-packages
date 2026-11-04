@@ -3,14 +3,17 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using LongLeap.Core.CloudSaves;
-using LongLeap.XsollaId;
 using UnityEngine;
 
-namespace LongLeap.Accounts
+namespace LongLeap.XsollaId.Accounts
 {
-    // Who plays this launch: an account or a guest. AccountId == null is a guest.
+    /// <summary>
+    /// Who plays this launch: an account or a guest. <see cref="AccountId"/> ==
+    /// <c>null</c> is a guest.
+    /// </summary>
     public sealed class AccountGateResult
     {
+        /// <summary>The guest result: no account, no account save.</summary>
         public static readonly AccountGateResult Guest = new AccountGateResult(null, null);
 
         public AccountGateResult(string accountId, IReadOnlyDictionary<string, CloudSaveEntry> accountEntries)
@@ -19,35 +22,40 @@ namespace LongLeap.Accounts
             AccountEntries = accountEntries;
         }
 
-        // The signed-in account (Xsolla ID subject); null means guest.
+        /// <summary>The signed-in account (Xsolla ID subject); <c>null</c> means guest.</summary>
         public string AccountId { get; }
 
-        // The account save as read from the server; null means it was not read
-        // (guest) or could not be read (the local mirror is this account's own,
-        // see SaveSwitch.CanUseAccount).
+        /// <summary>
+        /// The account save as read from the server. <c>null</c> means it was not
+        /// read (guest) or could not be read (the local mirror is this account's
+        /// own, see <see cref="SaveSwitch.CanUseAccount"/>).
+        /// </summary>
         public IReadOnlyDictionary<string, CloudSaveEntry> AccountEntries { get; }
 
+        /// <summary>True when there is no account.</summary>
         public bool IsGuest => AccountId == null;
     }
 
-    // Who plays this launch: an Xsolla ID account or a guest.
-    //
-    // Answers the question BEFORE the save service starts, so the save
-    // provider is chosen once: an account gets the cloud save on the server, a
-    // guest gets saves on this device only.
-    //
-    // Order:
-    //   1. Wait for the silent session restore (with a timeout).
-    //   2. No session — the startup screen: "Sign in" or "Play as guest".
-    //   3. Signed in — read the account save. SaveSwitch needs it to merge with
-    //      the guest progress. If it can't be read and the local save isn't
-    //      this account's, offer to retry or play as a guest.
-    //
-    // A guest choice is remembered for this app session (statics survive a
-    // scene reload); a new launch asks again.
-    //
-    // Ported from Blood Red Snow's AccountGate: async instead of a coroutine,
-    // and the screen is an interface drawn by the game.
+    /// <summary>
+    /// Who plays this launch: an Xsolla ID account or a guest.
+    /// </summary>
+    /// <remarks>
+    /// Answers the question BEFORE the save service starts, so the save provider
+    /// is chosen once: an account gets the cloud save on the server, a guest gets
+    /// saves on this device only.
+    ///
+    /// Order:
+    /// <list type="number">
+    /// <item>Wait for the silent session restore (with a timeout).</item>
+    /// <item>No session — the startup screen: "Sign in" or "Play as guest".</item>
+    /// <item>Signed in — read the account save. <see cref="SaveSwitch"/> needs it
+    /// to merge with the guest progress. If it can't be read and the local save
+    /// isn't this account's, offer to retry or play as a guest.</item>
+    /// </list>
+    ///
+    /// A guest choice is remembered for this app session (statics survive a
+    /// scene reload); a new launch asks again. See <see cref="ForgetGuestChoice"/>.
+    /// </remarks>
     public sealed class AccountGate
     {
         // How long to wait for the session restore. It goes to the network for
@@ -63,8 +71,10 @@ namespace LongLeap.Accounts
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics() => _guestChosen = false;
 
-        // Forget the guest choice: the player asked to sign in from the game,
-        // and the next run of the gate must show the startup screen.
+        /// <summary>
+        /// Forget the guest choice: the player asked to sign in from the game,
+        /// and the next run of the gate must show the startup screen.
+        /// </summary>
         public static void ForgetGuestChoice() => _guestChosen = false;
 
         private readonly IXsollaIdAuth _auth;
@@ -74,9 +84,14 @@ namespace LongLeap.Accounts
 
         private IAccountScreen _screen;
 
-        // tryPeek — read an account's save from the server without applying it;
-        // null means it could not be read (XsollaCloudSaveScope.TryPeekAccountAsync).
-        // createScreen — build the startup screen; called only when it is needed.
+        /// <param name="auth">The Xsolla ID session source.</param>
+        /// <param name="scope">Whose save sits in the local mirror.</param>
+        /// <param name="tryPeek">Read an account's save from the server without
+        /// applying it; <c>null</c> means it could not be read, an empty
+        /// dictionary means the server has nothing
+        /// (<c>XsollaCloudSaveScope.TryPeekAccountAsync</c>).</param>
+        /// <param name="createScreen">Build the startup screen; called only when
+        /// it is needed.</param>
         public AccountGate(
             IXsollaIdAuth auth,
             IAccountCloudSaveScope scope,
@@ -89,6 +104,10 @@ namespace LongLeap.Accounts
             _createScreen = createScreen ?? throw new ArgumentNullException(nameof(createScreen));
         }
 
+        /// <summary>
+        /// Decide who plays this launch. The startup screen, if it was shown, is
+        /// closed before this returns, throws or is cancelled.
+        /// </summary>
         public async Task<AccountGateResult> RunAsync(CancellationToken token = default)
         {
             if (!_auth.IsAvailable)
@@ -101,10 +120,10 @@ namespace LongLeap.Accounts
                 Debug.LogWarning($"{nameof(AccountGate)}: the session restore timed out — showing the startup screen.");
             }
 
-            // Availability can turn out only during the restore: the GamePix SDK
-            // reports "not inside the GamePix Player" (localhost, direct link)
-            // in its first answer. A screen there would offer a button that
-            // cannot work, so this launch is a silent guest.
+            // Some platforms report availability only during the restore — e.g.
+            // the GamePix SDK says "not inside the GamePix Player" (localhost,
+            // direct link) in its first answer. A screen there would offer a
+            // button that cannot work, so this launch is a silent guest.
             if (!_auth.IsAvailable)
             {
                 Debug.Log($"{nameof(AccountGate)}: sign-in became unavailable during the session restore — playing as guest.");
@@ -181,7 +200,7 @@ namespace LongLeap.Accounts
                 EnsureScreen();
 
                 // SignInAsync synchronously, straight from the click: see IAccountScreen.
-                _screen.SignInClicked = () => signIn ??= _auth.SignInAsync();
+                _screen.SignInClicked = () => signIn ??= StartSignIn();
                 _screen.GuestClicked = () => guest = true;
                 _screen.RetryClicked = null;
                 _screen.ShowChoice(lastError);
@@ -205,11 +224,11 @@ namespace LongLeap.Accounts
 
                 await FrameWait.UntilAsync(() => signIn.IsCompleted, -1, token);
 
-                XsollaIdResult result = signIn.Status == TaskStatus.RanToCompletion
+                XsollaIdResult result = signIn.Status == TaskStatus.RanToCompletion && signIn.Result != null
                     ? signIn.Result
                     : new XsollaIdResult.Failure(
-                        XsollaIdErrorCode.Network,
-                        signIn.Exception?.GetBaseException().Message ?? "the sign-in task faulted");
+                        XsollaIdErrorCode.InvalidState,
+                        signIn.Exception?.GetBaseException().Message ?? "the sign-in task returned no result");
 
                 if (result is XsollaIdResult.Failure failure)
                 {
@@ -218,9 +237,35 @@ namespace LongLeap.Accounts
                     continue;
                 }
 
+                // A success without a usable account would bring the choice back
+                // with no explanation — show it as a failed sign-in instead.
+                if (CurrentSubject() == null)
+                {
+                    Debug.LogWarning($"{nameof(AccountGate)}: sign-in succeeded, but the session has no account id.");
+                    lastError = XsollaIdErrorCode.InvalidState;
+                    continue;
+                }
+
                 lastError = null;
 
                 // Signed in — the next iteration reads the account save.
+            }
+        }
+
+        // IXsollaIdAuth never throws by contract. If an implementation does, the
+        // exception must not escape into the button's onClick (the gate would
+        // keep waiting with nothing shown): it becomes a failed sign-in.
+        private Task<XsollaIdResult> StartSignIn()
+        {
+            try
+            {
+                return _auth.SignInAsync()
+                    ?? Task.FromResult<XsollaIdResult>(new XsollaIdResult.Failure(
+                        XsollaIdErrorCode.InvalidState, "SignInAsync returned no task"));
+            }
+            catch (Exception e)
+            {
+                return Task.FromException<XsollaIdResult>(e);
             }
         }
 

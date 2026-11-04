@@ -1,10 +1,14 @@
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using LongLeap.Core.CloudSaves;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 
-namespace LongLeap.Accounts.Tests
+namespace LongLeap.XsollaId.Accounts.Tests
 {
+    [TestFixture]
     public class SaveSwitchTests
     {
         // An in-memory save service. Every call completes synchronously, so the
@@ -15,11 +19,16 @@ namespace LongLeap.Accounts.Tests
             public readonly List<string> Writes = new List<string>();
             public readonly List<string> Deletes = new List<string>();
             public int Resets;
+            public bool FailWrites;
+            public bool FailReset;
 
             public Task InitializeAsync() => Task.CompletedTask;
 
             public Task SetStringAsync(CloudSaveKey key, string value)
             {
+                if (FailWrites)
+                    return Task.FromException(new System.InvalidOperationException("write failed"));
+
                 Values[key.Value] = value;
                 Writes.Add(key.Value);
                 return Task.CompletedTask;
@@ -45,6 +54,9 @@ namespace LongLeap.Accounts.Tests
 
             public Task ResetAsync()
             {
+                if (FailReset)
+                    return Task.FromException(new System.InvalidOperationException("reset failed"));
+
                 Resets++;
                 Values.Clear();
                 return Task.CompletedTask;
@@ -187,9 +199,38 @@ namespace LongLeap.Accounts.Tests
         {
             _cloud.Values["coins"] = "50";
 
+            // The switch reports this as an error on purpose: the gate never lets it happen.
+            LogAssert.Expect(LogType.Error, new Regex("the account save is unknown"));
+
             Assert.AreEqual(SaveSwitchOutcome.Failed, Run("acc-1", null));
             Assert.IsFalse(_scope.IsAccountScoped);
             Assert.AreEqual("50", _cloud.Values["coins"]);
+        }
+
+        [Test]
+        public void GuestSignsIn_WriteFails_KeepsGuestScope()
+        {
+            _cloud.Values["coins"] = "50";
+            _cloud.FailWrites = true;
+
+            LogAssert.Expect(LogType.Error, new Regex("applying failed"));
+
+            Assert.AreEqual(SaveSwitchOutcome.Failed, Run("acc-1", Save(("coins", "30"))));
+            Assert.IsTrue(_switch.LastOutcome.IsFailure());
+            Assert.IsFalse(_scope.IsAccountScoped, "the next launch must see a guest save and merge again");
+        }
+
+        [Test]
+        public void OtherAccount_ResetFails_KeepsScope()
+        {
+            _scope.UseAccount("acc-1");
+            _cloud.Values["coins"] = "5";
+            _cloud.FailReset = true;
+
+            LogAssert.Expect(LogType.Error, new Regex("failed to reset the local save"));
+
+            Assert.AreEqual(SaveSwitchOutcome.Failed, Run("acc-2", Save(("coins", "1"))));
+            Assert.AreEqual("acc-1", _scope.AccountId, "acc-1's data must not be labelled as acc-2's");
         }
 
         [Test]

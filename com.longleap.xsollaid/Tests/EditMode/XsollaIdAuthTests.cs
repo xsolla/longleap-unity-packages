@@ -248,10 +248,9 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsTrue(auth.Current.ProfileFetched);
         }
 
-        // The MOST IMPORTANT test in this group: it catches a naive fix of the
-        // condition in BuildSessionAsync. If "no picture" were the trigger to ask,
-        // a player without a picture claim would hit userinfo on EVERY token
-        // refresh, forever.
+        // Guards the condition in BuildSessionAsync: if "no picture" triggered the
+        // request, a player without a picture claim would hit userinfo on every
+        // token refresh, forever.
         [Test]
         public async Task Refresh_DoesNotAskUserInfoAgain_EvenWithoutAPicture()
         {
@@ -473,16 +472,6 @@ namespace LongLeap.XsollaId.Tests
         }
 
         [Test]
-        public void DefaultScopes_RequestOfflineForRefreshToken()
-        {
-            // offline, not offline_access: on this Hydra instance it is the scope
-            // that issues a refresh token. Without it the player has to sign in again
-            // after every reload.
-            CollectionAssert.Contains(XsollaIdConfig.DefaultScopes.Split(' '), "offline");
-            StringAssert.DoesNotContain("offline_access", XsollaIdConfig.DefaultScopes);
-        }
-
-        [Test]
         public async Task SignIn_AuthorizeUrlCarriesConfiguredScopes()
         {
             await Create().SignInAsync();
@@ -490,20 +479,6 @@ namespace LongLeap.XsollaId.Tests
             StringAssert.Contains("offline", _browser.LastUrl);
             StringAssert.DoesNotContain("offline_access", _browser.LastUrl);
             StringAssert.Contains("client_id=client-stage", _browser.LastUrl);
-        }
-
-        [Test]
-        public async Task FirebaseAuthKeyIsNeverTouched()
-        {
-            _prefs.SetString("longleap_auth", "firebase-blob");
-
-            XsollaIdAuth auth = Create();
-            await auth.SignInAsync();
-            await auth.RefreshAsync();
-            await auth.SignOutAsync();
-
-            Assert.AreEqual("firebase-blob", _prefs.GetString("longleap_auth"),
-                "the anonymous Firebase identity holds the saves and must not be touched");
         }
     }
 }

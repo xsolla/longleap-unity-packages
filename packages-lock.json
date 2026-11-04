@@ -17,15 +17,6 @@
       },
       "hash": "c14de1e6dc01ab42d2bb358730cff954bce0ce6b"
     },
-    "com.longleap.accounts": {
-      "version": "file:com.longleap.accounts",
-      "depth": 0,
-      "source": "embedded",
-      "dependencies": {
-        "com.longleap.core": "0.1.0",
-        "com.longleap.xsollaid": "0.1.0"
-      }
-    },
     "com.longleap.achievements": {
       "version": "file:com.longleap.achievements",
       "depth": 0,

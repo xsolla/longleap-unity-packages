@@ -41,4 +41,22 @@ First release.
 - **Editor**: `Xsolla ID` menu (define toggles, environment switch, config
   selection), Build Manager options and warnings, and a post-build step that
   copies `xid-callback.html` into the WebGL build.
-- EditMode tests for the runtime, web and UI assemblies.
+- **Startup account flow** (`LongLeap.XsollaId.Accounts`): `AccountGate`
+  decides who plays this launch — an Xsolla ID account or a guest — before the
+  save service starts: waits for the silent session restore, shows the
+  game-drawn startup screen (`IAccountScreen`) only when there is no session,
+  reads the account save, and offers "Try again" or "Play as guest" when that
+  read fails. The guest choice lasts for the app session
+  (`AccountGate.ForgetGuestChoice()` clears it).
+- `SaveSwitch`: brings the local save mirror in line with this launch's owner
+  before `CloudSaveService.InitializeAsync` — clears another owner's local
+  save, uploads a local save the server lost, merges guest progress into the
+  account. Switches the scope only after the mirror holds the new owner's
+  data, so a failure is retried on the next launch. Reports
+  `SaveSwitchOutcome` (`IsFailure()`: play the launch on a local-only save) and
+  never throws. `new SaveSwitch(saves, scope, rules)` takes the
+  `CloudSaveService` once.
+- `SaveMergeRules`: per-key merge table with glob patterns and built-in rules
+  (`PreferAccount`, `PreferLocal`, `Max`, `Min`, `Or`, `Union`) or custom
+  functions.
+- EditMode tests for the runtime, web, UI and accounts assemblies.

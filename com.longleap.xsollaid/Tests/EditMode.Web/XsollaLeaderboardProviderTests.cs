@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using LongLeap.Core.Leaderboards;
 using Newtonsoft.Json.Linq;
@@ -13,32 +12,10 @@ namespace LongLeap.XsollaId.Web.Tests
     public class XsollaLeaderboardProviderTests
     {
         private const string BaseUrl = "http://127.0.0.1:5066";
-        private const string GameId = "Blood_red_snow";
-        private const string AccountId = "eea78aad-3764-4f71-b4d6-a4d8f591f62d";
+        private const string GameId = "test_game";
+        private const string AccountId = "account-1";
 
         private static readonly BoardId Board = new BoardId("dev_score");
-
-        // Records every call and answers from a queue; an empty queue
-        // answers 500.
-        private sealed class FakeTransport
-        {
-            private readonly Queue<HttpReply> _replies = new Queue<HttpReply>();
-
-            public readonly List<HttpCall> Calls = new List<HttpCall>();
-
-            public FakeTransport(params HttpReply[] replies)
-            {
-                foreach (HttpReply reply in replies)
-                    _replies.Enqueue(reply);
-            }
-
-            public XsollaIdHttp AsHttp() => new XsollaIdHttp(call =>
-            {
-                Calls.Add(call);
-
-                return Task.FromResult(_replies.Count > 0 ? _replies.Dequeue() : HttpReply.Status(500));
-            });
-        }
 
         private static XsollaLeaderboardProvider Create(FakeTransport transport) =>
             new XsollaLeaderboardProvider(BaseUrl + "/", GameId, AccountId, transport.AsHttp());

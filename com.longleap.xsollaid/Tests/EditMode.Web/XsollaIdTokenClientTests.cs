@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using NUnit.Framework;
 
@@ -24,28 +23,6 @@ namespace LongLeap.XsollaId.Web.Tests
                 AdvertisedRevoke));
         }
 
-        // Records EVERY address, not just the last one: the whole point of these
-        // tests is how many calls were made and where.
-        private sealed class FakeTransport
-        {
-            private readonly Queue<HttpReply> _replies = new Queue<HttpReply>();
-
-            public readonly List<string> Urls = new List<string>();
-
-            public FakeTransport(params HttpReply[] replies)
-            {
-                foreach (HttpReply reply in replies)
-                    _replies.Enqueue(reply);
-            }
-
-            public XsollaIdHttp AsHttp() => new XsollaIdHttp(call =>
-            {
-                Urls.Add(call.Url);
-
-                return Task.FromResult(_replies.Count > 0 ? _replies.Dequeue() : HttpReply.Status(500));
-            });
-        }
-
         private static XsollaIdConfig Config() => new XsollaIdConfig(
             XsollaIdEnvironment.Production,
             new XsollaIdClientRegistration(XsollaIdConfig.DefaultStageIssuer, "client-stage", "http://127.0.0.1:8081/xid-callback.html"),
@@ -56,11 +33,9 @@ namespace LongLeap.XsollaId.Web.Tests
         private static XsollaIdTokenClient Create(FakeTransport transport) =>
             new XsollaIdTokenClient(Config(), new FakeDiscovery(), transport.AsHttp());
 
-        // Regression. In the browser the root /oauth2/revoke is blocked by CORS:
-        // without Access-Control-Allow-Origin the response (and its 405) never
-        // reaches us, UnityWebRequest reports ConnectionError, and StatusCode stays
-        // zero. While the condition only checked 404/405, the fallback path was
-        // never tried and token revocation was silently lost.
+        // Regression: in the browser the root /oauth2/revoke is blocked by CORS,
+        // so its 405 never arrives — only a transport error with status 0. The
+        // fallback path must be tried for that too, or the revoke is silently lost.
         [Test]
         public async Task Revoke_FallsBackToAlternatePath_OnTransportError()
         {
@@ -140,10 +115,9 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreEqual("a@b.c", info.DisplayName);
         }
 
-        // Regression. A claim that arrived as an object broke the (string)o[key]
-        // cast, and the general catch turned the InvalidCastException into a
-        // failure of the WHOLE userinfo: the player was left without a name, even
-        // though sub was present and a readable email was right there.
+        // Regression: a claim of the wrong JSON type used to fail the whole
+        // userinfo, leaving the player without a name although sub and a readable
+        // email were there.
         [Test]
         public async Task UserInfo_NonStringNameClaim_DoesNotFailTheWholeResponse()
         {
@@ -184,9 +158,9 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreEqual("https://cdn.xsolla.com/a.png", info.Picture.Value);
         }
 
-        // The MOST IMPORTANT test in this group. Whether a given Xsolla ID instance
-        // returns the picture claim is unknown in advance; the whole feature must
-        // degrade to "no picture" without affecting sign-in.
+        // Whether an Xsolla ID instance returns the picture claim is not known in
+        // advance: without it the feature degrades to "no picture", and sign-in is
+        // unaffected.
         [Test]
         public async Task UserInfo_NoPictureClaim_StillSucceeds()
         {

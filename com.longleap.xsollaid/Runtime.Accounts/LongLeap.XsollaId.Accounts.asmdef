@@ -1,6 +1,6 @@
 {
-  "name": "LongLeap.Accounts",
-  "rootNamespace": "LongLeap.Accounts",
+  "name": "LongLeap.XsollaId.Accounts",
+  "rootNamespace": "LongLeap.XsollaId.Accounts",
   "references": [
     "LongLeap.Core",
     "LongLeap.XsollaId"

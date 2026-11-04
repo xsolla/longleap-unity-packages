@@ -19,37 +19,22 @@ namespace LongLeap.XsollaId.Tests
         }
 
         [Test]
-        public void Base64UrlEncode_HasNoPaddingAndNoUrlUnsafeChars()
+        public void Base64UrlEncode_UsesTheUrlAlphabetWithoutPadding()
         {
-            // 10 bytes give base64 with two trailing '=' - a good edge case.
-            string encoded = Pkce.Base64UrlEncode(new byte[] { 251, 255, 190, 1, 2, 3, 4, 5, 6, 7 });
+            // 0xFB 0xFF 0xBE are "+/++" in plain base64, and 10 bytes end with
+            // "==" — both substitutions and the padding are exercised.
+            // Plain base64: "+/++AQIDBAUGBw==".
+            byte[] bytes = { 0xFB, 0xFF, 0xBE, 1, 2, 3, 4, 5, 6, 7 };
 
-            Assert.IsFalse(encoded.Contains("="), "padding must be stripped");
-            Assert.IsFalse(encoded.Contains("+"), "'+' is not allowed in a URL");
-            Assert.IsFalse(encoded.Contains("/"), "'/' is not allowed in a URL");
+            Assert.AreEqual("-_--AQIDBAUGBw", Pkce.Base64UrlEncode(bytes));
         }
 
         [Test]
-        public void Base64UrlEncode_ReplacesPlusAndSlashWithDashAndUnderscore()
+        public void CreateVerifier_Is43UrlSafeChars()
         {
-            // 0xFB 0xFF 0xBE encode to "+/++" in plain base64 - checks the substitution.
-            string encoded = Pkce.Base64UrlEncode(new byte[] { 0xFB, 0xFF, 0xBE });
-
-            Assert.AreEqual(Convert.ToBase64String(new byte[] { 0xFB, 0xFF, 0xBE })
-                .TrimEnd('=').Replace('+', '-').Replace('/', '_'), encoded);
-        }
-
-        [Test]
-        public void CreateVerifier_Is43CharsAndUrlSafe()
-        {
-            string verifier = Pkce.CreateVerifier();
-
-            // 32 bytes in unpadded base64url are exactly 43 characters, within
-            // the 43..128 range allowed by the RFC.
-            Assert.AreEqual(43, verifier.Length);
-            Assert.IsFalse(verifier.Contains("="));
-            Assert.IsFalse(verifier.Contains("+"));
-            Assert.IsFalse(verifier.Contains("/"));
+            // 32 bytes in unpadded base64url are exactly 43 characters, within the
+            // 43..128 range allowed by the RFC.
+            StringAssert.IsMatch("^[A-Za-z0-9_-]{43}$", Pkce.CreateVerifier());
         }
 
         [Test]

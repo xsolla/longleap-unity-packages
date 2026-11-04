@@ -130,10 +130,9 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreEqual(XsollaIdErrorCode.PictureUnavailable, failure.Code);
         }
 
-        // Regression from a live build. Xsolla ID serves avatars as webp; the bytes
-        // arrive in full (CORS on cdn.xsolla.net is configured), but the decoder
-        // rejects them. This is NOT a network issue: offering "retry" is pointless,
-        // the same thing would happen. The transport reports such cases as 415.
+        // Regression: avatars may come as a format the decoder rejects (webp). The
+        // bytes arrived, so this is not a network problem and "retry" would not
+        // help. The transport reports such cases as 415.
         [Test]
         public async Task Load_UndecodableBody_IsPictureUnavailableNotNetwork()
         {

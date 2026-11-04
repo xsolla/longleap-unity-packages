@@ -23,62 +23,28 @@ namespace LongLeap.XsollaId.Tests
             new AccessToken("access-1"), new RefreshToken("refresh-1"),
             expiresAtUnixMs: 1_700_000_000_000);
 
-        private static XsollaIdSession SessionWithPicture() => new XsollaIdSession(
+        private static XsollaIdSession FullSession() => new XsollaIdSession(
             new XsollaUserId("sub-1"), "Player One",
             new AccessToken("access-1"), new RefreshToken("refresh-1"),
             expiresAtUnixMs: 1_700_000_000_000,
             picture: AvatarUrl.TryParse("https://cdn.xsolla.com/a.png"),
-            profileFetched: true);
+            profileFetched: true,
+            userName: "id12345678",
+            fullName: "Editor User");
 
-        // Exactly the JSON written by the version already shipped to players:
-        // no picture and profileFetched keys.
+        // Exactly the JSON written by the first shipped version: no picture,
+        // profileFetched, userName or fullName keys.
         private const string OldBlob =
             "{\"subject\":\"sub-1\",\"displayName\":\"Player One\",\"access\":\"access-1\"," +
             "\"refresh\":\"refresh-1\",\"expiresAtUnixMs\":1700000000000}";
 
-        private static XsollaIdSession SessionWithClaims() => new XsollaIdSession(
-            new XsollaUserId("sub-1"), "Player One",
-            new AccessToken("access-1"), new RefreshToken("refresh-1"),
-            expiresAtUnixMs: 1_700_000_000_000,
-            picture: AvatarUrl.None,
-            profileFetched: true,
-            userName: "id19334455",
-            fullName: "Editor User");
-
-        // The expanded account card shows username and the profile name separately,
-        // so both must survive a page reload: userinfo is NOT called after a session
-        // restore (ProfileFetched), so there would be nowhere to get them again.
+        // Every field must survive a page reload. userName and fullName matter as
+        // much as the tokens: after a restore userinfo is not called again
+        // (ProfileFetched), so there would be nowhere to get them back.
         [Test]
-        public void SaveThenLoad_RoundTripsUserNameAndFullName()
+        public void SaveThenLoad_RoundTripsEveryField()
         {
-            _store.Save(SessionWithClaims());
-
-            XsollaIdSession loaded = _store.Load();
-
-            Assert.AreEqual("id19334455", loaded.UserName);
-            Assert.AreEqual("Editor User", loaded.FullName);
-        }
-
-        // A blob written before these two keys existed must still load and return
-        // nulls instead of losing the whole session: a player who just updated the
-        // game must stay signed in.
-        [Test]
-        public void Load_BlobWithoutTheNewClaims_KeepsSessionAndLeavesThemNull()
-        {
-            _prefs.SetString(StoreKey, OldBlob);
-
-            XsollaIdSession loaded = _store.Load();
-
-            Assert.IsNotNull(loaded, "an old blob must not wipe the session");
-            Assert.AreEqual("Player One", loaded.DisplayName);
-            Assert.IsNull(loaded.UserName);
-            Assert.IsNull(loaded.FullName);
-        }
-
-        [Test]
-        public void SaveThenLoad_RoundTrips()
-        {
-            _store.Save(Session());
+            _store.Save(FullSession());
 
             XsollaIdSession loaded = _store.Load();
 
@@ -88,12 +54,54 @@ namespace LongLeap.XsollaId.Tests
             Assert.AreEqual("access-1", loaded.Access.Value);
             Assert.AreEqual("refresh-1", loaded.Refresh.Value);
             Assert.AreEqual(1_700_000_000_000, loaded.ExpiresAtUnixMs);
+            Assert.AreEqual("https://cdn.xsolla.com/a.png", loaded.Picture.Value);
+            Assert.IsTrue(loaded.ProfileFetched);
+            Assert.AreEqual("id12345678", loaded.UserName);
+            Assert.AreEqual("Editor User", loaded.FullName);
         }
 
         [Test]
         public void Load_ReturnsNullWhenNothingStored()
         {
             Assert.IsNull(_store.Load());
+        }
+
+        // The key migration test: the old blob is already on players' devices,
+        // and a game update must not cost them their session.
+        [Test]
+        public void Load_OldBlob_KeepsTheSessionAndAsksForTheProfileOnce()
+        {
+            _prefs.SetString(StoreKey, OldBlob);
+
+            XsollaIdSession loaded = _store.Load();
+
+            Assert.IsNotNull(loaded, "an old blob must load, not be discarded");
+            Assert.AreEqual("Player One", loaded.DisplayName);
+            Assert.AreEqual("access-1", loaded.Access.Value);
+            Assert.AreEqual("refresh-1", loaded.Refresh.Value);
+            Assert.IsFalse(loaded.Picture.IsValid);
+            Assert.IsNull(loaded.UserName);
+            Assert.IsNull(loaded.FullName);
+
+            // A missing key means "profile not fetched yet": that is what makes
+            // XsollaIdAuth fetch the profile exactly once.
+            Assert.IsFalse(loaded.ProfileFetched);
+            Assert.IsTrue(_prefs.HasKey(StoreKey), "the blob must not be cleared by the upgrade");
+        }
+
+        // What makes the migration work: an old blob is detected by the ABSENCE of
+        // the key. If keys were written only for non-empty values, an old blob
+        // would look like a new one without a picture, and the profile request
+        // would repeat forever.
+        [Test]
+        public void Save_AlwaysWritesPictureAndProfileFetchedKeys()
+        {
+            _store.Save(Session());
+
+            string written = _prefs.GetString(StoreKey);
+
+            StringAssert.Contains("\"picture\"", written);
+            StringAssert.Contains("\"profileFetched\"", written);
         }
 
         [Test]
@@ -114,54 +122,6 @@ namespace LongLeap.XsollaId.Tests
 
             Assert.IsNull(_store.Load());
             Assert.IsFalse(_prefs.HasKey(StoreKey));
-        }
-
-        [Test]
-        public void SaveThenLoad_RoundTripsPictureAndFlag()
-        {
-            _store.Save(SessionWithPicture());
-
-            XsollaIdSession loaded = _store.Load();
-
-            Assert.IsNotNull(loaded);
-            Assert.AreEqual("https://cdn.xsolla.com/a.png", loaded.Picture.Value);
-            Assert.IsTrue(loaded.ProfileFetched);
-        }
-
-        // The KEY migration test. The blob is already on players' devices, and a
-        // game update must not cost them their session.
-        [Test]
-        public void Load_OldBlobWithoutPictureKey_KeepsSessionAndAsksForRefetch()
-        {
-            _prefs.SetString(StoreKey, OldBlob);
-
-            XsollaIdSession loaded = _store.Load();
-
-            Assert.IsNotNull(loaded, "an old blob must load, not be discarded");
-            Assert.AreEqual("Player One", loaded.DisplayName);
-            Assert.AreEqual("access-1", loaded.Access.Value);
-            Assert.AreEqual("refresh-1", loaded.Refresh.Value);
-            Assert.IsFalse(loaded.Picture.IsValid);
-
-            // A missing key means "profile not fetched yet". That is what makes
-            // XsollaIdAuth fetch the picture exactly once.
-            Assert.IsFalse(loaded.ProfileFetched);
-            Assert.IsTrue(_prefs.HasKey(StoreKey), "the blob must not be cleared by the upgrade");
-        }
-
-        // The linchpin of the migration: an "old blob" is detected by the ABSENCE
-        // of the key. If keys were written only for non-empty values, an old blob
-        // would be indistinguishable from a new one without a picture, and the
-        // top-up request would repeat forever.
-        [Test]
-        public void Save_AlwaysWritesPictureAndProfileFetchedKeys()
-        {
-            _store.Save(Session());
-
-            string written = _prefs.GetString(StoreKey);
-
-            StringAssert.Contains("\"picture\"", written);
-            StringAssert.Contains("\"profileFetched\"", written);
         }
 
         [Test]
@@ -213,10 +173,8 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsFalse(loaded.ProfileFetched, "an unreadable flag falls back to \"not asked\"");
         }
 
-        // Regression. Fields used to be read via (string)o[key], and casting an
-        // object field threw InvalidCastException, caught by the catch in Load,
-        // which CLEARS THE KEY. One garbage field cost the player the whole
-        // session, even though subject and refresh were intact.
+        // Regression: a field of the wrong JSON type used to throw inside Load,
+        // whose catch clears the key — one garbage field cost the whole session.
         [Test]
         public void Load_NonStringDisplayName_KeepsTheSession()
         {

@@ -134,6 +134,16 @@ namespace LongLeap.XsollaId.Tests
         }
 
         [Test]
+        public void DefaultScopes_RequestOfflineForRefreshToken()
+        {
+            // offline, not offline_access: on this Hydra instance it is the scope
+            // that issues a refresh token. Without it the player has to sign in again
+            // after every reload.
+            CollectionAssert.Contains(XsollaIdConfig.DefaultScopes.Split(' '), "offline");
+            StringAssert.DoesNotContain("offline_access", XsollaIdConfig.DefaultScopes);
+        }
+
+        [Test]
         public void Registration_DiscoveryUrlTrimsTrailingSlash()
         {
             var registration = new XsollaIdClientRegistration(

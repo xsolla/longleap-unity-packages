@@ -131,7 +131,7 @@ from the Package Manager.
 
 | Package | What it is | Gate |
 |---|---|---|
-| `com.longleap.xsollaid` | Xsolla ID sign-in (OAuth2/OIDC auth code + PKCE) plus a drop-in account widget. Self-contained — nothing to copy into `Assets/`. | `XSOLLA_ID` for the `.Web` assembly |
+| `com.longleap.xsollaid` | Xsolla ID sign-in (OAuth2/OIDC auth code + PKCE), a drop-in account widget, and the startup account flow (`LongLeap.XsollaId.Accounts`: account or guest before the save service starts, guest progress merged into the account). Self-contained — nothing to copy into `Assets/`. | `XSOLLA_ID` for the `.Web` assembly |
 
 **Team kits** — what our games share on top of the services. Feature services are still
 built by the game; these only carry the plumbing and the screens.
@@ -363,8 +363,7 @@ editor code in `Editor/`, EditMode tests in `Tests/EditMode/`.
 - `CONTEXT.md` — the vocabulary: what each term means, which synonyms to avoid,
   invariants, and deliberate limits. Read this before naming anything.
 
-Current gaps: `gamepix` has neither, `devtools` has no `README.md`, `xsollaid`
-has no `CONTEXT.md`, and `analytics/README.md` is empty. `xsollaid/README.md` is
+Current gaps: `gamepix` has neither, `devtools` has no `README.md`, and `analytics/README.md` is empty. `xsollaid/README.md` is
 also the only package doc written in Russian.
 
 **Typed newtypes over raw strings.** A raw `string` crossing a package boundary
