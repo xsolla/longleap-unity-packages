@@ -1,6 +1,6 @@
 {
     "name": "LongLeap.Analytics.Tests",
-    "rootNamespace": "",
+    "rootNamespace": "LongLeap.Analytics.Tests",
     "references": [
         "LongLeap.Analytics",
         "LongLeap.Core",

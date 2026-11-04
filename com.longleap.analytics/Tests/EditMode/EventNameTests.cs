@@ -1,146 +1,112 @@
-using LongLeap.Analytics;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
+using UnityEngine;
 using UnityEngine.TestTools;
 
-public class EventNameTests
+namespace LongLeap.Analytics.Tests
 {
-    [SetUp]
-    public void SetUp()
+    public class EventNameTests
     {
-        LogAssert.ignoreFailingMessages = false;
-    }
+        private static readonly Regex InvalidNameError = new Regex("^EventName: ");
 
-    [Test]
-    public void Constructor_ValidName_StoresValue()
-    {
-        var name = new EventName("hero_selected");
-        Assert.AreEqual("hero_selected", name.Value);
-    }
+        [TestCase("hero_selected")]
+        [TestCase("a")]
+        [TestCase("Level2_Complete")]
+        public void Constructor_ValidName_IsValid(string value)
+        {
+            var name = new EventName(value);
 
-    [Test]
-    public void Constructor_ValidNameSingleChar_StoresValue()
-    {
-        var name = new EventName("a");
-        Assert.AreEqual("a", name.Value);
-    }
+            Assert.IsTrue(name.IsValid);
+            Assert.AreEqual(value, name.Value);
+        }
 
-    [Test]
-    public void Constructor_ValidNameMaxLength_StoresValue()
-    {
-        var name = new EventName(new string('a', 40));
-        Assert.AreEqual(40, name.Value.Length);
-    }
+        [Test]
+        public void Constructor_MaxLength_IsValid()
+        {
+            var name = new EventName(new string('a', 40));
 
-    [Test]
-    public void Constructor_NameTooLong_UsesInvalidSentinel()
-    {
-        LogAssert.ignoreFailingMessages = true;
-        var name = new EventName(new string('a', 41));
-        Assert.AreEqual("invalid_event", name.Value);
-    }
+            Assert.IsTrue(name.IsValid);
+            Assert.AreEqual(40, name.Value.Length);
+        }
 
-    [Test]
-    public void Constructor_EmptyString_UsesInvalidSentinel()
-    {
-        LogAssert.ignoreFailingMessages = true;
-        var name = new EventName("");
-        Assert.AreEqual("invalid_event", name.Value);
-    }
+        [TestCase("")]
+        [TestCase("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")] // 41
+        [TestCase("событие")]
+        [TestCase("hero selected")]
+        [TestCase("1hero")]
+        [TestCase("_hero")]
+        [TestCase("hero-selected")]
+        [TestCase("firebase_custom")]
+        [TestCase("google_event")]
+        [TestCase("ga_event")]
+        [TestCase("session_start")]
+        [TestCase("first_visit")]
+        public void Constructor_InvalidName_IsNoneAndLogsError(string value)
+        {
+            LogAssert.Expect(LogType.Error, InvalidNameError);
 
-    [Test]
-    public void Constructor_NullString_UsesInvalidSentinel()
-    {
-        LogAssert.ignoreFailingMessages = true;
-        var name = new EventName(null);
-        Assert.AreEqual("invalid_event", name.Value);
-    }
+            var name = new EventName(value);
 
-    [Test]
-    public void Constructor_CyrillicChars_UsesInvalidSentinel()
-    {
-        LogAssert.ignoreFailingMessages = true;
-        var name = new EventName("событие");
-        Assert.AreEqual("invalid_event", name.Value);
-    }
+            Assert.IsFalse(name.IsValid);
+            Assert.AreEqual(EventName.None, name);
+            Assert.AreEqual(string.Empty, name.Value);
+        }
 
-    [Test]
-    public void Constructor_Spaces_UsesInvalidSentinel()
-    {
-        LogAssert.ignoreFailingMessages = true;
-        var name = new EventName("hero selected");
-        Assert.AreEqual("invalid_event", name.Value);
-    }
+        [Test]
+        public void Constructor_Null_IsNoneAndLogsError()
+        {
+            LogAssert.Expect(LogType.Error, InvalidNameError);
 
-    [Test]
-    public void Constructor_DigitFirst_UsesInvalidSentinel()
-    {
-        LogAssert.ignoreFailingMessages = true;
-        var name = new EventName("1hero");
-        Assert.AreEqual("invalid_event", name.Value);
-    }
+            var name = new EventName(null);
 
-    [Test]
-    public void Constructor_UnderscoreFirst_UsesInvalidSentinel()
-    {
-        LogAssert.ignoreFailingMessages = true;
-        var name = new EventName("_hero");
-        Assert.AreEqual("invalid_event", name.Value);
-    }
+            Assert.IsFalse(name.IsValid);
+        }
 
-    [Test]
-    public void Constructor_Hyphen_UsesInvalidSentinel()
-    {
-        LogAssert.ignoreFailingMessages = true;
-        var name = new EventName("hero-selected");
-        Assert.AreEqual("invalid_event", name.Value);
-    }
+        [Test]
+        public void TryCreate_Valid_ReturnsTrue()
+        {
+            Assert.IsTrue(EventName.TryCreate("level_up", out var name));
+            Assert.AreEqual("level_up", name.Value);
+        }
 
-    [Test]
-    public void Equals_SameValue_ReturnsTrue()
-    {
-        var a = new EventName("test_event");
-        var b = new EventName("test_event");
-        Assert.IsTrue(a.Equals(b));
-        Assert.IsTrue(a == b);
-    }
+        [Test]
+        public void TryCreate_Invalid_ReturnsFalseWithoutLogging()
+        {
+            Assert.IsFalse(EventName.TryCreate("bad name", out var name));
+            Assert.AreEqual(EventName.None, name);
+            LogAssert.NoUnexpectedReceived();
+        }
 
-    [Test]
-    public void Equals_DifferentValue_ReturnsFalse()
-    {
-        var a = new EventName("event_a");
-        var b = new EventName("event_b");
-        Assert.IsFalse(a.Equals(b));
-        Assert.IsFalse(a == b);
-    }
+        [Test]
+        public void Default_IsNone()
+        {
+            EventName name = default;
 
-    [Test]
-    public void Equals_CaseSensitive_ReturnsFalse()
-    {
-        var a = new EventName("test_event");
-        var b = new EventName("Test_Event");
-        Assert.IsFalse(a.Equals(b));
-    }
+            Assert.IsFalse(name.IsValid);
+            Assert.AreEqual(EventName.None, name);
+            Assert.AreEqual("<none>", name.ToString());
+        }
 
-    [Test]
-    public void GetHashCode_SameValue_Matches()
-    {
-        var a = new EventName("test_event");
-        var b = new EventName("test_event");
-        Assert.AreEqual(a.GetHashCode(), b.GetHashCode());
-    }
+        [Test]
+        public void Equality_SameValue_Equal()
+        {
+            var a = new EventName("test_event");
+            var b = new EventName("test_event");
 
-    [Test]
-    public void ToString_ReturnsValue()
-    {
-        var name = new EventName("test_event");
-        Assert.AreEqual("test_event", name.ToString());
-    }
+            Assert.IsTrue(a == b);
+            Assert.AreEqual(a.GetHashCode(), b.GetHashCode());
+        }
 
-    [Test]
-    public void ToString_Invalid_ReturnsSentinel()
-    {
-        LogAssert.ignoreFailingMessages = true;
-        var name = new EventName("");
-        Assert.AreEqual("invalid_event", name.ToString());
+        [Test]
+        public void Equality_IsCaseSensitive()
+        {
+            Assert.IsTrue(new EventName("test_event") != new EventName("Test_Event"));
+        }
+
+        [Test]
+        public void ToString_ReturnsValue()
+        {
+            Assert.AreEqual("test_event", new EventName("test_event").ToString());
+        }
     }
 }

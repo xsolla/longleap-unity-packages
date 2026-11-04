@@ -1,67 +1,44 @@
 # LongLeap Platform WebGL
 
-WebGL-only GA4 analytics backend. Sends events via JavaScript interop instead of `UnityWebRequest` — avoids blocking the WebGL main thread.
+WebGL pieces for `com.longleap.analytics`:
 
-## Prerequisites
+- **`WebGlBeaconTransport`**: sends GA4 requests with `navigator.sendBeacon`, falling back to `fetch` with `keepalive`. The browser delivers these even while the tab is closing; a `UnityWebRequest` still running at that moment is lost.
+- **`WebGlPageLifecycle`**: reports page visibility to the analytics service. When the tab is hidden or closed, the queue is flushed while the page can still send. Unity raises no callback when a tab closes.
 
-The consuming project must define the following JavaScript function in its WebGL template or a `.jslib` plugin:
+The JavaScript side (`Runtime/LongLeapAnalytics.jslib`) ships with the package. Nothing needs to be added to the WebGL template.
 
-```javascript
-function SendGa4Beacon(url, body) { ... }
+## Usage
+
+```csharp
+using LongLeap.Analytics;
+using LongLeap.Platform.WebGL;
+
+var backend = new Ga4Backend(config, clientId, WebGlBeaconTransport.CreateForCurrentPlatform());
+var analytics = new AnalyticsService(backend);
+
+AnalyticsFlushDriver.Attach(analytics);
+WebGlPageLifecycle.Attach(analytics);
 ```
 
-Without this function, the backend compiles but will fail at runtime with a missing-function error.
+Both types compile on every platform. `CreateForCurrentPlatform()` returns the beacon transport in WebGL players and `UnityWebRequestAnalyticsTransport` everywhere else, including the Editor. `WebGlPageLifecycle` does nothing outside WebGL players.
 
 ## Public API
 
 | Type | Kind | Purpose |
 |---|---|---|
-| `Ga4WebGlBackend` | Class (sealed) | `IAnalyticsBackend` implementation guarded by `#if UNITY_WEBGL && !UNITY_EDITOR`. Constructor: `(IGa4Config config)`. Splits batches into chunks of 25, serializes to GA4 JSON, sends via `SendGa4Beacon`. |
+| `WebGlBeaconTransport` | Sealed class, `IAnalyticsTransport` | Beacon/keepalive POST. `IsSupported`, `CreateForCurrentPlatform()` |
+| `WebGlPageLifecycle` | MonoBehaviour | `Attach(IAnalyticsService)`: hidden page → `SetForeground(false)`, visible again → `SetForeground(true)` |
 
-Consumed interfaces (from `LongLeap.Analytics`):
+## Behaviour worth knowing
 
-| Interface | Members |
-|---|---|
-| `IAnalyticsBackend` | `SendBatch(IReadOnlyList<IAnalyticsEvent>)` |
-| `IGa4Config` | `MeasurementId`, `ApiSecret`, `ClientId`, `EndpointUrl` |
-| `IAnalyticsEvent` | `EventName`, `Params`, `TimestampMicros`, `SessionId`, `SetParam(key, value)` |
+- **No response.** A beacon is fire-and-forget. A request the browser accepted counts as delivered (HTTP 204) and is never retried. One it refused (payload over ~64 KB, beacon queue full, and `fetch` unavailable) is reported as a network error, and the service retries it.
+- **Validation mode.** `IGa4Config.ValidateOnly` needs to read GA4's response, so use `UnityWebRequestAnalyticsTransport` while validating.
+- **CORS.** Bodies are sent as `text/plain` (a CORS "simple" request), so no preflight is needed. GA4 parses the JSON regardless of the content type.
+- **Visibility events.** The jslib listens to `visibilitychange` and `pagehide`, and calls `OnPageHidden` / `OnPageVisible` on the `[WebGlPageLifecycle]` GameObject via `SendMessage`. Duplicate notifications are filtered, and `SetForeground` ignores repeats as well.
 
-## Initialization
+## JavaScript functions
 
-```csharp
-IGa4Config config = /* from ScriptableObject or DI */;
-
-#if UNITY_WEBGL && !UNITY_EDITOR
-    IAnalyticsBackend backend = new Ga4WebGlBackend(config);
-#else
-    IAnalyticsBackend backend = new Ga4MeasurementBackend(config);
-#endif
-
-var service = new AnalyticsService(
-    batchSize: 10,
-    flushIntervalSec: 5f,
-    backend: backend);
-```
-
-## Internals
-
-### SendBatch flow
-
-```
-SendBatch(events)
-  → Chunk into groups of 25 (GA4 batch limit)
-  → Per chunk:
-    → Serialize to JSON: {client_id, events: [{name, params, timestamp_micros}]}
-    → Inject session_id from IAnalyticsEvent.SessionId if present
-    → SendGa4Beacon(endpointUrl, jsonBody)   // JS interop, non-blocking
-```
-
-### Platform guard
-
-The entire class is wrapped in `#if UNITY_WEBGL && !UNITY_EDITOR`. On other platforms, `Ga4WebGlBackend` is invisible to the compiler.
-
-### JS interop
-
-`[DllImport("__Internal__")] private static extern void SendGa4Beacon(string url, string body);`
-
-No return value — fire-and-forget. JS side typically uses `navigator.sendBeacon` for reliable delivery on page unload.
+| Function | C# caller | Notes |
+|---|---|---|
+| `LongLeapAnalyticsSendBeacon(url, body)` | `WebGlBeaconTransport` | Returns 1 when the browser accepted the request, 0 otherwise |
+| `LongLeapAnalyticsWatchVisibility(gameObjectName)` | `WebGlPageLifecycle.Attach` | Registers the visibility listeners |
