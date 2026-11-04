@@ -7,7 +7,8 @@ Logic only — prefabs, art and fonts stay in the game.
 
 Every feature module is a separate assembly that compiles **only when its feature package
 is in the project manifest** (`versionDefines` + `defineConstraints`). The package itself
-depends only on uGUI, Input System and Addressables.
+depends only on uGUI, Input System and Addressables. Notifications are the exception: they
+live in this package and always compile (see [Notifications.md](Notifications.md)).
 
 | Assembly | Needs | What it is |
 |---|---|---|
@@ -17,7 +18,8 @@ depends only on uGUI, Input System and Addressables.
 | `LongLeap.UI.DailyRewards` | dailyrewards, localization | `DailyRewardsScreen`, `DailyRewardDayView`. |
 | `LongLeap.UI.DailyQuests` | dailyquests, localization | `DailyQuestPanel`, `DailyQuestItemView`, `DailyQuestRewardFlyout`, `PlayerStatRowView`, seam `IPlayerStatsSource`. |
 | `LongLeap.UI.BackPack` | backpack, xsollaid | `UserBackPackWindow`, `BackPackItemView`, `BackPackRewardView`, seams `IBackPackProduct` / `IBackPackProductCatalog`. |
-| `LongLeap.UI.Notifications` | notifications, platform.unity | `NotificationBootstrapper` (static `Show`, queues until ready), `GameNotificationView`, `NotificationPopup` (Animator or a code fade). |
+| `LongLeap.Notifications` | — | Notification core in `Runtime/Notifications/Core`: priority queue (`INotificationService`, `NotificationService`, `NotificationData`), `NotificationSystemView` base, `ITimer` / `CoroutineTimer`. No LongLeap dependencies. |
+| `LongLeap.UI.Notifications` | — | `NotificationBootstrapper` (static `Show`, queues until ready), `GameNotificationView`, `NotificationPopup` (Animator or a code fade). |
 
 ## Windows
 

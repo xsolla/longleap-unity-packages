@@ -11,7 +11,6 @@ Platform adapter layer — Unity-specific implementations of abstract contracts 
 | `FilePersistentStorage` | Sealed class `: IPersistentStorage` | Key-value storage backed by filesystem; atomic writes via temp file |
 | `ResourcesAchievementProvider` | Sealed class `: IAchievementProvider` | Loads achievement definitions from `Resources/Achievements/` |
 | `JsonAchievementProvider` | Sealed class `: IAchievementProvider` | Parses manifest + achievement JSON from any text source |
-| `CoroutineTimer` | Sealed class `: ITimer` | One-shot timer via Unity coroutines (`WaitForSecondsRealtime`) |
 
 ## Usage
 
@@ -57,16 +56,6 @@ IAchievementProvider provider = new JsonAchievementProvider(fileName => LoadText
 
 Same manifest/file format from any text source (`fileName → text`, `null` if missing). Used by `ResourcesAchievementProvider` and by tests.
 
-### CoroutineTimer
-
-```csharp
-ITimer timer = new CoroutineTimer(this);
-timer.Start(TimeSpan.FromSeconds(5), () => Debug.Log("Elapsed"));
-timer.Cancel();
-```
-
-Uses `WaitForSecondsRealtime` — continues during `Time.timeScale = 0`.
-
 ## Internals
 
 ### Adapter philosophy
@@ -79,4 +68,3 @@ Each class implements exactly one upstream interface and delegates to a single U
 | `PlayerPrefsPersistentStorage` | `IPersistentStorage` | `UnityEngine.PlayerPrefs` |
 | `FilePersistentStorage` | `IPersistentStorage` | `System.IO.File` |
 | `ResourcesAchievementProvider` | `IAchievementProvider` | `Resources.Load<TextAsset>` |
-| `CoroutineTimer` | `ITimer` | `MonoBehaviour.StartCorotine` |

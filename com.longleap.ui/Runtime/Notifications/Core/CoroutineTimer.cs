@@ -2,9 +2,9 @@ using System;
 using System.Collections;
 using UnityEngine;
 
-namespace LongLeap.Platform.Unity
+namespace LongLeap.Notifications
 {
-    public sealed class CoroutineTimer : LongLeap.Notifications.ITimer
+    public sealed class CoroutineTimer : ITimer
     {
         private readonly MonoBehaviour _host;
         private Coroutine _coroutine;

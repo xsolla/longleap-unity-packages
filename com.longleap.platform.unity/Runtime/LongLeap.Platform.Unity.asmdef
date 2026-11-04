@@ -4,7 +4,6 @@
   "references": [
     "LongLeap.Core",
     "LongLeap.Achievements",
-    "LongLeap.Notifications",
     "Newtonsoft.Json",
     "UnityEngine.CoreModule"
   ],

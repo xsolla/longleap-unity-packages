@@ -1,8 +1,0 @@
-{
-  "name": "com.longleap.notifications",
-  "version": "0.1.0",
-  "displayName": "LongLeap Notifications",
-  "description": "Priority-queued notification system for Unity.",
-  "unity": "6000.0",
-  "dependencies": {}
-}

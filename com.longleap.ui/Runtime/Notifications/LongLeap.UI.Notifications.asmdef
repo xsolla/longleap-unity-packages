@@ -5,8 +5,7 @@
     "LongLeap.UI",
     "UnityEngine.UI",
     "Unity.TextMeshPro",
-    "LongLeap.Notifications",
-    "LongLeap.Platform.Unity"
+    "LongLeap.Notifications"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
@@ -14,20 +13,6 @@
   "overrideReferences": false,
   "precompiledReferences": [],
   "autoReferenced": true,
-  "defineConstraints": [
-    "LONGLEAP_NOTIFICATIONS",
-    "LONGLEAP_PLATFORM_UNITY"
-  ],
-  "versionDefines": [
-    {
-      "name": "com.longleap.notifications",
-      "expression": "0.0.0",
-      "define": "LONGLEAP_NOTIFICATIONS"
-    },
-    {
-      "name": "com.longleap.platform.unity",
-      "expression": "0.0.0",
-      "define": "LONGLEAP_PLATFORM_UNITY"
-    }
-  ]
+  "defineConstraints": [],
+  "versionDefines": []
 }

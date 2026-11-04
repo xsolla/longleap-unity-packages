@@ -1,6 +1,5 @@
 
 using LongLeap.Notifications;
-using LongLeap.Platform.Unity;
 using UnityEngine;
 
 namespace LongLeap.UI

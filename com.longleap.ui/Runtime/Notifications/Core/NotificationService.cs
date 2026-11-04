@@ -15,34 +15,37 @@ namespace LongLeap.Notifications
         /// <summary>
         /// Raised when a notification is ready to be displayed. The <see cref="Action"/> callback
         /// should be invoked once the notification has been dismissed, which triggers the next
-        /// queued notification (if any).
+        /// queued notification (if any). Subscribing while idle immediately shows the next queued notification.
         /// </summary>
-        public event Action<NotificationData, Action> OnShowRequest;
+        public event Action<NotificationData, Action> OnShowRequest
+        {
+            add
+            {
+                _showRequest += value;
+                ShowNextIfIdle();
+            }
+            remove => _showRequest -= value;
+        }
 
         private readonly List<NotificationData> _items = new List<NotificationData>();
+        private Action<NotificationData, Action> _showRequest;
         private bool _isBusy;
+        private int _showId;
 
         /// <summary>
         /// Shows the specified notification immediately if the service is idle, or enqueues it
-        /// if a notification is currently being displayed.
+        /// if a notification is currently being displayed or no view is subscribed yet.
         /// </summary>
         /// <param name="data">The notification data to show.</param>
         public void Show(NotificationData data)
         {
-            if (OnShowRequest == null)
-            {
-                Debug.LogError("Cannot show notification: no subscribers registered for OnShowRequest.");
-                return;
-            }
-
-            if (_isBusy)
+            if (_isBusy || _showRequest == null)
             {
                 Enqueue(data);
                 return;
             }
 
-            _isBusy = true;
-            OnShowRequest(data, OnViewComplete);
+            StartShow(data);
         }
 
         /// <summary>
@@ -53,13 +56,61 @@ namespace LongLeap.Notifications
             _items.Clear();
         }
 
-        private void OnViewComplete()
+        private void StartShow(NotificationData data)
+        {
+            _isBusy = true;
+            var showId = ++_showId;
+
+            try
+            {
+                _showRequest(data, () => OnViewComplete(showId));
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"NotificationService: OnShowRequest handler threw while showing \"{data.Title}\": {e}");
+
+                // The handler may have completed the notification before throwing; only recover if it did not.
+                if (IsCurrentShow(showId))
+                {
+                    FinishCurrentShow();
+                }
+            }
+        }
+
+        private void OnViewComplete(int showId)
+        {
+            if (!IsCurrentShow(showId))
+            {
+                Debug.LogWarning("NotificationService: ignored a duplicate or stale completion callback.");
+                return;
+            }
+
+            FinishCurrentShow();
+        }
+
+        private bool IsCurrentShow(int showId)
+        {
+            return _isBusy && showId == _showId;
+        }
+
+        private void FinishCurrentShow()
         {
             _isBusy = false;
+            ShowNextIfIdle();
+        }
+
+        private void ShowNextIfIdle()
+        {
+            // With no subscriber the queue is kept intact until a view subscribes again.
+            if (_isBusy || _showRequest == null)
+            {
+                return;
+            }
+
             var next = Dequeue();
             if (next.HasValue)
             {
-                Show(next.Value);
+                StartShow(next.Value);
             }
         }
 

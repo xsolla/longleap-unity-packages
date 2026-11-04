@@ -91,7 +91,6 @@ Consequences worth knowing before you add anything:
 | Package | What it is |
 |---|---|
 | `com.longleap.core` | All contracts and domain types, plus the `CloudSaveService` and `LeaderboardService` implementations. Everything depends on this. |
-| `com.longleap.notifications` | Priority-queued popup notifications. Fully standalone; game code supplies the view. |
 | `com.longleap.localization` | `Loc` static facade over Unity.Localization, `LocKey` newtype, `LocalizedText` component. |
 
 **Features**
@@ -124,7 +123,7 @@ from the Package Manager.
 
 | Package | What it is | Depends on |
 |---|---|---|
-| `com.longleap.platform.unity` | `PlayerPrefs` adapter, file and PlayerPrefs persistent storage, coroutine timer, Resources achievement loader. | core |
+| `com.longleap.platform.unity` | `PlayerPrefs` adapter, file and PlayerPrefs persistent storage, Resources achievement loader. | core |
 | `com.longleap.platform.webgl` | `sendBeacon` transport for analytics (survives tab close) and a page-visibility hook that flushes analytics when the tab is hidden. | core, analytics |
 
 **Identity**
@@ -139,7 +138,7 @@ built by the game; these only carry the plumbing and the screens.
 | Package | What it is | Depends on |
 |---|---|---|
 | `com.longleap.bootstrap` | Sequential loading pipeline of `ILoadingTask` steps, `ServiceContainer`, `GameServices` access point, optional Addressables loading, `LoadSceneTask`. | — (Addressables) |
-| `com.longleap.ui` | Window system (catalog of Addressable window prefabs with preload/unload rules) and windows for settings, achievements, daily rewards, daily quests, backpack, notifications. Each feature module compiles only when its feature package is installed. Logic only — prefabs stay in the game. | — (uGUI, Input System, Addressables); feature modules: the matching feature packages |
+| `com.longleap.ui` | Window system (catalog of Addressable window prefabs with preload/unload rules) and windows for settings, achievements, daily rewards, daily quests, backpack. Includes the priority-queued notification system (formerly `com.longleap.notifications`). Each feature module compiles only when its feature package is installed. Logic only — prefabs stay in the game. | — (uGUI, Input System, Addressables); feature modules: the matching feature packages |
 
 **Tooling**
 
