@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
-using LongLeap.RemoteConfig.Storage;
+using LongLeap.Core;
 using LongLeap.Firebase;
 using Newtonsoft.Json;
 using NUnit.Framework;
@@ -11,7 +12,7 @@ using UnityEngine;
 namespace LongLeap.Firebase.Tests
 {
     [TestFixture]
-    public class FirebaseRemoteConfigBackendTests
+    public class FirebaseRemoteConfigProviderTests
     {
         private const string TestApiKey = "test-api-key";
         private const long TestProjectNumber = 123456789L;
@@ -75,8 +76,8 @@ namespace LongLeap.Firebase.Tests
             };
 
             var config = CreateConfigWithOverrides();
-            var backend = new FirebaseRemoteConfigBackend(config, _prefs, handler);
-            var result = await backend.FetchAsync();
+            var provider = new FirebaseRemoteConfigProvider(config, _prefs, handler);
+            var result = await provider.FetchAsync();
 
             Assert.IsTrue(result.IsSuccess, "FetchAsync should succeed");
             Assert.AreEqual(2, callLog.Count, "Expected 2 HTTP calls: FID registration, RC fetch");
@@ -112,8 +113,8 @@ namespace LongLeap.Firebase.Tests
             };
 
             var config = CreateConfigWithOverrides();
-            var backend = new FirebaseRemoteConfigBackend(config, _prefs, handler);
-            var result = await backend.FetchAsync();
+            var provider = new FirebaseRemoteConfigProvider(config, _prefs, handler);
+            var result = await provider.FetchAsync();
 
             Assert.IsTrue(result.IsSuccess, "FetchAsync should succeed");
             Assert.AreEqual(1, callLog.Count, "Expected exactly 1 HTTP call (RC fetch only)");
@@ -141,10 +142,68 @@ namespace LongLeap.Firebase.Tests
             };
 
             var config = CreateConfigWithOverrides();
-            var backend = new FirebaseRemoteConfigBackend(config, _prefs, handler);
-            var result = await backend.FetchAsync();
+            var provider = new FirebaseRemoteConfigProvider(config, _prefs, handler);
+            var result = await provider.FetchAsync();
 
             Assert.IsFalse(result.IsSuccess, "A network error should return IsSuccess=false");
+        }
+
+        [Test]
+        public async Task FetchAsync_DateLikeValues_StayVerbatim()
+        {
+            SaveValidFidData();
+            Func<string, string, string, Task<string>> handler = (method, url, body) =>
+                Task.FromResult(@"{""entries"": {""sale_end"": ""2026-12-01T00:00:00Z"", ""day"": ""2026-12-01""}}");
+
+            var provider = new FirebaseRemoteConfigProvider(CreateConfigWithOverrides(), _prefs, handler);
+            var result = await provider.FetchAsync();
+
+            Assert.IsTrue(result.IsSuccess);
+            Assert.AreEqual("2026-12-01T00:00:00Z", result.Parameters["sale_end"]);
+            Assert.AreEqual("2026-12-01", result.Parameters["day"]);
+        }
+
+        [Test]
+        public async Task FetchAsync_NoEntries_SucceedsWithNoParameters()
+        {
+            SaveValidFidData();
+            Func<string, string, string, Task<string>> handler = (method, url, body) =>
+                Task.FromResult(@"{""state"": ""EMPTY_CONFIG""}");
+
+            var provider = new FirebaseRemoteConfigProvider(CreateConfigWithOverrides(), _prefs, handler);
+            var result = await provider.FetchAsync();
+
+            Assert.IsTrue(result.IsSuccess);
+            Assert.AreEqual(0, result.Parameters.Count);
+            Assert.AreEqual(0, result.Experiments.Count);
+        }
+
+        [Test]
+        public async Task FetchAsync_CanceledDuringRequest_DropsTheAnswerAndThrows()
+        {
+            SaveValidFidData();
+            var cts = new CancellationTokenSource();
+            Func<string, string, string, Task<string>> handler = (method, url, body) =>
+            {
+                cts.Cancel();
+                return Task.FromResult(@"{""entries"": {""p1"": ""v1""}}");
+            };
+
+            var provider = new FirebaseRemoteConfigProvider(CreateConfigWithOverrides(), _prefs, handler);
+
+            // Awaited rather than Assert.CatchAsync: a blocking wait on a continuation posted to
+            // Unity's synchronization context would never finish.
+            OperationCanceledException caught = null;
+            try
+            {
+                await provider.FetchAsync(cts.Token);
+            }
+            catch (OperationCanceledException ex)
+            {
+                caught = ex;
+            }
+
+            Assert.IsNotNull(caught, "cancellation must surface as OperationCanceledException");
         }
 
         [Test]
@@ -154,7 +213,7 @@ namespace LongLeap.Firebase.Tests
 
             var ex = Assert.Throws<ArgumentException>(() =>
             {
-                _ = new FirebaseRemoteConfigBackend(config, _prefs);
+                _ = new FirebaseRemoteConfigProvider(config, _prefs);
             });
 
             Assert.That(ex.Message, Does.Contain("GoogleAppId"));

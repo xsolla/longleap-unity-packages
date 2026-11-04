@@ -1,317 +1,258 @@
 using System;
-using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using LongLeap.Core;
-using LongLeap.RemoteConfig.Storage;
-using Newtonsoft.Json;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 
 namespace LongLeap.RemoteConfig.Tests
 {
+    // Fetching, deduplication, cancellation, throttling, activation and disposal.
     [TestFixture]
-    public class RemoteConfigServiceTests
+    public sealed class RemoteConfigServiceTests
     {
-        private MockProvider _mock;
+        private FakeRemoteConfigProvider _provider;
         private InMemoryPlayerPrefs _prefs;
-        private RemoteConfigService _service;
+        private DateTime _now;
 
         [SetUp]
         public void SetUp()
         {
-            _mock = new MockProvider();
+            _provider = new FakeRemoteConfigProvider();
             _prefs = new InMemoryPlayerPrefs();
-            _service = new RemoteConfigService(_mock, _prefs);
+            _now = new DateTime(2026, 11, 4, 12, 0, 0, DateTimeKind.Utc);
         }
 
-        [TearDown]
-        public void TearDown()
+        private RemoteConfigService Create(Action<RemoteConfigOptions> configure = null)
         {
-            _service.Dispose();
-        }
-
-        private sealed class MockProvider : IRemoteConfigProvider
-        {
-            public RemoteConfigFetchResult Result { get; set; }
-            public int CallCount { get; private set; }
-            public TaskCompletionSource<RemoteConfigFetchResult> Tcs { get; set; }
-
-            public Task<RemoteConfigFetchResult> FetchAsync()
-            {
-                CallCount++;
-                if (Tcs != null)
-                    return Tcs.Task;
-                return Task.FromResult(Result);
-            }
+            var options = new RemoteConfigOptions { UtcNow = () => _now };
+            configure?.Invoke(options);
+            return new RemoteConfigService(_provider, _prefs, options);
         }
 
         [Test]
-        public async Task FetchAsync_Success_UpdatesParameters()
+        public void Constructor_InvalidArguments_Throw()
         {
-            _mock.Result = new RemoteConfigFetchResult(
-                new Dictionary<string, string>
-                {
-                    ["str_key"] = "hello",
-                    ["int_key"] = "42",
-                    ["float_key"] = "3.14",
-                    ["bool_key"] = "true"
-                },
-                Array.Empty<AbExperimentInfo>(),
-                true
-            );
-
-            await _service.FetchAsync();
-
-            Assert.AreEqual("hello", _service.GetString("str_key", "def"));
-            Assert.AreEqual(42, _service.GetInt("int_key", 0));
-            Assert.AreEqual(3.14f, _service.GetFloat("float_key", 0f));
-            Assert.AreEqual(true, _service.GetBool("bool_key", false));
+            Assert.Throws<ArgumentNullException>(() => new RemoteConfigService(null, _prefs));
+            Assert.Throws<ArgumentNullException>(() => new RemoteConfigService(_provider, null));
+            Assert.Throws<ArgumentException>(() => Create(o => o.CacheKey = ""));
+            Assert.Throws<ArgumentException>(() => Create(o => o.MinimumFetchInterval = TimeSpan.FromSeconds(-1)));
+            Assert.Throws<ArgumentException>(() => Create(o => o.UtcNow = null));
         }
 
         [Test]
-        public async Task FetchAsync_Success_UpdatesCache()
+        public async Task Fetch_Success_AppliesValuesAndExperiments()
         {
-            _mock.Result = new RemoteConfigFetchResult(
-                new Dictionary<string, string>
-                {
-                    ["key1"] = "val1",
-                    ["key2"] = "val2"
-                },
-                Array.Empty<AbExperimentInfo>(),
-                true
-            );
+            var service = Create();
+            _provider.Result = FakeRemoteConfigProvider.Success(
+                new[] { ("str_key", "hello"), ("int_key", "42") },
+                new[] { new AbExperimentInfo("exp_01", 1), new AbExperimentInfo("exp_02", 2) });
 
-            await _service.FetchAsync();
+            var status = await service.FetchAsync();
 
-            string cached = _prefs.GetString("rc_cache", "");
-            Assert.IsNotEmpty(cached);
-
-            var deserialized = JsonConvert.DeserializeObject<Dictionary<string, string>>(cached);
-            Assert.AreEqual("val1", deserialized["key1"]);
-            Assert.AreEqual("val2", deserialized["key2"]);
+            Assert.AreEqual(RemoteConfigFetchStatus.Success, status);
+            Assert.AreEqual(RemoteConfigFetchStatus.Success, service.LastFetchStatus);
+            Assert.AreEqual(_now, service.LastSuccessfulFetchUtc);
+            Assert.AreEqual("hello", service.GetString("str_key", "def"));
+            Assert.AreEqual(42, service.GetInt("int_key", 0));
+            Assert.AreEqual(2, service.ActiveExperiments.Count);
+            Assert.AreEqual("exp_02", service.ActiveExperiments[1].ExperimentId);
+            Assert.AreEqual(2, service.ActiveExperiments[1].VariantIndex);
         }
 
         [Test]
-        public async Task FetchAsync_Failure_KeepsPreviousValues()
+        public async Task Fetch_SuccessReplacesTheWholeSet()
         {
-            _mock.Result = new RemoteConfigFetchResult(
-                new Dictionary<string, string> { ["key"] = "first" },
-                Array.Empty<AbExperimentInfo>(),
-                true
-            );
-            await _service.FetchAsync();
+            var service = Create();
+            _provider.Result = FakeRemoteConfigProvider.Success(("old", "1"));
+            await service.FetchAsync();
 
-            _mock.Result = new RemoteConfigFetchResult(null, Array.Empty<AbExperimentInfo>(), false);
-            await _service.FetchAsync();
+            _provider.Result = RemoteConfigFetchResult.Success(null);
+            await service.FetchAsync();
 
-            Assert.AreEqual("first", _service.GetString("key", "def"));
+            Assert.IsFalse(service.HasKey("old"));
+            Assert.AreEqual(0, service.Values.Count);
         }
 
         [Test]
-        public void FetchAsync_NoCacheNoNetwork_ReturnsDefaults()
+        public async Task Fetch_Failure_KeepsPreviousValues()
         {
-            LogAssert.Expect(LogType.Warning, new Regex("ключ 'str_key'.*не найден"));
-            Assert.AreEqual("default_str", _service.GetString("str_key", "default_str"));
+            var service = Create();
+            _provider.Result = FakeRemoteConfigProvider.Success(("key", "first"));
+            await service.FetchAsync();
 
-            LogAssert.Expect(LogType.Warning, new Regex("ключ 'int_key'.*не найден"));
-            Assert.AreEqual(42, _service.GetInt("int_key", 42));
+            _provider.Result = RemoteConfigFetchResult.Failure;
+            var status = await service.FetchAsync();
 
-            LogAssert.Expect(LogType.Warning, new Regex("ключ 'float_key'.*не найден"));
-            Assert.AreEqual(3.14f, _service.GetFloat("float_key", 3.14f));
-
-            LogAssert.Expect(LogType.Warning, new Regex("ключ 'bool_key'.*не найден"));
-            Assert.AreEqual(true, _service.GetBool("bool_key", true));
+            Assert.AreEqual(RemoteConfigFetchStatus.Failure, status);
+            Assert.AreEqual(RemoteConfigFetchStatus.Failure, service.LastFetchStatus);
+            Assert.AreEqual("first", service.GetString("key", "def"));
         }
 
         [Test]
-        public async Task FetchAsync_ConcurrentCall_Deduplicates()
+        public async Task Fetch_ProviderThrowsOrReturnsNull_ReturnsFailure()
         {
-            var tcs = new TaskCompletionSource<RemoteConfigFetchResult>();
-            var successResult = new RemoteConfigFetchResult(
-                new Dictionary<string, string> { ["key"] = "val" },
-                Array.Empty<AbExperimentInfo>(),
-                true
-            );
+            var service = Create();
 
-            _mock.Tcs = tcs;
+            _provider.Throw = new InvalidOperationException("boom");
+            LogAssert.Expect(LogType.Warning, new Regex("RemoteConfigService: the provider threw: boom"));
+            Assert.AreEqual(RemoteConfigFetchStatus.Failure, await service.FetchAsync());
 
-            var task1 = _service.FetchAsync();
-            var task2 = _service.FetchAsync();
-
-            tcs.SetResult(successResult);
-
-            await Task.WhenAll(task1, task2);
-
-            Assert.AreEqual(1, _mock.CallCount, "Должен быть только один вызов провайдера");
-            Assert.AreEqual("val", _service.GetString("key", "default"));
+            _provider.Throw = null;
+            _provider.Result = null;
+            Assert.AreEqual(RemoteConfigFetchStatus.Failure, await service.FetchAsync());
         }
 
         [Test]
-        public async Task GetFloat_BadValue_ReturnsDefault()
+        public async Task Fetch_ConcurrentCalls_ShareOneRequest()
         {
-            _mock.Result = new RemoteConfigFetchResult(
-                new Dictionary<string, string> { ["bad_float"] = "banana" },
-                Array.Empty<AbExperimentInfo>(),
-                true
-            );
-            await _service.FetchAsync();
+            var service = Create();
+            _provider.Pending = new TaskCompletionSource<RemoteConfigFetchResult>();
 
-            LogAssert.Expect(LogType.Warning, new Regex("не удалось.*bad_float.*banana.*float"));
-            float result = _service.GetFloat("bad_float", 3.14f);
-            Assert.AreEqual(3.14f, result);
+            var first = service.FetchAsync();
+            var second = service.FetchAsync();
+            var third = service.FetchAsync();
+            _provider.Pending.SetResult(FakeRemoteConfigProvider.Success(("key", "val")));
+            var statuses = await Task.WhenAll(first, second, third);
+
+            Assert.AreEqual(1, _provider.CallCount, "the provider must be called once");
+            CollectionAssert.AreEqual(new[] { RemoteConfigFetchStatus.Success, RemoteConfigFetchStatus.Success, RemoteConfigFetchStatus.Success }, statuses);
+            Assert.AreEqual("val", service.GetString("key", "default"));
         }
 
         [Test]
-        public async Task GetFloat_MissingKey_LogsWarningOnce()
+        public async Task Fetch_AfterCompletion_StartsANewRequest()
         {
-            _mock.Result = new RemoteConfigFetchResult(
-                new Dictionary<string, string> { ["other"] = "value" },
-                Array.Empty<AbExperimentInfo>(),
-                true
-            );
-            await _service.FetchAsync();
+            var service = Create();
 
-            LogAssert.Expect(LogType.Warning, new Regex("ключ 'missing_float'.*не найден"));
-            float result1 = _service.GetFloat("missing_float", 5.0f);
-            Assert.AreEqual(5.0f, result1);
+            await service.FetchAsync();
+            await service.FetchAsync();
 
-            float result2 = _service.GetFloat("missing_float", 5.0f);
-            Assert.AreEqual(5.0f, result2);
+            Assert.AreEqual(2, _provider.CallCount);
         }
 
         [Test]
-        public async Task GetInt_ValidValue_ReturnsParsedInt()
+        public async Task Fetch_CallerCancels_ReturnsCanceledButResultIsStillApplied()
         {
-            _mock.Result = new RemoteConfigFetchResult(
-                new Dictionary<string, string> { ["int_val"] = "42" },
-                Array.Empty<AbExperimentInfo>(),
-                true
-            );
-            await _service.FetchAsync();
+            var service = Create();
+            _provider.Pending = new TaskCompletionSource<RemoteConfigFetchResult>();
+            var cts = new CancellationTokenSource();
 
-            int result = _service.GetInt("int_val", 0);
-            Assert.AreEqual(42, result);
+            var waiting = service.FetchAsync(cts.Token);
+            cts.Cancel();
+            Assert.AreEqual(RemoteConfigFetchStatus.Canceled, await waiting);
+
+            _provider.Pending.SetResult(FakeRemoteConfigProvider.Success(("key", "late")));
+            // Joins the request still in flight (or repeats it with the same result).
+            Assert.AreEqual(RemoteConfigFetchStatus.Success, await service.FetchAsync());
+
+            Assert.AreEqual("late", service.GetString("key", "default"));
         }
 
         [Test]
-        public async Task GetBool_TrueValues_ReturnTrue()
+        public async Task Fetch_TokenAlreadyCanceled_DoesNotCallProvider()
         {
-            _mock.Result = new RemoteConfigFetchResult(
-                new Dictionary<string, string>
-                {
-                    ["bool_true"] = "true",
-                    ["bool_one"] = "1"
-                },
-                Array.Empty<AbExperimentInfo>(),
-                true
-            );
-            await _service.FetchAsync();
+            var service = Create();
 
-            Assert.AreEqual(true, _service.GetBool("bool_true", false));
-            Assert.AreEqual(true, _service.GetBool("bool_one", false));
+            var status = await service.FetchAsync(new CancellationToken(true));
+
+            Assert.AreEqual(RemoteConfigFetchStatus.Canceled, status);
+            Assert.AreEqual(0, _provider.CallCount);
         }
 
         [Test]
-        public async Task GetBool_FalseValues_ReturnFalse()
+        public async Task Fetch_MinimumInterval_ThrottlesUntilElapsed_AlsoAcrossLaunches()
         {
-            _mock.Result = new RemoteConfigFetchResult(
-                new Dictionary<string, string>
-                {
-                    ["bool_false"] = "false",
-                    ["bool_zero"] = "0"
-                },
-                Array.Empty<AbExperimentInfo>(),
-                true
-            );
-            await _service.FetchAsync();
+            void Configure(RemoteConfigOptions o) => o.MinimumFetchInterval = TimeSpan.FromMinutes(10);
+            var service = Create(Configure);
+            _provider.Result = FakeRemoteConfigProvider.Success(("key", "val"));
+            await service.FetchAsync();
 
-            Assert.AreEqual(false, _service.GetBool("bool_false", true));
-            Assert.AreEqual(false, _service.GetBool("bool_zero", true));
+            _now = _now.AddMinutes(5);
+            Assert.AreEqual(RemoteConfigFetchStatus.Throttled, await service.FetchAsync());
+            Assert.AreEqual(RemoteConfigFetchStatus.Throttled, await Create(Configure).FetchAsync(), "the fetch time is cached");
+            Assert.AreEqual(1, _provider.CallCount);
+
+            _now = _now.AddMinutes(5);
+            Assert.AreEqual(RemoteConfigFetchStatus.Success, await service.FetchAsync());
+            Assert.AreEqual(2, _provider.CallCount);
         }
 
         [Test]
-        public void ActiveExperiments_NeverNull()
+        public async Task Fetch_DeferredActivation_AppliesOnActivateOrNextLaunch()
         {
-            Assert.IsNotNull(_service.ActiveExperiments);
-            Assert.AreEqual(0, _service.ActiveExperiments.Count);
+            var service = Create(o => o.ActivateOnFetch = false);
+            var updates = 0;
+            service.Updated += () => updates++;
+            _provider.Result = FakeRemoteConfigProvider.Success(
+                new[] { ("key", "new") }, new[] { new AbExperimentInfo("exp", 1) });
+
+            Assert.AreEqual(RemoteConfigFetchStatus.Success, await service.FetchAsync());
+            Assert.IsTrue(service.HasPendingValues);
+            Assert.IsFalse(service.HasKey("key"));
+            Assert.AreEqual(0, service.ActiveExperiments.Count);
+            Assert.AreEqual(0, updates);
+
+            Assert.AreEqual("new", Create().GetString("key", "def"), "the next launch reads the fetched values");
+
+            Assert.IsTrue(service.Activate());
+            Assert.AreEqual("new", service.GetString("key", "def"));
+            Assert.AreEqual(1, service.ActiveExperiments.Count);
+            Assert.AreEqual(1, updates);
+            Assert.IsFalse(service.Activate(), "nothing left to activate");
         }
 
         [Test]
-        public async Task ActiveExperiments_AfterFetch_ReturnsExperiments()
+        public async Task Updated_RaisedOnApply_AndAFailingHandlerDoesNotStopOthers()
         {
-            var experiments = new List<AbExperimentInfo>
-            {
-                new AbExperimentInfo("exp_01", 1),
-                new AbExperimentInfo("exp_02", 2)
-            };
+            var service = Create();
+            var calls = 0;
+            service.Updated += () => throw new InvalidOperationException("handler failed");
+            service.Updated += () => calls++;
+            _provider.Result = FakeRemoteConfigProvider.Success(("key", "val"));
 
-            _mock.Result = new RemoteConfigFetchResult(new Dictionary<string, string>(), experiments, true);
-            await _service.FetchAsync();
+            LogAssert.Expect(LogType.Exception, new Regex("handler failed"));
+            var status = await service.FetchAsync();
 
-            Assert.AreEqual(2, _service.ActiveExperiments.Count);
-            Assert.AreEqual("exp_01", _service.ActiveExperiments[0].ExperimentId);
-            Assert.AreEqual(1, _service.ActiveExperiments[0].VariantIndex);
-            Assert.AreEqual("exp_02", _service.ActiveExperiments[1].ExperimentId);
-            Assert.AreEqual(2, _service.ActiveExperiments[1].VariantIndex);
+            Assert.AreEqual(RemoteConfigFetchStatus.Success, status);
+            Assert.AreEqual(1, calls);
         }
 
         [Test]
-        public void Cache_Corrupted_DiscardedAndDefaultsUsed()
+        public async Task Dispose_DuringFetch_CancelsProviderAndDropsResult()
         {
-            _prefs.SetString("rc_cache", "not valid json {{{");
-            _service.Dispose();
+            var service = Create();
+            _provider.Pending = new TaskCompletionSource<RemoteConfigFetchResult>();
 
-            LogAssert.Expect(LogType.Warning, new Regex("кэш Remote Config повреждён"));
-            var corruptedService = new RemoteConfigService(_mock, _prefs);
+            var fetch = service.FetchAsync();
+            service.Dispose();
+            Assert.IsTrue(_provider.LastToken.IsCancellationRequested, "the provider's token is cancelled");
 
-            LogAssert.Expect(LogType.Warning, new Regex("ключ 'any_key'.*не найден"));
-            string result = corruptedService.GetString("any_key", "fallback");
-            Assert.AreEqual("fallback", result);
+            _provider.Pending.SetResult(FakeRemoteConfigProvider.Success(("key", "late")));
 
-            corruptedService.Dispose();
+            Assert.AreEqual(RemoteConfigFetchStatus.Canceled, await fetch);
+            Assert.IsFalse(service.HasKey("key"));
+            Assert.AreEqual(RemoteConfigFetchStatus.Canceled, await service.FetchAsync());
         }
 
         [Test]
-        public void Cache_LoadedOnConstruction()
+        public async Task Dispose_ClearsStateAndGettersStaySilent()
         {
-            var cacheData = new Dictionary<string, string>
-            {
-                ["cached_key"] = "cached_value",
-                ["cached_int"] = "99"
-            };
-            string json = JsonConvert.SerializeObject(cacheData);
-            _prefs.SetString("rc_cache", json);
+            var service = Create();
+            _provider.Result = FakeRemoteConfigProvider.Success(
+                new[] { ("key", "val") }, new[] { new AbExperimentInfo("exp", 1) });
+            await service.FetchAsync();
 
-            _service.Dispose();
-            var cachedService = new RemoteConfigService(_mock, _prefs);
+            service.Dispose();
 
-            Assert.AreEqual("cached_value", cachedService.GetString("cached_key", "def"));
-            Assert.AreEqual(99, cachedService.GetInt("cached_int", 0));
-
-            cachedService.Dispose();
-        }
-
-        [Test]
-        public void Dispose_ClearsState()
-        {
-            _mock.Result = new RemoteConfigFetchResult(
-                new Dictionary<string, string> { ["key"] = "val" },
-                Array.Empty<AbExperimentInfo>(),
-                true
-            );
-            // Note: FetchAsync is async, but dispose clears state even if we didn't fetch.
-            // After Dispose, getters should return defaults without logging warnings.
-
-            _service.Dispose();
-
-            Assert.AreEqual("default", _service.GetString("key", "default"));
-            Assert.AreEqual(10, _service.GetInt("key", 10));
-            Assert.AreEqual(1.0f, _service.GetFloat("key", 1.0f));
-            Assert.AreEqual(true, _service.GetBool("key", true));
-            Assert.IsNotNull(_service.ActiveExperiments);
-            Assert.AreEqual(0, _service.ActiveExperiments.Count);
+            Assert.AreEqual("default", service.GetString("key", "default"));
+            Assert.AreEqual(10, service.GetInt("key", 10));
+            Assert.AreEqual(1.0f, service.GetFloat("key", 1.0f));
+            Assert.AreEqual(true, service.GetBool("key", true));
+            Assert.AreEqual(0, service.ActiveExperiments.Count);
+            LogAssert.NoUnexpectedReceived();
         }
     }
 }

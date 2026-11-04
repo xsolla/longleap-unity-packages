@@ -8,7 +8,7 @@ Production Firebase backends for LongLeap services, pure REST, no Firebase SDK. 
 
 **FirebaseLeaderboardProvider** — Implements `ILeaderboardProvider`. RTDB score submission and retrieval. Submits are immediate, written only when they beat the stored score; queries order by `negScore` (needs `.indexOn`).
 
-**FirebaseRemoteConfigBackend** — Implements `IRemoteConfigProvider` (from `com.longleap.remoteconfig`). Registers a Firebase Installation ID (stored in `IPlayerPrefs`), then fetches parameters and A/B experiment payloads from the Remote Config REST API. Parameter caching is done by `com.longleap.remoteconfig`, not here.
+**FirebaseRemoteConfigProvider** — Implements `IRemoteConfigProvider` (from `com.longleap.remoteconfig`). Registers a Firebase Installation ID (stored in `IPlayerPrefs`), then fetches parameters and A/B experiment payloads from the Remote Config REST API. Parameter caching is done by `com.longleap.remoteconfig`, not here.
 
 **FirebaseConfigSO** — ScriptableObject holding `ApiKey`, `DatabaseUrl`, `GoogleAppId`, `ProjectNumber`.
 
@@ -17,5 +17,5 @@ Production Firebase backends for LongLeap services, pure REST, no Firebase SDK. 
 ## Relationships
 
 - **Firebase → Core**: Implements `IAuthProvider`, `ICloudSaveProvider`, `IAccountCloudSaveScope`, `ILeaderboardProvider`; uses `IPlayerPrefs` and `CloudSaveEnvelope`.
-- **Firebase → RemoteConfig**: Implements `IRemoteConfigProvider`. Tests use `InMemoryPlayerPrefs` from that package.
+- **Firebase → RemoteConfig**: Implements `IRemoteConfigProvider`. Tests use `InMemoryPlayerPrefs` from `com.longleap.core`.
 - **XsollaId → Firebase**: `com.longleap.xsollaid` drives `IAccountCloudSaveScope` on sign-in/sign-out and shares the `longleap_cloudsave_scope` prefs key.

@@ -1,9 +1,12 @@
 using System.Collections.Generic;
 using System.Globalization;
-using LongLeap.Core;
 
-namespace LongLeap.RemoteConfig.Storage
+namespace LongLeap.Core
 {
+    /// <summary>
+    /// <see cref="IPlayerPrefs"/> kept in memory only: nothing survives the instance and
+    /// <see cref="Save"/> does nothing. For tests, and for sessions that must not persist anything.
+    /// </summary>
     public sealed class InMemoryPlayerPrefs : IPlayerPrefs
     {
         private readonly Dictionary<string, string> _store = new Dictionary<string, string>();
@@ -15,7 +18,8 @@ namespace LongLeap.RemoteConfig.Storage
 
         public int GetInt(string key, int defaultValue = 0)
         {
-            if (_store.TryGetValue(key, out var value) && int.TryParse(value, out var result))
+            if (_store.TryGetValue(key, out var value)
+                && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
                 return result;
             return defaultValue;
         }
@@ -35,12 +39,12 @@ namespace LongLeap.RemoteConfig.Storage
 
         public void SetInt(string key, int value)
         {
-            _store[key] = value.ToString();
+            _store[key] = value.ToString(CultureInfo.InvariantCulture);
         }
 
         public void SetFloat(string key, float value)
         {
-            _store[key] = value.ToString(CultureInfo.InvariantCulture);
+            _store[key] = value.ToString("R", CultureInfo.InvariantCulture);
         }
 
         public bool HasKey(string key)

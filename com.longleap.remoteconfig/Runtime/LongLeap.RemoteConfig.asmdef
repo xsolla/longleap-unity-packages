@@ -3,8 +3,7 @@
   "rootNamespace": "LongLeap.RemoteConfig",
   "references": [
     "LongLeap.Core",
-    "Newtonsoft.Json",
-    "UnityEngine.CoreModule"
+    "Newtonsoft.Json"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
@@ -13,5 +12,6 @@
   "precompiledReferences": [],
   "autoReferenced": true,
   "defineConstraints": [],
-  "versionDefines": []
+  "versionDefines": [],
+  "noEngineReferences": false
 }

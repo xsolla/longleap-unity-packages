@@ -13,6 +13,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the `LongLeap.Core` namespace, moved from the removed `com.longleap.platform.unity`
   package (was `LongLeap.Platform.Unity`). Behaviour is unchanged; replace
   `using LongLeap.Platform.Unity;` with `using LongLeap.Core;`.
+- `InMemoryPlayerPrefs`: dictionary-backed `IPlayerPrefs` for tests, moved from
+  `com.longleap.remoteconfig` (was `LongLeap.RemoteConfig.Storage`). Replace
+  `using LongLeap.RemoteConfig.Storage;` with `using LongLeap.Core;`. Integers are
+  now written and read culture-invariantly.
 
 ### Removed
 

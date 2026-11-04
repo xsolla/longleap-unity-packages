@@ -22,7 +22,7 @@
   "licensesUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.firebase/LICENSE.md",
   "dependencies": {
     "com.longleap.core": "0.1.0",
-    "com.longleap.remoteconfig": "1.0.0",
+    "com.longleap.remoteconfig": "0.1.0",
     "com.unity.nuget.newtonsoft-json": "3.0.2"
   }
 }

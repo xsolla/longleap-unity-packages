@@ -20,7 +20,9 @@ First release.
   through `IAccountCloudSaveScope`. The selected scope persists across launches.
 - `FirebaseLeaderboardProvider`: submit only-better scores, top-N, player rank
   and surroundings, ordered by `negScore`.
-- `FirebaseRemoteConfigBackend`: Firebase Installation ID registration and
-  Remote Config REST fetch, including A/B experiment assignments.
+- `FirebaseRemoteConfigProvider`: Firebase Installation ID registration and
+  Remote Config REST fetch, including A/B experiment assignments. Supports
+  cancellation (aborts the request). Parameter values are kept verbatim
+  (ISO date strings are not reformatted in the current culture).
 - `FirebaseConfigSO` config asset.
 - Injectable HTTP handlers on every network class, for tests.

@@ -15,7 +15,7 @@ Null-object backends for the service seams in `com.longleap.core`. Each does not
 ## Relationships
 
 - **Null → Core**: implements provider interfaces from `com.longleap.core`. That is the only dependency.
-- Null backends of feature seams live in their own packages: `NullRemoteConfigBackend` (remoteconfig), `NullAnalyticsBackend` (analytics), `NullBackPackService` (backpack), the customization `Null…Service` classes.
+- Null backends of feature seams live in their own packages: `NullRemoteConfigProvider` (remoteconfig), `NullAnalyticsBackend` (analytics), `NullBackPackService` (backpack), the customization `Null…Service` classes.
 
 ## Rejected names
 

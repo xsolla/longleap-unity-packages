@@ -66,6 +66,7 @@ Unity implementations of the storage contracts.
 | Type | Kind | Purpose |
 |---|---|---|
 | `UnityPlayerPrefsAdapter` | Sealed class `: IPlayerPrefs` | Pass-through to `UnityEngine.PlayerPrefs` |
+| `InMemoryPlayerPrefs` | Sealed class `: IPlayerPrefs` | Dictionary-backed, nothing persists, `Save()` does nothing. For tests and sessions that must not write to disk |
 | `PlayerPrefsPersistentStorage` | Sealed class `: IPersistentStorage` | Key-value storage in `PlayerPrefs`. Synchronous, saves on every write. Works on WebGL |
 | `FilePersistentStorage` | Sealed class `: IPersistentStorage` | One `<key>.json` file per key in a given folder. Runs on the thread pool, so not for WebGL |
 

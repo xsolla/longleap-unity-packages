@@ -104,7 +104,7 @@ Consequences worth knowing before you add anything:
 | `com.longleap.dailyquests` | JSON-defined quest pool, weighted daily set per UTC reset window, progress derived from stats (delta since issue), rewards claimed by the player. | core, stats |
 | `com.longleap.settings` | Typed settings (bool / int / float / enum) with auto-generated UI and per-group cloud persistence. | core, localization, tools |
 | `com.longleap.analytics` | GA4 Measurement Protocol analytics: validated events, batching with retry/backoff and a bounded queue, sessions and engagement time, consent switch, user ID/properties, A/B experiment tagging. Pluggable backends and HTTP transports, including a WebGL `sendBeacon` transport (survives tab close); `AnalyticsFlushDriver` hooks it to the player loop, `WebGlPageLifecycle` flushes when the browser tab is hidden. | core |
-| `com.longleap.remoteconfig` | Typed remote parameters via Firebase Remote Config REST (no Firebase SDK), PlayerPrefs cache, A/B experiment info. | core |
+| `com.longleap.remoteconfig` | Typed remote parameters with inline defaults: PlayerPrefs cache of parameters and A/B experiments, shared in-flight fetch, cancellation, throttling, deferred activation. Backend-agnostic; Firebase provider in `com.longleap.firebase`. | core |
 
 **Backends** — provider implementations, chosen by game code at construction
 
@@ -373,8 +373,8 @@ share one shape:
 | `EventName` | analytics | `None` sentinel + `IsValid`; logs an error, service drops the event |
 | `LocKey` | localization | null and `""` are the same empty key (`IsEmpty`); the only one that is not a `readonly struct` (Unity serialization) |
 
-**Versions.** Everything is `0.1.0` except `com.longleap.remoteconfig` at
-`1.0.0`. Nothing is enforced by a registry (these are embedded packages), so a
+**Versions.** Each package keeps its own version in `package.json` (most are
+`0.1.0`). Nothing is enforced by a registry (these are embedded packages), so a
 `package.json` dependency list can drift from what the `.asmdef` actually
 references without anything failing. Treat the
 `.asmdef` as the truth and fix the manifest to match.

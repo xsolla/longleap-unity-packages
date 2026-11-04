@@ -68,7 +68,7 @@ Player's 1-based position on a board. The service can query "my rank" and "entri
 ## Shared
 
 **IPlayerPrefs**:
-Abstraction over Unity PlayerPrefs: `GetString/Int/Float`, `SetString/Int/Float`, `HasKey`, `DeleteKey`, `Save`. Implemented by `UnityPlayerPrefsAdapter`; tests use in-memory fakes.
+Abstraction over Unity PlayerPrefs: `GetString/Int/Float`, `SetString/Int/Float`, `HasKey`, `DeleteKey`, `Save`. Implemented by `UnityPlayerPrefsAdapter` and, for tests, `InMemoryPlayerPrefs`.
 
 **IPersistentStorage**:
 Async key-value string storage. Implemented by `PlayerPrefsPersistentStorage` (all platforms, including WebGL) and `FilePersistentStorage` (a file per key; not for WebGL).

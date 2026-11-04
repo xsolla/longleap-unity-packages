@@ -1,15 +1,24 @@
 {
-    "name": "com.longleap.remoteconfig",
-    "version": "1.0.0",
-    "displayName": "LongLeap Remote Config",
-    "description": "Remote configurable game parameters with A/B testing analytics embedding",
-    "unity": "6000.0",
-    "keywords": ["remote-config", "firebase"],
-    "author": {
-        "name": "LongLeap"
-    },
-    "dependencies": {
-        "com.longleap.core": "0.1.0",
-        "com.unity.nuget.newtonsoft-json": "3.0.2"
-    }
+  "name": "com.longleap.remoteconfig",
+  "version": "0.1.0",
+  "displayName": "LongLeap Remote Config",
+  "description": "Typed remote game parameters with inline defaults: PlayerPrefs cache, fetch deduplication, deferred activation, fetch throttling and A/B experiment info for analytics tagging. Backend-agnostic; the Firebase provider lives in com.longleap.firebase.",
+  "unity": "6000.0",
+  "keywords": [
+    "remote-config",
+    "feature-flags",
+    "ab-testing",
+    "longleap"
+  ],
+  "author": {
+    "name": "LongLeap"
+  },
+  "license": "SEE LICENSE IN LICENSE.md",
+  "documentationUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.remoteconfig/README.md",
+  "changelogUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.remoteconfig/CHANGELOG.md",
+  "licensesUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.remoteconfig/LICENSE.md",
+  "dependencies": {
+    "com.longleap.core": "0.2.0",
+    "com.unity.nuget.newtonsoft-json": "3.0.2"
+  }
 }

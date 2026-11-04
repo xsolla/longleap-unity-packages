@@ -1,12 +1,12 @@
 {
   "name": "LongLeap.RemoteConfig.Tests",
-  "rootNamespace": "",
-      "references": [
+  "rootNamespace": "LongLeap.RemoteConfig.Tests",
+  "references": [
     "LongLeap.RemoteConfig",
     "LongLeap.Core",
+    "Newtonsoft.Json",
     "UnityEngine.TestRunner",
-    "NUnit.Framework",
-    "Newtonsoft.Json"
+    "NUnit.Framework"
   ],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],
@@ -14,7 +14,5 @@
   "overrideReferences": false,
   "precompiledReferences": [],
   "autoReferenced": false,
-  "defineConstraints": [
-    "UNITY_INCLUDE_TESTS"
-  ]
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"]
 }

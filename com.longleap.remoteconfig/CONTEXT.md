@@ -1,33 +1,27 @@
 # LongLeap Remote Config
 
-Fetches typed game parameters from Firebase Remote Config REST API. No Firebase SDK — pure `UnityWebRequest` calls. Parameters are cached locally in PlayerPrefs and served via inline-default getters. A/B experiment info is auto-appended to GA4 analytics events.
+Typed remote parameters with inline defaults, a PlayerPrefs cache and A/B experiment info. Backend-agnostic; see README.md for usage.
 
-**IRemoteConfigService**:
-Interface: `FetchAsync()`, `GetString(key, default)`, `GetInt`, `GetFloat`, `GetBool`. Inherits `IExperimentInfoProvider`.
-
-**RemoteConfigService**:
-Implementation. Loads `rc_cache` from PlayerPrefs on construction. Fetches from backend via `FetchAsync()`. `IDisposable`. Deduplicates concurrent fetch calls.
+**IRemoteConfigService / RemoteConfigService**:
+Game-facing API. Loads the cache in the constructor; `FetchAsync` asks the provider, caches the result and applies it (or keeps it pending until `Activate()` when `ActivateOnFetch` is off). Concurrent fetches share one request; a caller's token only cancels its own wait; `Dispose` aborts the request. Implements `IExperimentInfoProvider`.
 
 **IRemoteConfigProvider**:
-Provider seam: `Task<RemoteConfigFetchResult> FetchAsync()`. Implementations: `FirebaseRemoteConfigBackend` (production, in `com.longleap.firebase`), `NullRemoteConfigBackend` (no-op, in this package).
+Backend seam. One request per call, full parameter set on success. Implementations: `FirebaseRemoteConfigProvider` (`com.longleap.firebase`), `NullRemoteConfigProvider` (here).
 
-**NullRemoteConfigBackend**:
-No-op backend. Every fetch completes synchronously with `IsSuccess=false`, so the service keeps cached values and getters return inline defaults.
+**RemoteConfigFetchResult / RemoteConfigFetchStatus**:
+Provider result (`Success(...)` / `Failure`, collections never null) and service outcome (`Success`, `Failure`, `Throttled`, `Canceled`).
 
-**RemoteConfigFetchResult**:
-DTO: `Parameters` (Dict), `Experiments` (List of `AbExperimentInfo`), `IsSuccess` (bool).
+**RemoteConfigOptions**:
+`CacheKey`, `ActivateOnFetch`, `MinimumFetchInterval`, `WarnOnMissingKeys`, `UtcNow`.
 
-**InMemoryPlayerPrefs**:
-In-memory `IPlayerPrefs` implementation. Used by Firebase backend for FID storage and by tests. No persistence — `Save()` is a no-op.
+**Cache** (`RemoteConfigCache`, internal):
+Versioned JSON in `IPlayerPrefs`: parameters, experiments, fetch time. Experiments are cached so a cached A/B variant is never served untagged. Unreadable or other-version caches are discarded with a warning.
 
-**Caching**:
-Stored in PlayerPrefs under key `rc_cache` as a JSON blob. Loaded on construction. Written on every successful `FetchAsync()`. Corrupted JSON is caught and discarded.
-
-**FID lifecycle**:
-The backend registers a Firebase Installation ID (FID) on first use. Persisted in PlayerPrefs (`rc_fid_data`). No auth tokens — `appInstanceId` alone suffices for Remote Config fetch.
+**Parsing** (`RemoteConfigValueParser`, internal):
+Culture-invariant, trimmed; whole decimals accepted as integers; non-finite floats rejected; Firebase SDK boolean tokens.
 
 ## Relationships
 
-- **RemoteConfig → Core**: Uses `IPlayerPrefs`, `IExperimentInfoProvider`, `AbExperimentInfo`.
-- **RemoteConfig → Firebase**: Production backend (`FirebaseRemoteConfigBackend`) in `com.longleap.firebase`.
-- **RemoteConfig → Analytics**: `RemoteConfigService` implements `IExperimentInfoProvider` for A/B experiment auto-tagging.
+- **RemoteConfig → Core**: `IPlayerPrefs`, `IExperimentInfoProvider`, `AbExperimentInfo`; tests use `InMemoryPlayerPrefs`.
+- **Firebase → RemoteConfig**: `FirebaseRemoteConfigProvider` implements `IRemoteConfigProvider`.
+- **Analytics → Core ← RemoteConfig**: `ExperimentEnricher` reads `ActiveExperiments` through `IExperimentInfoProvider`; analytics does not reference this package.

@@ -1,184 +1,158 @@
 # LongLeap Remote Config
 
-Fetches typed game parameters from Firebase Remote Config REST API. No Firebase SDK — pure `UnityWebRequest` calls. Parameters are cached locally in PlayerPrefs and served via inline-default getters. A/B experiment info is auto-appended to GA4 analytics events.
+Typed remote game parameters with inline defaults. The service caches the last successful fetch in `IPlayerPrefs`, so a launch starts with the previous session's values, and exposes the player's A/B experiments to analytics.
 
-## Package Dependencies
+The package does not talk to any server itself. A provider (`IRemoteConfigProvider`) does the request:
 
-|Package|Version|Role|
+| Provider | Package | Use |
 |---|---|---|
-|`com.longleap.core`|0.1.0|Required. Provides `IPlayerPrefs`, `IExperimentInfoProvider`, `AbExperimentInfo`
-|`com.unity.nuget.newtonsoft-json`|3.0.2|Required. JSON caching (PlayerPrefs blob), deserialization
-|`com.longleap.firebase`|0.1.0|Optional. Production backend (`FirebaseRemoteConfigBackend`). Not needed for tests or custom backends
+| `FirebaseRemoteConfigProvider` | `com.longleap.firebase` | Production. Firebase Remote Config over REST, no Firebase SDK, works on WebGL. Setup: see that package's README |
+| `NullRemoteConfigProvider` | this package | Offline builds and tests. Every fetch fails, so cached values or inline defaults are used |
+| your own | — | Implement `IRemoteConfigProvider` (see [Custom provider](#custom-provider)) |
 
-## Firebase Prerequisites
+## Dependencies
 
-The backend talks to two REST APIs. Both must be enabled for your Firebase project.
+| Package | Version | Role |
+|---|---|---|
+| `com.longleap.core` | 0.2.0 | `IPlayerPrefs`, `IExperimentInfoProvider`, `AbExperimentInfo`; `InMemoryPlayerPrefs` for tests |
+| `com.unity.nuget.newtonsoft-json` | 3.0.2 | Cache serialization, `GetJson<T>` |
 
-### 1. Enable APIs in Google Cloud Console
+## Quick start
 
-Open the [API Library](https://console.cloud.google.com/apis/library) for your Firebase project and enable:
+```csharp
+IPlayerPrefs prefs = new UnityPlayerPrefsAdapter();
+IRemoteConfigProvider provider = new FirebaseRemoteConfigProvider(firebaseConfig, prefs);
+// or: new NullRemoteConfigProvider();
 
-|API|Purpose|
+var remoteConfig = new RemoteConfigService(provider, prefs);
+
+// Optional startup timeout: the game continues with cached values or defaults.
+using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+{
+    var status = await remoteConfig.FetchAsync(timeout.Token);
+}
+
+// A/B tagging of analytics events (com.longleap.analytics)
+analytics.AddEnricher(new ExperimentEnricher(remoteConfig));
+
+float hp = remoteConfig.GetFloat("enemy_health_multiplier", 1.0f);
+```
+
+`CancellationTokenSource(TimeSpan)` needs a thread-pool timer. WebGL has no threads, so there, cancel the token yourself from a coroutine or the player loop.
+
+Dispose the service when its owner goes away. Disposing aborts a fetch in flight and drops its result.
+
+## Reading values
+
+```csharp
+int maxEnemies   = remoteConfig.GetInt("max_enemies", 10);
+long seed        = remoteConfig.GetLong("seed", 0);
+double rate      = remoteConfig.GetDouble("drop_rate", 0.05);
+bool newShop     = remoteConfig.GetBool("new_shop", false);
+string greeting  = remoteConfig.GetString("welcome_message", "Hello");
+WaveConfig wave  = remoteConfig.GetJson("wave_1", WaveConfig.Default);
+
+if (remoteConfig.TryGetInt("bonus_coins", out var bonus)) { /* key present and valid */ }
+```
+
+| Rule | Behaviour |
 |---|---|
-|**Firebase Installations API**|Registers a device FID (Firebase Installation ID)|
-|**Firebase Remote Config API**|Fetches published parameter key/value pairs|
+| `Get*`, key missing | Returns the default. Logs a warning once per key, but only after values came from the server (successful fetch or loaded cache), and only if `WarnOnMissingKeys` is on |
+| `Get*`, value invalid | Returns the default. Logs a warning once per key and type |
+| `TryGet*` | Never logs. `false` when missing or invalid |
+| Numbers | Culture-invariant, surrounding whitespace ignored. Integers accept whole decimals (`"42.0"`). `NaN`/`Infinity` are rejected |
+| Booleans | `true/t/yes/y/on/1` and `false/f/no/n/off/0`, case-insensitive (same as the Firebase SDK) |
+| JSON | `GetJson<T>` / `TryGetJson<T>` use Newtonsoft.Json. A JSON `null` counts as invalid |
+| After `Dispose()` | Every getter returns its default silently; `ActiveExperiments` is empty |
 
-### 2. Fill FirebaseConfigSO fields
+`Values` is a read-only snapshot of all raw values; `HasKey` checks one key.
 
-Edit `Assets/Resources/Backend/FirebaseConfig.asset` in the Inspector. Three fields under the **Remote Config** header must be set:
+## Fetching
 
-|Field|Where to find it|
+`FetchAsync(CancellationToken)` returns a `RemoteConfigFetchStatus`:
+
+| Status | Meaning |
 |---|---|
-|`GoogleAppId`|Firebase Console → Project Settings → Your Apps → App ID. Looks like `"1:123456789:android:abc123def456"`|
-|`ApiKey`|Firebase Console → Project Settings → Web API Key. Already populated in most projects; Remote Config reuses the same key as RTDB|
-|`ProjectNumber`|Firebase Console → Project Settings → Project number. Numeric-only, no dashes (e.g. `123456789`)|
+| `Success` | Values fetched and cached (and applied, see [Activation](#activation)) |
+| `Failure` | The provider failed or threw. Current values are kept |
+| `Throttled` | No request: the last success is younger than `MinimumFetchInterval` |
+| `Canceled` | The caller's token was cancelled, or the service is disposed |
 
-`DatabaseUrl` is not used by Remote Config — no changes needed there.
+- **Shared request.** Calls made while a fetch is in flight join it; the provider is called once.
+- **Cancellation** only stops the caller's wait. The request keeps running for other callers and its result is still applied. `Dispose()` is what aborts the request.
+- **Success replaces the whole set.** A parameter removed on the server disappears from `Values`.
+- `LastFetchStatus` and `LastSuccessfulFetchUtc` report the latest outcome; the success time is restored from the cache.
 
-### 3. Add parameters in Firebase Console
+## Activation
 
-1. Go to **Firebase Console → Remote Config**
-2. Click "Add parameter" and enter a key (e.g. `enemy_health_multiplier`)
-3. Set a default value
-4. Optionally add conditional values for A/B tests or targeting
-5. Click **Publish changes** — parameters are not served until published
+By default a successful fetch applies at once and raises `Updated`. Values that change in the middle of a level can be awkward, so activation can be deferred:
 
-### 4. (Optional) Create A/B experiments
+```csharp
+var remoteConfig = new RemoteConfigService(provider, prefs, new RemoteConfigOptions { ActivateOnFetch = false });
+await remoteConfig.FetchAsync();   // cached; HasPendingValues == true
+// ... later, at a safe moment (main menu, between levels):
+remoteConfig.Activate();           // applies and raises Updated
+```
 
-1. Go to **Firebase Console → Remote Config → A/B Testing**
-2. Create an experiment targeting one or more parameters
-3. Each variant gets an index (0, 1, 2, …)
-4. When the experiment is active and analytics has an `ExperimentEnricher` for this service, every event gets `exp_{experimentId}={variantIndex}`
+Without `Activate()`, fetched values apply on the next launch, because the constructor loads the cache. Parameters and experiments always change together.
+
+## Options
+
+| `RemoteConfigOptions` | Default | Purpose |
+|---|---|---|
+| `CacheKey` | `"rc_cache"` | `IPlayerPrefs` key of the cache. Use one key per Firebase project or environment |
+| `ActivateOnFetch` | `true` | `false` defers activation (see above) |
+| `MinimumFetchInterval` | `TimeSpan.Zero` | Throttles fetches, also across launches. `Zero` turns throttling off |
+| `WarnOnMissingKeys` | `true` | Missing-key warnings |
+| `UtcNow` | `DateTime.UtcNow` | Clock, replaceable in tests |
+
+## A/B experiments
+
+`RemoteConfigService` implements `IExperimentInfoProvider`. `ActiveExperiments` lists the experiments of the active values. `ExperimentEnricher` (`com.longleap.analytics`) adds `exp_{experimentId}={variantIndex}` to every analytics event. Experiments are cached with the parameters, so events sent before the first fetch of a session are already tagged.
+
+## Cache
+
+One JSON string in `IPlayerPrefs` under `CacheKey`, written on every successful fetch:
+
+```json
+{"v":1,"fetchedAtUnixMs":1762250000000,"parameters":{"max_enemies":"12"},"experiments":[{"id":"exp_01","variant":1}]}
+```
+
+A cache that cannot be read (corrupted, or a different format version) is discarded with a warning; defaults are used until the next successful fetch.
+
+## Custom provider
+
+```csharp
+public sealed class MyProvider : IRemoteConfigProvider
+{
+    public async Task<RemoteConfigFetchResult> FetchAsync(CancellationToken cancellationToken = default)
+    {
+        var values = await LoadFromMyServerAsync(cancellationToken); // null on error
+        return values != null
+            ? RemoteConfigFetchResult.Success(values, experiments: null)
+            : RemoteConfigFetchResult.Failure;
+    }
+}
+```
+
+Return the complete parameter set on success. Report errors with `RemoteConfigFetchResult.Failure` instead of throwing; the service treats an exception as a failure and logs a warning. The token is cancelled when the service is disposed.
 
 ## Public API
 
-### This package (`LongLeap.RemoteConfig`)
+| Type | Kind | Purpose |
+|---|---|---|
+| `IRemoteConfigService` | Interface (`IExperimentInfoProvider`, `IDisposable`) | Getters, `FetchAsync`, `Activate`, `Updated`, fetch status |
+| `RemoteConfigService` | Sealed class | Default implementation: `(IRemoteConfigProvider, IPlayerPrefs, RemoteConfigOptions = null)` |
+| `RemoteConfigOptions` | Sealed class | Settings, read once in the constructor |
+| `RemoteConfigFetchStatus` | Enum | `Success`, `Failure`, `Throttled`, `Canceled` |
+| `IRemoteConfigProvider` | Interface | Backend seam: `FetchAsync(CancellationToken)` |
+| `RemoteConfigFetchResult` | Sealed class | `Success(parameters, experiments)` / `Failure`; collections never null |
+| `NullRemoteConfigProvider` | Sealed class | Offline provider; always `Failure`, completes synchronously |
 
-|Type|Namespace|Kind|Purpose|
-|---|---|---|---|
-|`IRemoteConfigService`|`LongLeap.RemoteConfig`|Interface|`FetchAsync()`, `GetString(key, default)`, `GetInt(key, default)`, `GetFloat(key, default)`, `GetBool(key, default)`. Inherits `IExperimentInfoProvider`|
-|`RemoteConfigService`|`LongLeap.RemoteConfig`|Class (sealed)|Implementation. Loads `rc_cache` from PlayerPrefs on construction. Fetches from backend via `FetchAsync()`. `IDisposable`|
-|`IRemoteConfigProvider`|`LongLeap.RemoteConfig`|Interface|Provider seam: `Task<RemoteConfigFetchResult> FetchAsync()`|
-|`RemoteConfigFetchResult`|`LongLeap.RemoteConfig`|Class|`Parameters` (Dict), `Experiments` (List of `AbExperimentInfo`), `IsSuccess` (bool)|
-|`NullRemoteConfigBackend`|`LongLeap.RemoteConfig`|Class (sealed)|No-op backend. Completes synchronously with `IsSuccess=false` — game falls through to cached values or inline defaults|
-|`InMemoryPlayerPrefs`|`LongLeap.RemoteConfig.Storage`|Class (sealed)|In-memory `IPlayerPrefs` implementation for tests. No persistence — `Save()` is a no-op|
+## Threading
 
-### `com.longleap.core` (dependency)
+Not thread-safe. Call the service from Unity's main thread; `Updated` is raised there too. An exception in an `Updated` handler is logged and does not stop the other handlers.
 
-|Type|Namespace|Kind|Purpose|
-|---|---|---|---|
-|`IPlayerPrefs`|`LongLeap.Core`|Interface|PlayerPrefs abstraction: `GetString/Int/Float`, `SetString/Int/Float`, `HasKey`, `DeleteKey`, `Save`|
-|`IExperimentInfoProvider`|`LongLeap.Core`|Interface|Exposes `ActiveExperiments` (`IReadOnlyList<AbExperimentInfo>`) for analytics auto-tagging|
+## Tests
 
-### `com.longleap.firebase` (optional)
-
-|Type|Namespace|Kind|Purpose|
-|---|---|---|---|
-|`FirebaseRemoteConfigBackend`|`LongLeap.Firebase`|Class (sealed)|Production backend. FID registration → REST fetch. Two constructors (see below)|
-
-#### `FirebaseRemoteConfigBackend` constructors
-
-```csharp
-// Production: 2-arg constructor (UnityWebRequest internally)
-public FirebaseRemoteConfigBackend(FirebaseConfigSO config, IPlayerPrefs playerPrefs)
-
-// Testable: 3-arg constructor with injectable HTTP handler
-public FirebaseRemoteConfigBackend(
-    FirebaseConfigSO config,
-    IPlayerPrefs playerPrefs,
-    Func<string, string, string, Task<string>> httpHandler)
-```
-
-The 3-arg constructor accepts `httpHandler(string method, string url, string body) → Task<string>` for unit testing — swap in a mock HTTP handler without touching `UnityWebRequest`.
-
-## Initialization
-
-> **Note:** `GameBootstrapper` and `RemoteConfigBootstrapper` are game-level integration classes living in the main game assembly (`Assets/Scripts/`), **not** in this package. They are documented here for context on production wiring.
-
-### Via GameBootstrapper (production path)
-
-1. Add a `RemoteConfigBootstrapper` component to the `GameBootstrapper` GameObject
-2. Assign it to the `Remote Config Bootstrapper` field in the GameBootstrapper Inspector
-3. At startup, `GameBootstrapper.Start()` calls `remoteConfigBootstrapper.InitializeAsync(config, playerPrefs)` with a 15-second timeout
-
-The bootstrapper:
-- Validates `GoogleAppId`, `ApiKey`, `ProjectNumber` — logs fatal error and stops if any are missing
-- Creates a `RemoteConfigService` instance
-- Calls `FetchAsync()` with timeout polling; on timeout, disposes the service and continues with cache/defaults
-- Assigns `Service` (public property, exposed as `IRemoteConfigService`)
-- The GameBootstrapper then wires the service into analytics: `analytics.AddEnricher(new ExperimentEnricher(service))`
-
-Access from game code:
-```csharp
-var multiplier = GameBootstrapper.Instance.RemoteConfig.GetFloat("enemy_health_multiplier", 1.0f);
-```
-
-### Direct construction (for tests or custom init)
-
-```csharp
-var prefs = new InMemoryPlayerPrefs();
-var backend = new FirebaseRemoteConfigBackend(config, prefs);
-var service = new RemoteConfigService(backend, prefs);
-await service.FetchAsync();
-```
-
-You can also pass a mock `IRemoteConfigProvider` or `NullRemoteConfigBackend`.
-
-## Usage
-
-### Reading parameters
-
-```csharp
-float multiplier = config.GetFloat("enemy_health_multiplier", 1.0f);
-int maxEnemies = config.GetInt("max_enemies", 10);
-bool debugMode = config.GetBool("debug_mode", false);
-string welcomeMsg = config.GetString("welcome_message", "Hello");
-```
-
-Each getter:
-1. Returns the value from the last successful fetch (or cache) if the key exists
-2. If the key is missing, logs a **one-time** warning then returns the inline default
-3. If the value can't be parsed to the requested type (e.g. `GetFloat` on `"banana"`), logs a warning and returns the inline default
-4. After `Dispose()`, all getters return the inline default silently
-
-### Refetching (e.g. scene reload)
-
-`SceneManager.LoadScene` triggers a fresh `GameBootstrapper.Start()` which calls `FetchAsync()` again. No manual refetch needed.
-
-### Type coercion for booleans
-
-In Firebase Console, booleans are stored as strings `"true"` or `"false"`. `GetBool` also accepts `"1"` and `"0"` as valid `true`/`false` values.
-
-## Internals
-
-### Data flow
-
-```
-Firebase Remote Config REST API
- ↓ POST (FID registration, fetch)
-FirebaseRemoteConfigBackend
-  → RemoteConfigFetchResult
-RemoteConfigService._parameters
-  → GetFloat/GetInt/GetBool/GetString
-Game code
-```
-
-### Cache
-
-Stored in PlayerPrefs under key `rc_cache` as a JSON blob of `Dictionary<string, string>`. Loaded on `RemoteConfigService` construction. Written on every successful `FetchAsync()`. Corrupted JSON is caught, logged as a warning, and discarded — getters fall back to inline defaults.
-
-### FID lifecycle
-
-The backend registers a Firebase Installation ID (FID) on first use via the Firebase Installations REST API. The FID is persisted in PlayerPrefs (`rc_fid_data`) and reused for every subsequent Remote Config fetch. No auth tokens are generated — the `appInstanceId` alone is sufficient for the Remote Config fetch endpoint.
-
-### Request deduplication
-
-Concurrent calls to `FetchAsync()` are collapsed — the second caller awaits the first. No duplicate network requests.
-
-### Experiment auto-tagging
-
-`RemoteConfigService` implements `IExperimentInfoProvider`. Register `new ExperimentEnricher(remoteConfigService)` on the analytics service once; from then on every sent event gets `exp_{id}={variantIndex}` from the current `ActiveExperiments`. See `com.longleap.analytics`.
-
-### Timeout
-
-`RemoteConfigBootstrapper` polls `FetchAsync()` for 15 seconds. On timeout, the service is disposed — late-arriving fetch results are discarded. The game continues with cached values or inline defaults.
+EditMode tests in `Tests/EditMode` (assembly `LongLeap.RemoteConfig.Tests`) run without a network, using a fake provider and `InMemoryPlayerPrefs`.

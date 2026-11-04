@@ -11,7 +11,7 @@ Production Firebase backends for LongLeap services: anonymous auth, cloud saves,
 | Auth | `IAuthProvider` | `FirebaseAnonymousAuthProvider` | Authentication (anonymous) |
 | Cloud Saves | `ICloudSaveProvider`, `IAccountCloudSaveScope` | `FirebaseCloudSaveProvider` | Realtime Database |
 | Leaderboards | `ILeaderboardProvider` | `FirebaseLeaderboardProvider` | Realtime Database |
-| Remote Config | `IRemoteConfigProvider` | `FirebaseRemoteConfigBackend` | Remote Config + Installations |
+| Remote Config | `IRemoteConfigProvider` | `FirebaseRemoteConfigProvider` | Remote Config + Installations |
 
 Interfaces come from `com.longleap.core`, except `IRemoteConfigProvider`, which comes from `com.longleap.remoteconfig`.
 
@@ -83,7 +83,7 @@ var http = new FirebaseHttpClient(config.DatabaseUrl, auth);
 
 var cloudSaveProvider   = new FirebaseCloudSaveProvider(http, auth, playerPrefs); // playerPrefs: IPlayerPrefs, optional
 var leaderboardProvider = new FirebaseLeaderboardProvider(http);
-var remoteConfigBackend = new FirebaseRemoteConfigBackend(config, playerPrefs);
+var remoteConfigProvider = new FirebaseRemoteConfigProvider(config, playerPrefs);
 ```
 
 `auth` and `http` are meant to be shared: create one of each and pass them to every provider.
@@ -112,7 +112,7 @@ Func<string, string, string, Task<string>> fakeHttp =
 
 var auth = new FirebaseAnonymousAuthProvider("test-key", fakeHttp);
 var http = new FirebaseHttpClient("https://test.firebaseio.com", auth, fakeHttp);
-var rc   = new FirebaseRemoteConfigBackend(config, playerPrefs, fakeHttp);
+var rc   = new FirebaseRemoteConfigProvider(config, playerPrefs, fakeHttp);
 ```
 
 The delegate type is the same, but the failure contract is not:
@@ -120,8 +120,10 @@ The delegate type is the same, but the failure contract is not:
 | Class | Handler signals failure by |
 |---|---|
 | `FirebaseAnonymousAuthProvider` | returning `null` |
-| `FirebaseRemoteConfigBackend` | returning `null` |
+| `FirebaseRemoteConfigProvider` | returning `null` |
 | `FirebaseHttpClient` | throwing (`GetAsync`/`PatchAsync` catch it and return `null`; `PutAsync`/`DeleteAsync` let it propagate) |
+
+A test handler does not receive a cancellation token. `FirebaseRemoteConfigProvider` still honours cancellation around it: an answer that arrives after cancellation is dropped and `OperationCanceledException` is thrown.
 
 `FirebaseAnonymousAuthProvider` always reads and writes the real `UnityEngine.PlayerPrefs` key `longleap_auth`, even with a test handler.
 
@@ -134,7 +136,7 @@ The delegate type is the same, but the failure contract is not:
 | `FirebaseHttpClient` | Sealed class | `(string databaseUrl, IAuthProvider)` or `(..., handler)`. `GetAsync`, `PatchAsync`, `PutAsync`, `DeleteAsync`. Attaches a fresh ID token to every request; returns `null` when no token is available |
 | `FirebaseCloudSaveProvider` | Sealed class `: ICloudSaveProvider, IAccountCloudSaveScope` | `(FirebaseHttpClient, IAuthProvider, IPlayerPrefs = null)`. Guest saves at `cloud_saves/{uid}/{key}`, account saves at `xsolla_saves/{accountId}/{key}`. The uid is resolved on first use |
 | `FirebaseLeaderboardProvider` | Sealed class `: ILeaderboardProvider` (`IDisposable`) | `(FirebaseHttpClient)`. Entries at `leaderboards/{boardId}/{uid}`. Writes a submit only if it beats the stored score. After `Dispose()` every call returns an empty or failed result |
-| `FirebaseRemoteConfigBackend` | Sealed class `: IRemoteConfigProvider` | `(FirebaseConfigSO, IPlayerPrefs)` or `(..., handler)`. Registers an FID, then fetches parameters and A/B experiment assignments. Throws `ArgumentException` if `GoogleAppId` is empty |
+| `FirebaseRemoteConfigProvider` | Sealed class `: IRemoteConfigProvider` | `(FirebaseConfigSO, IPlayerPrefs)` or `(..., handler)`. Registers an FID, then fetches parameters and A/B experiment assignments. `FetchAsync(CancellationToken)` aborts the request on cancellation (the token comes from `RemoteConfigService`, cancelled on `Dispose`). Throws `ArgumentException` if `GoogleAppId` is empty |
 
 ## Data layout
 
@@ -172,7 +174,9 @@ RTDB queries sort ascending only. Each entry stores `negScore`: `-score` for `De
 
 ### Remote Config FID
 
-On first fetch, the backend registers a Firebase Installation ID via `firebaseinstallations.googleapis.com` and stores the ID the server returns in `rc_fid_data`. Later fetches reuse it as `appInstanceId`. This class does not cache parameter values; `com.longleap.remoteconfig` does that.
+On first fetch, the provider registers a Firebase Installation ID via `firebaseinstallations.googleapis.com` and stores the ID the server returns in `rc_fid_data`. Later fetches reuse it as `appInstanceId`. This class does not cache parameter values; `com.longleap.remoteconfig` does that.
+
+Parameter values are passed on exactly as the server sends them; date-like strings are not reformatted. A response without `entries` (state `EMPTY_CONFIG` or `NO_TEMPLATE`) is a success with no parameters. A `NO_CHANGE` response is reported as a failure, so the cached values stay.
 
 ## Limitations
 

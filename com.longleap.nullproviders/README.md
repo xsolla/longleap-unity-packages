@@ -25,7 +25,7 @@ does not pull in feature packages:
 
 | Seam | Null implementation | Package |
 |---|---|---|
-| `IRemoteConfigProvider` | `NullRemoteConfigBackend` | `com.longleap.remoteconfig` |
+| `IRemoteConfigProvider` | `NullRemoteConfigProvider` | `com.longleap.remoteconfig` |
 | `IAnalyticsBackend` | `NullAnalyticsBackend` | `com.longleap.analytics` |
 | `IBackPackService` | `NullBackPackService` | `com.longleap.backpack` |
 | `IColorService`, `IEquipmentService`, `IInventoryService` | `Null…Service` | `com.longleap.customization` |

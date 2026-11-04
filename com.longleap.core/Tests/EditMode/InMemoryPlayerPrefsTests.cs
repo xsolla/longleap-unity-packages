@@ -1,11 +1,10 @@
-using NUnit.Framework;
 using LongLeap.Core;
-using LongLeap.RemoteConfig.Storage;
+using NUnit.Framework;
 
-namespace LongLeap.RemoteConfig.Tests
+namespace LongLeap.Core.Tests
 {
     [TestFixture]
-    public class InMemoryPlayerPrefsTests
+    public sealed class InMemoryPlayerPrefsTests
     {
         private InMemoryPlayerPrefs _prefs;
 
@@ -16,7 +15,7 @@ namespace LongLeap.RemoteConfig.Tests
         }
 
         [Test]
-        public void InMemoryPlayerPrefs_StoresAndRetrievesValues()
+        public void SetThenGet_ReturnsStoredValues()
         {
             _prefs.SetString("test_str", "hello");
             _prefs.SetInt("test_int", 42);
@@ -28,7 +27,7 @@ namespace LongLeap.RemoteConfig.Tests
         }
 
         [Test]
-        public void InMemoryPlayerPrefs_HasKey_ReturnsCorrectly()
+        public void HasKey_FollowsSetAndDelete()
         {
             Assert.IsFalse(_prefs.HasKey("some_key"));
             _prefs.SetString("some_key", "value");
@@ -38,30 +37,11 @@ namespace LongLeap.RemoteConfig.Tests
         }
 
         [Test]
-        public void InMemoryPlayerPrefs_GetMissingKey_ReturnsDefault()
+        public void Get_MissingKey_ReturnsDefault()
         {
             Assert.AreEqual("default_val", _prefs.GetString("missing", "default_val"));
             Assert.AreEqual(99, _prefs.GetInt("missing", 99));
             Assert.AreEqual(1.5f, _prefs.GetFloat("missing", 1.5f));
-        }
-
-        [Test]
-        public void InMemoryPlayerPrefs_Save_IsNoOp()
-        {
-            Assert.DoesNotThrow(() => _prefs.Save());
-        }
-    }
-
-    [TestFixture]
-    public class AbExperimentInfoTests
-    {
-        [Test]
-        public void AbExperimentInfo_Properties_ReturnConstructorValues()
-        {
-            var info = new AbExperimentInfo("exp_01", 2);
-
-            Assert.AreEqual("exp_01", info.ExperimentId);
-            Assert.AreEqual(2, info.VariantIndex);
         }
     }
 }

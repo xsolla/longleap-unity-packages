@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using LongLeap.Core;
 using LongLeap.RemoteConfig;
@@ -19,10 +21,11 @@ namespace LongLeap.Firebase
     /// <see cref="IPlayerPrefs"/> under <c>rc_fid_data</c>; later fetches reuse it. Parameter
     /// caching is not done here; it belongs to <c>com.longleap.remoteconfig</c>.
     /// </remarks>
-    public sealed class FirebaseRemoteConfigBackend : IRemoteConfigProvider
+    public sealed class FirebaseRemoteConfigProvider : IRemoteConfigProvider
     {
         private readonly FirebaseConfigSO _config;
         private readonly IPlayerPrefs _playerPrefs;
+        // null: real requests through UnityWebRequest, which can be aborted on cancellation.
         private readonly Func<string, string, string, Task<string>> _httpHandler;
 
         private const string FidPrefsKey = "rc_fid_data";
@@ -30,23 +33,24 @@ namespace LongLeap.Firebase
         /// <param name="config">Must have <see cref="FirebaseConfigSO.GoogleAppId"/>, <see cref="FirebaseConfigSO.ProjectNumber"/> and <see cref="FirebaseConfigSO.ApiKey"/> set.</param>
         /// <param name="playerPrefs">Stores the FID between launches.</param>
         /// <exception cref="ArgumentException"><see cref="FirebaseConfigSO.GoogleAppId"/> is empty.</exception>
-        public FirebaseRemoteConfigBackend(FirebaseConfigSO config, IPlayerPrefs playerPrefs)
+        public FirebaseRemoteConfigProvider(FirebaseConfigSO config, IPlayerPrefs playerPrefs)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
             if (string.IsNullOrEmpty(config.GoogleAppId))
                 throw new ArgumentException("GoogleAppId cannot be empty", nameof(config));
             _playerPrefs = playerPrefs ?? throw new ArgumentNullException(nameof(playerPrefs));
-            _httpHandler = SendUnityWebRequestAsync;
+            _httpHandler = null;
         }
 
         /// <param name="config">Must have <see cref="FirebaseConfigSO.GoogleAppId"/>, <see cref="FirebaseConfigSO.ProjectNumber"/> and <see cref="FirebaseConfigSO.ApiKey"/> set.</param>
         /// <param name="playerPrefs">Stores the FID between launches.</param>
         /// <param name="httpHandler">
         /// Replaces the network call (for tests). Receives method, URL and body; returns the
-        /// response body, or <c>null</c> on failure.
+        /// response body, or <c>null</c> on failure. It is not given the cancellation token; an
+        /// answer that arrives after cancellation is dropped.
         /// </param>
         /// <exception cref="ArgumentException"><see cref="FirebaseConfigSO.GoogleAppId"/> is empty.</exception>
-        public FirebaseRemoteConfigBackend(FirebaseConfigSO config, IPlayerPrefs playerPrefs, Func<string, string, string, Task<string>> httpHandler)
+        public FirebaseRemoteConfigProvider(FirebaseConfigSO config, IPlayerPrefs playerPrefs, Func<string, string, string, Task<string>> httpHandler)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
             if (string.IsNullOrEmpty(config.GoogleAppId))
@@ -55,29 +59,41 @@ namespace LongLeap.Firebase
             _httpHandler = httpHandler ?? throw new ArgumentNullException(nameof(httpHandler));
         }
 
-        public async Task<RemoteConfigFetchResult> FetchAsync()
+        /// <inheritdoc />
+        /// <remarks>
+        /// Cancellation aborts the HTTP request and throws <see cref="OperationCanceledException"/>;
+        /// an answer that arrives after cancellation is never parsed.
+        /// </remarks>
+        public async Task<RemoteConfigFetchResult> FetchAsync(CancellationToken cancellationToken = default)
         {
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var fidData = LoadFidData();
                 if (string.IsNullOrEmpty(fidData?.Fid))
                 {
-                    var fid = await RegisterFidAsync();
+                    var fid = await RegisterFidAsync(cancellationToken);
                     if (string.IsNullOrEmpty(fid))
-                        return Failed();
+                        return RemoteConfigFetchResult.Failure;
                     fidData = new FidData { Fid = fid };
                     SaveFidData(fidData);
                 }
 
-                var json = await FetchRemoteConfigAsync(fidData.Fid);
+                cancellationToken.ThrowIfCancellationRequested();
+                var json = await FetchRemoteConfigAsync(fidData.Fid, cancellationToken);
                 if (json == null)
-                    return Failed();
+                    return RemoteConfigFetchResult.Failure;
                 return ParseResult(json);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
-                Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: FetchAsync failed — {ex.Message}");
-                return Failed();
+                Debug.LogError($"{nameof(FirebaseRemoteConfigProvider)}: FetchAsync failed — {ex.Message}");
+                return RemoteConfigFetchResult.Failure;
             }
         }
 
@@ -93,7 +109,7 @@ namespace LongLeap.Firebase
             }
             catch (Exception ex)
             {
-                Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: failed to deserialize the cached FID data — {ex.Message}");
+                Debug.LogError($"{nameof(FirebaseRemoteConfigProvider)}: failed to deserialize the cached FID data — {ex.Message}");
                 return null;
             }
         }
@@ -104,7 +120,7 @@ namespace LongLeap.Firebase
             _playerPrefs.SetString(FidPrefsKey, json);
         }
 
-        private async Task<string> RegisterFidAsync()
+        private async Task<string> RegisterFidAsync(CancellationToken cancellationToken)
         {
             var url = $"https://firebaseinstallations.googleapis.com/v1/projects/{_config.ProjectNumber}/installations?key={_config.ApiKey}";
             var fid = Guid.NewGuid().ToString("D");
@@ -120,10 +136,11 @@ namespace LongLeap.Firebase
 
             try
             {
-                var response = await _httpHandler("POST", url, bodyJson);
+                var response = await SendAsync("POST", url, bodyJson, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (response == null)
                 {
-                    Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: failed to register the FID");
+                    Debug.LogError($"{nameof(FirebaseRemoteConfigProvider)}: failed to register the FID");
                     return null;
                 }
 
@@ -131,7 +148,7 @@ namespace LongLeap.Firebase
                 var name = (string)j["name"];
                 if (string.IsNullOrEmpty(name))
                 {
-                    Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: the FID registration response has no 'name'");
+                    Debug.LogError($"{nameof(FirebaseRemoteConfigProvider)}: the FID registration response has no 'name'");
                     return null;
                 }
 
@@ -141,14 +158,18 @@ namespace LongLeap.Firebase
 
                 return fid;
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
-                Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: FID registration failed — {ex.Message}");
+                Debug.LogError($"{nameof(FirebaseRemoteConfigProvider)}: FID registration failed — {ex.Message}");
                 return null;
             }
         }
 
-        private async Task<string> FetchRemoteConfigAsync(string fid)
+        private async Task<string> FetchRemoteConfigAsync(string fid, CancellationToken cancellationToken)
         {
             var url = $"https://firebaseremoteconfig.googleapis.com/v1/projects/{_config.ProjectNumber}/namespaces/firebase:fetch?key={_config.ApiKey}";
 
@@ -159,15 +180,26 @@ namespace LongLeap.Firebase
             };
             var bodyJson = JsonConvert.SerializeObject(body);
 
-            return await _httpHandler("POST", url, bodyJson);
+            var response = await SendAsync("POST", url, bodyJson, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return response;
         }
 
         private static RemoteConfigFetchResult ParseResult(string json)
         {
             try
             {
-                var j = JObject.Parse(json);
+                var j = ParseKeepingStrings(json);
 
+                // Without an ETag in the request the server always sends the full template, so
+                // NO_CHANGE is unexpected; treat it as a failure so the cached values stay.
+                if ((string)j["state"] == "NO_CHANGE")
+                {
+                    Debug.LogWarning($"{nameof(FirebaseRemoteConfigProvider)}: the server answered NO_CHANGE; the current values are kept");
+                    return RemoteConfigFetchResult.Failure;
+                }
+
+                // No "entries" (state EMPTY_CONFIG or NO_TEMPLATE) means no parameters are published.
                 Dictionary<string, string> parameters = null;
                 var entries = (JObject)j["entries"];
                 if (entries != null)
@@ -175,7 +207,11 @@ namespace LongLeap.Firebase
                     parameters = new Dictionary<string, string>();
                     foreach (var prop in entries.Properties())
                     {
-                        parameters[prop.Name] = prop.Value?.ToString();
+                        // Firebase sends every value as a string; keep it verbatim.
+                        var value = prop.Value;
+                        parameters[prop.Name] = value == null || value.Type == JTokenType.Null ? null
+                            : value.Type == JTokenType.String ? (string)value
+                            : value.ToString(Formatting.None);
                     }
                 }
 
@@ -195,22 +231,33 @@ namespace LongLeap.Firebase
                     }
                 }
 
-                return new RemoteConfigFetchResult(parameters, experiments, true);
+                return RemoteConfigFetchResult.Success(parameters, experiments);
             }
             catch (Exception ex)
             {
-                Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: failed to parse the response — {ex.Message}");
-                return Failed();
+                Debug.LogError($"{nameof(FirebaseRemoteConfigProvider)}: failed to parse the response — {ex.Message}");
+                return RemoteConfigFetchResult.Failure;
             }
         }
 
-        private static RemoteConfigFetchResult Failed()
+        // JObject.Parse turns ISO-8601 strings into DateTime, and ToString() then formats them in
+        // the current culture ("2026-12-01T00:00:00Z" -> "12/01/2026 00:00:00"). Values must
+        // reach the game exactly as published, so dates are not parsed.
+        private static JObject ParseKeepingStrings(string json)
         {
-            return new RemoteConfigFetchResult(null, null, false);
+            using var reader = new JsonTextReader(new StringReader(json)) { DateParseHandling = DateParseHandling.None };
+            return JObject.Load(reader);
         }
 
-        private async Task<string> SendUnityWebRequestAsync(string method, string url, string body)
+        private Task<string> SendAsync(string method, string url, string body, CancellationToken cancellationToken) =>
+            _httpHandler != null
+                ? _httpHandler(method, url, body)
+                : SendUnityWebRequestAsync(method, url, body, cancellationToken);
+
+        private static async Task<string> SendUnityWebRequestAsync(string method, string url, string body, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             using var request = new UnityWebRequest(url, method);
 
             if (!string.IsNullOrEmpty(body))
@@ -224,12 +271,20 @@ namespace LongLeap.Firebase
 
             var operation = request.SendWebRequest();
             while (!operation.isDone)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    request.Abort();
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
                 await Task.Yield();
+            }
 
             if (request.result == UnityWebRequest.Result.ConnectionError ||
                 request.result == UnityWebRequest.Result.ProtocolError)
             {
-                Debug.LogError($"{nameof(FirebaseRemoteConfigBackend)}: HTTP {method} FAILED — {request.error} (code {request.responseCode}), body: {request.downloadHandler.text}");
+                Debug.LogError($"{nameof(FirebaseRemoteConfigProvider)}: HTTP {method} FAILED — {request.error} (code {request.responseCode}), body: {request.downloadHandler.text}");
                 return null;
             }
 
