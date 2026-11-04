@@ -14,8 +14,16 @@ namespace LongLeap.Analytics
         // Upper bound on queued events. When full, the oldest event is dropped.
         public int MaxQueueSize { get; set; } = 500;
 
-        // Delivery attempts per event before it is dropped.
+        // Failed answers from the server (HTTP 408/429/5xx) an event may get
+        // before it is dropped. Network errors and timeouts do not count: an
+        // offline session is kept until it can be sent, within MaxQueueSize
+        // and MaxEventAge.
         public int MaxAttempts { get; set; } = 5;
+
+        // Events older than this are dropped before sending. GA4 discards
+        // events backdated by more than 72 hours, so a larger value only
+        // wastes requests.
+        public TimeSpan MaxEventAge { get; set; } = Ga4Rules.MaxEventAge;
 
         // Retry backoff: FlushIntervalSeconds * 2^(failures - 1), capped here.
         public float MaxRetryDelaySeconds { get; set; } = 300f;
@@ -26,6 +34,12 @@ namespace LongLeap.Analytics
         // Initial consent state. When false, Send drops events until
         // SetCollectionEnabled(true) is called.
         public bool CollectionEnabled { get; set; } = true;
+
+        // Optional event sent when the app goes to background, so the
+        // engagement time since the last event is reported before a possible
+        // kill or tab close. EventName.None (default) sends nothing. Use a
+        // custom name such as "app_paused": GA4 reserves user_engagement.
+        public EventName BackgroundEvent { get; set; } = EventName.None;
 
         // Time source; replace in tests.
         public Func<DateTimeOffset> Clock { get; set; } = () => DateTimeOffset.UtcNow;
@@ -42,6 +56,8 @@ namespace LongLeap.Analytics
                 throw new ArgumentOutOfRangeException(nameof(MaxAttempts), MaxAttempts, "Must be at least 1.");
             if (MaxRetryDelaySeconds < FlushIntervalSeconds)
                 throw new ArgumentOutOfRangeException(nameof(MaxRetryDelaySeconds), MaxRetryDelaySeconds, "Must be at least FlushIntervalSeconds.");
+            if (MaxEventAge <= TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(MaxEventAge), MaxEventAge, "Must be positive.");
             if (SessionTimeout <= TimeSpan.Zero)
                 throw new ArgumentOutOfRangeException(nameof(SessionTimeout), SessionTimeout, "Must be positive.");
             if (Clock == null)

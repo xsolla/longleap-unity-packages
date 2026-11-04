@@ -13,15 +13,20 @@ namespace LongLeap.Analytics
     //
     // Flush triggers: the queue reaching BatchSize, Update every
     // FlushIntervalSeconds, SetForeground(false), Flush/FlushAsync, Dispose.
-    // One delivery is in flight at a time; a flush requested meanwhile runs
-    // right after it.
+    // One delivery is in flight at a time. A flush requested meanwhile runs
+    // right after it if that delivery succeeded; after a failure the backoff
+    // decides when the next attempt happens. To keep a backend that sends
+    // events of its own (a log forwarder, say) from looping forever, one run
+    // makes at most MaxRoundsPerRun deliveries; anything left goes out on a
+    // later trigger.
     //
     // Failures: events the backend reports as RetryLater go back to the front
     // of the queue (order is kept) and automatic flushes pause with
-    // exponential backoff. An event is dropped after MaxAttempts failed
-    // attempts, and the oldest events are dropped when the queue is full, so
-    // an offline session cannot grow memory without bound. The queue lives in
-    // memory only: whatever is still queued when the process dies is lost.
+    // exponential backoff. Only failures the server answered count against
+    // MaxAttempts; network errors do not, so an offline session waits until
+    // it can be sent. The queue is capped at MaxQueueSize (oldest dropped) and
+    // events older than MaxEventAge are dropped before sending. The queue
+    // lives in memory only: whatever is queued when the process dies is lost.
     //
     // Sessions follow GA4 semantics: a new session starts after SessionTimeout
     // of inactivity (no events, or time spent in background). The session ID
@@ -29,11 +34,15 @@ namespace LongLeap.Analytics
     //
     // engagement_time_msec is the foreground time since the previous event,
     // at least 1 ms: GA4 needs a non-zero value to count the user as active.
+    // Time after the last event is only reported with the next one; set
+    // AnalyticsOptions.BackgroundEvent to report it when the app goes to
+    // background.
     //
     // Main thread only.
     public sealed class AnalyticsService : IAnalyticsService
     {
         private const long MicrosPerSecond = 1_000_000L;
+        private const int MaxRoundsPerRun = 4;
 
         private readonly IAnalyticsBackend _backend;
         private readonly Func<DateTimeOffset> _clock;
@@ -43,6 +52,8 @@ namespace LongLeap.Analytics
         private readonly int _maxAttempts;
         private readonly float _maxRetryDelaySeconds;
         private readonly long _sessionTimeoutMicros;
+        private readonly long _maxEventAgeMicros;
+        private readonly EventName _backgroundEvent;
 
         private readonly List<AnalyticsEnvelope> _queue = new List<AnalyticsEnvelope>();
         private readonly List<IAnalyticsEnricher> _enrichers = new List<IAnalyticsEnricher>();
@@ -54,6 +65,10 @@ namespace LongLeap.Analytics
         private bool _enabled;
         private bool _disposed;
 
+        // Bumped when consent is withdrawn: a batch taken before that must not
+        // come back into the queue if consent is given again meanwhile.
+        private int _consentGeneration;
+
         private long _sessionId;
         private long _lastActivityMicros;
         private long _engagedMicros;
@@ -62,7 +77,7 @@ namespace LongLeap.Analytics
 
         private bool _isFlushing;
         private bool _flushAgain;
-        private Task _inFlight;
+        private TaskCompletionSource<bool> _runCompletion;
         private float _secondsSinceFlush;
         private float _retryDelayRemaining;
         private int _consecutiveFailures;
@@ -81,7 +96,9 @@ namespace LongLeap.Analytics
             _maxQueueSize = options.MaxQueueSize;
             _maxAttempts = options.MaxAttempts;
             _maxRetryDelaySeconds = options.MaxRetryDelaySeconds;
-            _sessionTimeoutMicros = (long)(options.SessionTimeout.TotalMilliseconds * 1000.0);
+            _sessionTimeoutMicros = ToMicros(options.SessionTimeout);
+            _maxEventAgeMicros = ToMicros(options.MaxEventAge);
+            _backgroundEvent = options.BackgroundEvent;
             _enabled = options.CollectionEnabled;
 
             var now = NowMicros();
@@ -105,9 +122,16 @@ namespace LongLeap.Analytics
             _enabled = enabled;
             if (!enabled)
             {
+                _consentGeneration++;
                 _queue.Clear();
                 _overflowWarned = false;
+                return;
             }
+
+            // Time spent without consent is not engagement to report.
+            _engagedMicros = 0L;
+            if (_isForeground)
+                _foregroundSinceMicros = NowMicros();
         }
 
         public void SetUserId(string userId)
@@ -151,7 +175,7 @@ namespace LongLeap.Analytics
             if (value.Length > Ga4Rules.MaxUserPropertyValueLength)
             {
                 Debug.LogWarning($"AnalyticsService: user property '{name}' cut to {Ga4Rules.MaxUserPropertyValueLength} characters.");
-                value = value.Substring(0, Ga4Rules.MaxUserPropertyValueLength);
+                value = Ga4Rules.Truncate(value, Ga4Rules.MaxUserPropertyValueLength);
             }
 
             if (_userProperties.TryGetValue(name, out var current) && current == value)
@@ -260,10 +284,15 @@ namespace LongLeap.Analytics
                 return;
             }
 
-            // Leaving: bank the engaged time and push out what is queued while
-            // the app still runs (mobile may suspend it right after this).
+            // Leaving: bank the engaged time, optionally report it, and push
+            // out what is queued while the app still runs (mobile may suspend
+            // it and a browser may close the tab right after this).
             _engagedMicros += Math.Max(0L, now - _foregroundSinceMicros);
             _lastActivityMicros = now;
+
+            if (_backgroundEvent.IsValid && _enabled && _engagedMicros >= 1000L)
+                Send(new AnalyticsEvent(_backgroundEvent));
+
             Flush();
         }
 
@@ -277,18 +306,16 @@ namespace LongLeap.Analytics
             if (_isFlushing)
             {
                 _flushAgain = true;
-                return _inFlight ?? Task.CompletedTask;
+                return _runCompletion.Task;
             }
 
             if (_queue.Count == 0)
                 return Task.CompletedTask;
 
-            var task = RunFlushAsync();
-
-            // A backend that completes synchronously finishes the whole run
-            // inside the call above; only keep a task that is still pending.
-            _inFlight = task.IsCompleted ? null : task;
-            return task;
+            var completion = new TaskCompletionSource<bool>();
+            _runCompletion = completion;
+            _ = RunFlushAsync(completion);
+            return completion.Task;
         }
 
         public void Dispose()
@@ -302,23 +329,21 @@ namespace LongLeap.Analytics
             _enrichers.Clear();
         }
 
-        private async Task RunFlushAsync()
+        private async Task RunFlushAsync(TaskCompletionSource<bool> completion)
         {
             _isFlushing = true;
             try
             {
-                do
+                for (var round = 0; round < MaxRoundsPerRun; round++)
                 {
                     _flushAgain = false;
                     _secondsSinceFlush = 0f;
 
-                    if (_queue.Count == 0)
+                    var batch = TakeBatch();
+                    if (batch == null)
                         break;
 
-                    var batch = _queue.ToArray();
-                    _queue.Clear();
-                    _overflowWarned = false;
-
+                    var generation = _consentGeneration;
                     SendResult result;
                     try
                     {
@@ -327,38 +352,67 @@ namespace LongLeap.Analytics
                     catch (Exception ex)
                     {
                         Debug.LogWarning($"AnalyticsService: backend {_backend.GetType().Name} threw: {ex}");
-                        result = SendResult.RetryLater(0, ex.Message);
+                        result = SendResult.RetryLater(0, ex.Message, batch.Length);
                     }
 
                     if (!result.IsComplete)
                     {
-                        Requeue(batch, result);
+                        Requeue(batch, result, generation);
                         break;
                     }
 
                     _consecutiveFailures = 0;
                     _retryDelayRemaining = 0f;
+
+                    if (!_flushAgain)
+                        break;
                 }
-                while (_flushAgain);
             }
             finally
             {
                 _isFlushing = false;
-                _inFlight = null;
+                _runCompletion = null;
+                completion.TrySetResult(true);
             }
         }
 
-        private void Requeue(AnalyticsEnvelope[] batch, SendResult result)
+        // Removes and returns the whole queue minus events GA4 would discard
+        // as too old; null when nothing is left to send.
+        private AnalyticsEnvelope[] TakeBatch()
         {
-            if (_disposed || !_enabled)
+            if (_queue.Count == 0)
+                return null;
+
+            var oldestAllowed = NowMicros() - _maxEventAgeMicros;
+            var expired = _queue.RemoveAll(e => e.TimestampMicros < oldestAllowed);
+            if (expired > 0)
+                Debug.LogWarning($"AnalyticsService: {expired} event(s) dropped: older than {_maxEventAgeMicros / MicrosPerSecond / 3600} h.");
+
+            if (_queue.Count == 0)
+                return null;
+
+            var batch = _queue.ToArray();
+            _queue.Clear();
+            _overflowWarned = false;
+            return batch;
+        }
+
+        private void Requeue(AnalyticsEnvelope[] batch, SendResult result, int generation)
+        {
+            if (_disposed || !_enabled || generation != _consentGeneration)
                 return;
 
-            var retry = new List<AnalyticsEnvelope>(batch.Length);
+            var handled = Math.Min(result.HandledCount, batch.Length);
+            var chargedEnd = Math.Min(batch.Length, handled + result.AttemptedCount);
+
+            var retry = new List<AnalyticsEnvelope>(batch.Length - handled);
             var dropped = 0;
-            for (var i = Math.Min(result.HandledCount, batch.Length); i < batch.Length; i++)
+            for (var i = handled; i < batch.Length; i++)
             {
                 var envelope = batch[i];
-                envelope.Attempts++;
+                if (i < chargedEnd)
+                    envelope.Attempts++;
+
                 if (envelope.Attempts >= _maxAttempts)
                     dropped++;
                 else
@@ -377,7 +431,7 @@ namespace LongLeap.Analytics
             var exponent = Math.Min(_consecutiveFailures - 1, 16);
             _retryDelayRemaining = Math.Min(_maxRetryDelaySeconds, _flushIntervalSeconds * (1 << exponent));
 
-            var droppedNote = dropped > 0 ? $"; {dropped} event(s) dropped after {_maxAttempts} attempts or queue overflow" : string.Empty;
+            var droppedNote = dropped > 0 ? $"; {dropped} event(s) dropped after {_maxAttempts} failed attempts or queue overflow" : string.Empty;
             Debug.LogWarning(
                 $"AnalyticsService: delivery failed ({result.Error}). {_queue.Count} event(s) queued, " +
                 $"next attempt in {_retryDelayRemaining:0.#} s{droppedNote}.");
@@ -429,5 +483,7 @@ namespace LongLeap.Analytics
         }
 
         private long NowMicros() => _clock().ToUnixTimeMilliseconds() * 1000L;
+
+        private static long ToMicros(TimeSpan span) => (long)(span.TotalMilliseconds * 1000.0);
     }
 }

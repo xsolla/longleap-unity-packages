@@ -7,9 +7,9 @@ namespace LongLeap.Analytics
     //
     //     public sealed class LevelCompleted : AnalyticsEventBase
     //     {
-    //         private static readonly EventName Name = new EventName("level_completed");
+    //         private static readonly EventName EventId = new EventName("level_completed");
     //
-    //         public LevelCompleted(int level, double seconds) : base(Name)
+    //         public LevelCompleted(int level, double seconds) : base(EventId)
     //         {
     //             SetParam("level", level);
     //             SetParam("duration_sec", seconds);
@@ -44,10 +44,11 @@ namespace LongLeap.Analytics
             Store(key, value);
         }
 
-        // int, short and byte bind here.
+        // int, uint, short, ushort, byte and sbyte bind here.
         protected void SetParam(string key, long value) => Store(key, value);
 
-        // float binds here. NaN and infinities are rejected.
+        // float binds here. NaN and infinities are rejected. Note that ulong
+        // binds here too and loses precision above 2^53: cast it to long.
         protected void SetParam(string key, double value) => Store(key, value);
 
         // Sent as "true" / "false": GA4 has no boolean parameter type.

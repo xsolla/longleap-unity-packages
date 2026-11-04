@@ -29,6 +29,9 @@ namespace LongLeap.Analytics.Tests
 
         public bool Throw;
 
+        // Runs inside SendAsync, before the result is returned.
+        public Action<IReadOnlyList<AnalyticsEnvelope>> OnSend;
+
         public int CallCount => Batches.Count;
 
         public List<AnalyticsEnvelope> LastBatch => Batches[Batches.Count - 1];
@@ -36,6 +39,7 @@ namespace LongLeap.Analytics.Tests
         public Task<SendResult> SendAsync(IReadOnlyList<AnalyticsEnvelope> batch)
         {
             Batches.Add(new List<AnalyticsEnvelope>(batch));
+            OnSend?.Invoke(batch);
 
             if (Throw)
                 throw new InvalidOperationException("Simulated backend failure");
@@ -50,8 +54,10 @@ namespace LongLeap.Analytics.Tests
         }
     }
 
-    internal sealed class FakeTransport : IAnalyticsTransport
+    internal sealed class FakeTransport : IAnalyticsTransport, IAnalyticsTransportLimits
     {
+        public int MaxBodyBytes { get; set; } = int.MaxValue;
+
         public readonly List<(string Url, string Body)> Calls = new List<(string, string)>();
         public readonly Queue<AnalyticsHttpResponse> Responses = new Queue<AnalyticsHttpResponse>();
         public bool Throw;
@@ -69,12 +75,10 @@ namespace LongLeap.Analytics.Tests
         }
     }
 
-    internal sealed class FakeGa4Config : IGa4Config
+    internal static class TestSettings
     {
-        public string MeasurementId { get; set; } = "G-TEST123";
-        public string ApiSecret { get; set; } = "test_secret";
-        public string EndpointUrl { get; set; } = "https://www.google-analytics.com/mp/collect";
-        public bool ValidateOnly { get; set; }
+        public static Ga4Settings Create(string apiSecret = "test_secret") =>
+            new Ga4Settings("G-TEST123", apiSecret);
     }
 
     internal sealed class FakeExperimentProvider : IExperimentInfoProvider
@@ -107,13 +111,14 @@ namespace LongLeap.Analytics.Tests
             long timestampMicros = 1_000_000L,
             string userId = null,
             IReadOnlyDictionary<string, string> userProperties = null,
+            long sessionId = 42L,
             params (string Key, object Value)[] parameters)
         {
             var dict = new Dictionary<string, object>();
             foreach (var (key, value) in parameters)
                 dict[key] = value;
 
-            return new AnalyticsEnvelope(new EventName(name), dict, timestampMicros, 42L, userId, userProperties);
+            return new AnalyticsEnvelope(new EventName(name), dict, timestampMicros, sessionId, userId, userProperties);
         }
 
         public static List<AnalyticsEnvelope> Many(int count, string userId = null)

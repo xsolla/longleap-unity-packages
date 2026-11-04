@@ -14,6 +14,13 @@ namespace LongLeap.Analytics
         Task<AnalyticsHttpResponse> PostAsync(string url, string body);
     }
 
+    // Optional: a transport that cannot carry large bodies says so here, and
+    // Ga4Backend splits requests to stay under the limit.
+    public interface IAnalyticsTransportLimits
+    {
+        int MaxBodyBytes { get; }
+    }
+
     public readonly struct AnalyticsHttpResponse
     {
         public AnalyticsHttpResponse(long statusCode, string body, string error)

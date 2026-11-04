@@ -3,8 +3,7 @@
   "rootNamespace": "LongLeap.Analytics",
   "references": [
     "Newtonsoft.Json",
-    "LongLeap.Core",
-    "UnityEngine.UnityWebRequestModule"
+    "LongLeap.Core"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

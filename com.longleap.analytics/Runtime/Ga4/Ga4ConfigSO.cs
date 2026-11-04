@@ -1,10 +1,13 @@
+using System;
 using UnityEngine;
 
 namespace LongLeap.Analytics
 {
-    // IGa4Config as an asset: Assets -> Create -> LongLeap Services -> GA4 Config.
+    // GA4 settings as an asset: Assets -> Create -> LongLeap Services -> GA4 Config.
+    //
+    //     var backend = new Ga4Backend(ga4ConfigAsset.ToSettings(), clientId);
     [CreateAssetMenu(menuName = "LongLeap Services/GA4 Config", fileName = "Ga4Config")]
-    public sealed class Ga4ConfigSO : ScriptableObject, IGa4Config
+    public sealed class Ga4ConfigSO : ScriptableObject
     {
         [Tooltip("GA4 Admin -> Data streams -> your stream. Looks like G-XXXXXXXXXX.")]
         [SerializeField] private string _measurementId;
@@ -22,5 +25,23 @@ namespace LongLeap.Analytics
         public string ApiSecret => _apiSecret;
         public string EndpointUrl => _endpointUrl;
         public bool ValidateOnly => _validateOnly;
+
+        // True when both the measurement ID and the API secret are filled in.
+        public bool IsConfigured =>
+            !string.IsNullOrWhiteSpace(_measurementId) && !string.IsNullOrWhiteSpace(_apiSecret);
+
+        // Throws InvalidOperationException when the asset is not filled in;
+        // check IsConfigured first to fall back to another backend instead.
+        public Ga4Settings ToSettings()
+        {
+            if (!IsConfigured)
+                throw new InvalidOperationException($"Ga4ConfigSO '{name}': fill in the measurement ID and the API secret.");
+
+            return new Ga4Settings(_measurementId, _apiSecret)
+            {
+                EndpointUrl = _endpointUrl,
+                ValidateOnly = _validateOnly,
+            };
+        }
     }
 }

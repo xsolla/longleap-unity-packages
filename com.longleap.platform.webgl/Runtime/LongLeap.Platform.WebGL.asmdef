@@ -3,8 +3,7 @@
   "rootNamespace": "LongLeap.Platform.WebGL",
   "references": [
     "LongLeap.Core",
-    "LongLeap.Analytics",
-    "UnityEngine.CoreModule"
+    "LongLeap.Analytics"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

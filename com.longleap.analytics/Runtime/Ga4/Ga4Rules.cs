@@ -22,6 +22,12 @@ namespace LongLeap.Analytics
         public const int MaxUserPropertyValueLength = 36;
         public const int MaxUserIdLength = 256;
 
+        // GA4 refuses request bodies of 130 kB or more.
+        public const int MaxRequestBytes = 130_000;
+
+        // GA4 accepts events backdated by at most 72 hours.
+        public static readonly TimeSpan MaxEventAge = TimeSpan.FromHours(72);
+
         // Parameter slots kept free for the service: session_id,
         // engagement_time_msec and up to three experiment tags. A game event
         // may use the rest, so the service never has to drop its own params.
@@ -43,11 +49,11 @@ namespace LongLeap.Analytics
             "ad_activeview", "ad_click", "ad_exposure", "ad_query", "ad_reward", "adunit_exposure",
             "app_background", "app_clear_data", "app_exception", "app_remove", "app_store_refund",
             "app_store_subscription_cancel", "app_store_subscription_convert",
-            "app_store_subscription_renew", "app_update", "app_upgrade",
+            "app_store_subscription_renew", "app_install", "app_update", "app_upgrade",
             "dynamic_link_app_open", "dynamic_link_app_update", "dynamic_link_first_open",
             "error", "first_open", "first_visit", "in_app_purchase",
             "notification_dismiss", "notification_foreground", "notification_open",
-            "notification_receive", "os_update", "session_start", "session_start_with_rollout",
+            "notification_receive", "notification_send", "os_update", "session_start", "session_start_with_rollout",
             "user_engagement",
         };
 
@@ -91,10 +97,25 @@ namespace LongLeap.Analytics
         public static bool IsServiceParam(string name) =>
             name == SessionIdParam || name == EngagementTimeParam;
 
+        // Cuts a string to maxLength UTF-16 units without splitting a
+        // surrogate pair (an emoji cut in half becomes U+FFFD in the payload).
+        public static string Truncate(string value, int maxLength)
+        {
+            if (value == null || value.Length <= maxLength)
+                return value;
+
+            var cut = maxLength;
+            if (cut > 0 && char.IsHighSurrogate(value[cut - 1]))
+                cut--;
+
+            return value.Substring(0, cut);
+        }
+
         // Converts a parameter value to one of the three types GA4 accepts:
         // string (cut to MaxParamValueLength), long or double. bool becomes
         // "true"/"false" because GA4 has no boolean type. Returns false for
-        // null, NaN, infinities and any other type (nested objects, arrays).
+        // null, NaN, infinities, ulong values above long.MaxValue and any
+        // other type (nested objects, arrays).
         public static bool TryNormalizeParamValue(object value, out object normalized, out string reason)
         {
             reason = null;
@@ -109,7 +130,7 @@ namespace LongLeap.Analytics
                     if (s.Length > MaxParamValueLength)
                     {
                         reason = $"the value was cut to {MaxParamValueLength} characters";
-                        s = s.Substring(0, MaxParamValueLength);
+                        s = Truncate(s, MaxParamValueLength);
                     }
 
                     normalized = s;
@@ -126,11 +147,26 @@ namespace LongLeap.Analytics
                 case short sh:
                     normalized = (long)sh;
                     return true;
+                case ushort us:
+                    normalized = (long)us;
+                    return true;
                 case byte by:
                     normalized = (long)by;
                     return true;
+                case sbyte sb:
+                    normalized = (long)sb;
+                    return true;
                 case uint ui:
                     normalized = (long)ui;
+                    return true;
+                case ulong ul:
+                    if (ul > long.MaxValue)
+                    {
+                        reason = "the value is larger than long.MaxValue";
+                        return false;
+                    }
+
+                    normalized = (long)ul;
                     return true;
                 case float f:
                     return TryNormalizeDouble(f, out normalized, out reason);

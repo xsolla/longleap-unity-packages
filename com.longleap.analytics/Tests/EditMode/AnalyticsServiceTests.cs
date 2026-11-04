@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
@@ -12,12 +13,25 @@ namespace LongLeap.Analytics.Tests
     {
         private ManualClock _clock;
         private SpyBackend _backend;
+        private SynchronizationContext _previousContext;
 
         [SetUp]
         public void SetUp()
         {
             _clock = new ManualClock();
             _backend = new SpyBackend();
+
+            // Without a context, the continuation of a pending delivery runs
+            // inline when the test completes it, so in-flight paths are
+            // deterministic.
+            _previousContext = SynchronizationContext.Current;
+            SynchronizationContext.SetSynchronizationContext(null);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            SynchronizationContext.SetSynchronizationContext(_previousContext);
         }
 
         private AnalyticsService Create(Action<AnalyticsOptions> configure = null)
@@ -380,7 +394,7 @@ namespace LongLeap.Analytics.Tests
         [Test]
         public void Event_DroppedAfterMaxAttempts()
         {
-            _backend.AlwaysResult = SendResult.RetryLater(0, "offline");
+            _backend.AlwaysResult = SendResult.RetryLater(0, "server error", attemptedCount: 1);
             var service = Create(o => o.MaxAttempts = 2);
             service.Send(Event());
 
@@ -408,7 +422,201 @@ namespace LongLeap.Analytics.Tests
             CollectionAssert.AreEqual(new[] { "event_3", "event_4", "event_5" }, Names(_backend.LastBatch));
         }
 
+        [Test]
+        public void NetworkFailures_DoNotUseUpAttempts()
+        {
+            _backend.AlwaysResult = SendResult.RetryLater(0, "offline");
+            var service = Create(o => o.MaxAttempts = 2);
+            service.Send(Event());
+
+            for (var i = 0; i < 10; i++)
+                service.Flush();
+
+            Assert.AreEqual(10, _backend.CallCount);
+            Assert.AreEqual(1, service.PendingCount);
+        }
+
+        [Test]
+        public void Attempts_ChargedOnlyForAttemptedEvents()
+        {
+            _backend.Results.Enqueue(SendResult.RetryLater(1, "server error", attemptedCount: 1));
+            var service = Create(o => o.MaxAttempts = 1);
+            service.Send(Event("event_a"));
+            service.Send(Event("event_b"));
+            service.Send(Event("event_c"));
+
+            service.Flush();   // a handled, b charged and dropped, c never tried
+            service.Flush();
+
+            CollectionAssert.AreEqual(new[] { "event_c" }, Names(_backend.LastBatch));
+        }
+
+        [Test]
+        public void Events_OlderThanMaxEventAge_DroppedBeforeSending()
+        {
+            var service = Create(o => o.MaxEventAge = TimeSpan.FromHours(1));
+            service.Send(Event("event_old"));
+            _clock.Advance(TimeSpan.FromHours(2));
+            service.Send(Event("event_new"));
+
+            service.Flush();
+
+            CollectionAssert.AreEqual(new[] { "event_new" }, Names(_backend.LastBatch));
+        }
+
+        // --- in-flight deliveries ---
+
+        [Test]
+        public void FlushDuringDelivery_RunsAfterSuccess_AndTaskWaitsForIt()
+        {
+            var pending = new TaskCompletionSource<SendResult>();
+            _backend.Pending = pending;
+            var service = Create();
+
+            service.Send(Event("event_a"));
+            var task = service.FlushAsync();
+            service.Send(Event("event_b"));
+            service.Flush();
+
+            Assert.IsFalse(task.IsCompleted);
+
+            _backend.Pending = null;
+            pending.SetResult(SendResult.Complete);
+
+            Assert.IsTrue(task.IsCompleted);
+            Assert.AreEqual(2, _backend.CallCount);
+            CollectionAssert.AreEqual(new[] { "event_b" }, Names(_backend.LastBatch));
+            Assert.AreEqual(0, service.PendingCount);
+        }
+
+        [Test]
+        public void FlushDuringDelivery_SkippedAfterFailure_BackoffApplies()
+        {
+            var pending = new TaskCompletionSource<SendResult>();
+            _backend.Pending = pending;
+            var service = Create();
+
+            service.Send(Event("event_a"));
+            var task = service.FlushAsync();
+            service.Send(Event("event_b"));
+            service.Flush();
+
+            _backend.Pending = null;
+            pending.SetResult(SendResult.RetryLater(0, "offline"));
+
+            Assert.IsTrue(task.IsCompleted);
+            Assert.AreEqual(1, _backend.CallCount);
+            Assert.AreEqual(2, service.PendingCount);
+        }
+
+        [Test]
+        public void DisposeDuringDelivery_SendsTheRestAfterSuccess()
+        {
+            var pending = new TaskCompletionSource<SendResult>();
+            _backend.Pending = pending;
+            var service = Create();
+
+            service.Send(Event("event_a"));
+            service.Flush();
+            service.Send(Event("event_b"));
+            service.Dispose();
+
+            _backend.Pending = null;
+            pending.SetResult(SendResult.Complete);
+
+            Assert.AreEqual(2, _backend.CallCount);
+            CollectionAssert.AreEqual(new[] { "event_b" }, Names(_backend.LastBatch));
+        }
+
+        [Test]
+        public void DisposeDuringDelivery_FailedBatchNotRequeued()
+        {
+            var pending = new TaskCompletionSource<SendResult>();
+            _backend.Pending = pending;
+            var service = Create();
+
+            service.Send(Event("event_a"));
+            service.Flush();
+            service.Dispose();
+
+            _backend.Pending = null;
+            pending.SetResult(SendResult.RetryLater(0, "offline"));
+
+            Assert.AreEqual(0, service.PendingCount);
+        }
+
+        [Test]
+        public void ConsentWithdrawnAndGivenDuringDelivery_FailedBatchDiscarded()
+        {
+            var pending = new TaskCompletionSource<SendResult>();
+            _backend.Pending = pending;
+            var service = Create();
+
+            service.Send(Event("event_a"));
+            service.Flush();
+            service.SetCollectionEnabled(false);
+            service.SetCollectionEnabled(true);
+
+            _backend.Pending = null;
+            pending.SetResult(SendResult.RetryLater(0, "offline"));
+
+            Assert.AreEqual(0, service.PendingCount);
+        }
+
+        [Test]
+        public void BackendThatSendsEvents_RunIsBounded()
+        {
+            AnalyticsService service = null;
+            service = Create(o => o.BatchSize = 1);
+            _backend.OnSend = _ => service.Send(Event("event_loop"));
+
+            service.Send(Event("event_a"));
+
+            Assert.LessOrEqual(_backend.CallCount, 4);
+            Assert.AreEqual(1, service.PendingCount);
+        }
+
+        // --- background event ---
+
+        [Test]
+        public void BackgroundEvent_SentWithEngagementOnBackground()
+        {
+            var service = Create(o => o.BackgroundEvent = new EventName("app_paused"));
+
+            _clock.AdvanceSeconds(2);
+            service.SetForeground(false);
+
+            var envelope = _backend.LastBatch[0];
+            Assert.AreEqual("app_paused", envelope.Name.Value);
+            Assert.AreEqual(2000L, envelope.Params[Ga4Rules.EngagementTimeParam]);
+        }
+
+        [Test]
+        public void BackgroundEvent_NotConfigured_NothingSent()
+        {
+            var service = Create();
+
+            _clock.AdvanceSeconds(2);
+            service.SetForeground(false);
+
+            Assert.AreEqual(0, _backend.CallCount);
+        }
+
         // --- consent ---
+
+        [Test]
+        public void EnablingCollection_ResetsEngagementBaseline()
+        {
+            var service = Create(o => o.CollectionEnabled = false);
+            _clock.AdvanceSeconds(10);
+
+            service.SetCollectionEnabled(true);
+            _clock.AdvanceSeconds(1);
+            service.Send(Event());
+            service.Flush();
+
+            Assert.AreEqual(1000L, _backend.LastBatch[0].Params[Ga4Rules.EngagementTimeParam]);
+        }
 
         [Test]
         public void CollectionDisabledInOptions_SendIgnored()

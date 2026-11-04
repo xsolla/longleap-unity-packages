@@ -48,10 +48,13 @@ namespace LongLeap.Analytics
         void SetForeground(bool isForeground);
 
         // Starts a flush now, ignoring the retry backoff. Fire-and-forget.
+        // During a delivery already in flight it asks for one more round
+        // right after it, which happens only if that delivery succeeds.
         void Flush();
 
-        // Same as Flush; the task completes when the delivery attempt (and any
-        // flush requested meanwhile) is over. Never faults.
+        // Same as Flush. The task completes when the current run is over,
+        // including the extra round requested during it. It never faults;
+        // check PendingCount to see whether everything went out.
         Task FlushAsync();
     }
 }

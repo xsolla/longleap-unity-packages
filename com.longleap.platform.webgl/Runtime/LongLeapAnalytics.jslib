@@ -5,9 +5,11 @@ mergeInto(LibraryManager.library, {
     // request, which sendBeacon requires (it cannot do a preflight). GA4
     // parses the JSON regardless of the content type.
     //
-    // sendBeacon refuses payloads over ~64 KB or when its queue is full;
-    // fetch with keepalive has the same delivery guarantee and is the
-    // fallback. Returns 1 when the browser accepted the request, 0 otherwise.
+    // Returns 1 only when the browser queued the request, 0 when it refused
+    // (beacon quota of ~64 KB in flight exceeded) or sendBeacon is missing.
+    // There is deliberately no fetch() fallback: fetch with keepalive shares
+    // the same quota and fails asynchronously, after this function would have
+    // had to report success.
     LongLeapAnalyticsSendBeacon: function (urlPtr, bodyPtr) {
         var url = UTF8ToString(urlPtr);
         var body = UTF8ToString(bodyPtr);
@@ -17,43 +19,57 @@ mergeInto(LibraryManager.library, {
                 return 1;
             }
         } catch (e) {
-            // Fall through to fetch.
-        }
-
-        try {
-            if (typeof fetch === 'function') {
-                fetch(url, { method: 'POST', body: body, keepalive: true, mode: 'no-cors' })
-                    .catch(function () { /* Fire-and-forget: nothing to report back. */ });
-                return 1;
-            }
-        } catch (e) {
-            // Neither path is available.
+            // Treated as refused.
         }
 
         return 0;
     },
 
-    // Reports page visibility changes to a GameObject via SendMessage:
-    // OnPageHidden when the tab is hidden or closing, OnPageVisible when it
-    // comes back. 'pagehide' covers browsers that skip visibilitychange on
-    // close (older Safari).
+    // Reports page visibility to a GameObject via SendMessage: OnPageHidden
+    // when the tab is hidden or the page is being unloaded, OnPageVisible when
+    // it is shown again (including a back/forward cache restore). Duplicate
+    // states are filtered. Listeners are kept per GameObject so they can be
+    // removed again by LongLeapAnalyticsUnwatchVisibility.
     LongLeapAnalyticsWatchVisibility: function (gameObjectNamePtr) {
         var target = UTF8ToString(gameObjectNamePtr);
-        var hidden = false;
+        var watchers = Module.longLeapAnalyticsWatchers || (Module.longLeapAnalyticsWatchers = {});
+        if (watchers[target]) {
+            return;
+        }
+
+        var state = { hidden: document.visibilityState === 'hidden' };
 
         function report(isHidden) {
-            if (hidden === isHidden) {
+            if (state.hidden === isHidden) {
                 return;
             }
-            hidden = isHidden;
+            state.hidden = isHidden;
             SendMessage(target, isHidden ? 'OnPageHidden' : 'OnPageVisible');
         }
 
-        document.addEventListener('visibilitychange', function () {
-            report(document.visibilityState === 'hidden');
-        });
-        window.addEventListener('pagehide', function () {
-            report(true);
-        });
+        var handlers = {
+            visibilitychange: function () { report(document.visibilityState === 'hidden'); },
+            pagehide: function () { report(true); },
+            pageshow: function () { report(document.visibilityState === 'hidden'); }
+        };
+
+        document.addEventListener('visibilitychange', handlers.visibilitychange);
+        window.addEventListener('pagehide', handlers.pagehide);
+        window.addEventListener('pageshow', handlers.pageshow);
+        watchers[target] = handlers;
+    },
+
+    LongLeapAnalyticsUnwatchVisibility: function (gameObjectNamePtr) {
+        var target = UTF8ToString(gameObjectNamePtr);
+        var watchers = Module.longLeapAnalyticsWatchers;
+        var handlers = watchers && watchers[target];
+        if (!handlers) {
+            return;
+        }
+
+        document.removeEventListener('visibilitychange', handlers.visibilitychange);
+        window.removeEventListener('pagehide', handlers.pagehide);
+        window.removeEventListener('pageshow', handlers.pageshow);
+        delete watchers[target];
     }
 });
