@@ -10,10 +10,10 @@ _Avoid_: Chain, sequence, run
 How far before the last reset boundary the last claim may lie for the streak to survive. The default (24h) means a strict streak: missing any day resets it. Each further 24h forgives one more missed day; use multiples of 24h. When the streak resets, cycle progress (which days were claimed) is preserved.
 
 **Cycle**:
-A complete pass through all reward days. When a cycle ends, it either completes permanently (`Once` policy) or wraps back to day 1 (`Loop` policy, firing a cycle-completed event). In `Loop` the finished cycle stays on screen until the next reset; the new cycle starts with the next reset window.
+A complete pass through all reward days. When a cycle ends, it either completes permanently (`Once` policy) or wraps back to day 1 (`Loop` policy; the claim result has `CompletedCycle` set). In `Loop` the finished cycle stays on screen until the next reset; the new cycle starts with the next reset window.
 
 **Reset Window**:
-A fixed UTC hour when the daily reward becomes available again. Time-math (comparing `lastClaimUtcTicks` to the last reset boundary) is fully encapsulated inside the service.
+A fixed UTC hour when the daily reward becomes available again. Time-math (comparing `LastClaimUtcTicks` to the last reset boundary) lives in `LongLeap.Core.ResetSchedule` and the internal `DailyRewardsRules`; callers never do it themselves.
 
 **RewardKey** / **RewardId**:
 Typed newtypes for reward identification. `RewardKey` (from `LongLeap.Core`, shared with daily quests) identifies what to grant (e.g. a currency id `"soft"`); the game interprets it. `RewardId` identifies a specific reward item. Both follow the `readonly struct : IEquatable<T>` pattern with `None` sentinel values.
