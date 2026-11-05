@@ -1,14 +1,14 @@
 namespace LongLeap.Settings
 {
     /// <summary>
-    /// Операции над всем набором настроек сервиса. Расширениями, а не членами
-    /// <see cref="ISettingsService"/>: интерфейс остаётся прежним для тех, кто его реализует сам.
+    /// Operations over the whole set of settings in a service. These are extensions rather than
+    /// members of <see cref="ISettingsService"/>, so the interface stays unchanged for anyone who implements it.
     /// </summary>
     public static class SettingsServiceExtensions
     {
         /// <summary>
-        /// Найти настройку по ключу (<see cref="Setting.Key"/>) среди всех групп сервиса.
-        /// null — такой настройки нет.
+        /// Find a setting by its key (<see cref="Setting.Key"/>) across all groups of the service.
+        /// Returns null if there is no such setting.
         /// </summary>
         public static Setting FindSetting(this ISettingsService service, string key)
         {
@@ -27,10 +27,10 @@ namespace LongLeap.Settings
         }
 
         /// <summary>
-        /// Вернуть всё, что зарегистрировано в сервисе, к значениям по умолчанию.
-        /// Группы не перечисляются поимённо: новая группа сбрасывается сама.
-        /// Значения идут через <see cref="ISettingsService.SetValue{T}"/>, поэтому
-        /// подписчики <see cref="ISettingsService.OnChanged"/> узнают об изменениях.
+        /// Reset everything registered in the service to its default value.
+        /// Groups are not listed by name, so a newly added group is reset automatically.
+        /// Values go through <see cref="ISettingsService.SetValue{T}"/>, so
+        /// <see cref="ISettingsService.OnChanged"/> subscribers are notified.
         /// </summary>
         public static void ResetToDefaults(this ISettingsService service)
         {

@@ -5,30 +5,30 @@ using UnityEngine;
 namespace LongLeap.Settings.UI
 {
     /// <summary>
-    /// Конфиги окна настроек по профилям устройства (<see cref="DeviceProfile"/>).
-    /// Заполнять нужно не все: незаполненный профиль берёт ближайший заполненный
-    /// (<see cref="Resolve"/>), так что достаточно одного конфига.
+    /// Settings window configs per device profile (<see cref="DeviceProfile"/>).
+    /// Not all of them need to be filled: an empty profile takes the nearest filled one
+    /// (<see cref="Resolve"/>), so a single config is enough.
     /// </summary>
     [Serializable]
     public sealed class SettingsWindowConfigSet
     {
-        [Tooltip("ПК, нативная сборка.")]
+        [Tooltip("Desktop, native build.")]
         public SettingsWindowConfig Desktop;
 
-        [Tooltip("Телефон или планшет, нативная сборка.")]
+        [Tooltip("Phone or tablet, native build.")]
         public SettingsWindowConfig Mobile;
 
-        [Tooltip("Браузер на ПК. Пусто — конфиг для ПК.")]
+        [Tooltip("Desktop browser. Empty: the Desktop config.")]
         public SettingsWindowConfig WebDesktop;
 
-        [Tooltip("Браузер на телефоне или планшете. Пусто — мобильный конфиг.")]
+        [Tooltip("Mobile browser. Empty: the Mobile config.")]
         public SettingsWindowConfig WebMobile;
 
         /// <summary>
-        /// Конфиг для профиля. Порядок запасных: веб берёт свой нативный аналог
-        /// (WebMobile — Mobile), затем то же управление, затем остальное; так на
-        /// мобильном без мобильного конфига окно соберётся по конфигу ПК, как и раньше.
-        /// null — не заполнен ни один.
+        /// Config for the profile. Fallback order: a web profile takes its native counterpart
+        /// (WebMobile → Mobile), then the same input type, then the rest; so a mobile device with no
+        /// mobile config still builds the window from the desktop config.
+        /// Returns null if none is filled.
         /// </summary>
         public SettingsWindowConfig Resolve(DeviceProfile profile, out DeviceProfile used)
         {

@@ -1,0 +1,26 @@
+{
+  "name": "LongLeap.Settings.Tests",
+  "rootNamespace": "LongLeap.Settings.Tests",
+  "references": [
+    "LongLeap.Settings",
+    "LongLeap.Settings.UI",
+    "LongLeap.Core",
+    "LongLeap.Tools",
+    "Unity.InputSystem",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner",
+    "NUnit.Framework"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": []
+}

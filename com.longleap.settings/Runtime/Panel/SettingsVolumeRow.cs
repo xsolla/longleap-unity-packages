@@ -9,17 +9,15 @@ using UnityEngine.UI;
 namespace LongLeap.Settings.UI
 {
     /// <summary>
-    /// Строка громкости: подпись, ползунок и процент справа.
+    /// Slider row for a numeric setting: label, slider and the value on the right.
     ///
-    /// Наследуется от <see cref="SettingsSliderBase"/> из пакета настроек, то
-    /// есть говорит с настройкой ровно тем же контрактом, что и обычный
-    /// префабный ползунок. Разница одна: иерархию строит сама
-    /// (<see cref="Create"/>), потому что окно настроек собирается
-    /// кодом, а не префабами.
+    /// Derives from <see cref="SettingsSliderBase"/>, so it talks to the setting through the
+    /// same contract as a prefab-based slider would. The difference is that it builds its own
+    /// hierarchy (<see cref="Create"/>), because the settings panel is built in code.
     ///
-    /// Значение уезжает в настройку на каждое движение ползунка — звук меняется,
-    /// пока его тянут (см. SoundSettingsBinder). В хранилище оно попадает позже,
-    /// когда окно закроют.
+    /// The value goes to the setting on every slider move, so subscribers of
+    /// <see cref="ISettingsService.OnChanged"/> (for example, audio volume) react while the slider
+    /// is dragged. Writing to storage happens later and is the window's job.
     /// </summary>
     public sealed class SettingsVolumeRow : SettingsSliderBase
     {
@@ -35,9 +33,8 @@ namespace LongLeap.Settings.UI
         private NumericSetting<int> _intSetting;
 
         /// <summary>
-        /// Собрать строку внутри колонки окна. <paramref name="fallbackLabel"/> —
-        /// текст, пока локализация не поднята: таблиц в проекте ещё нет, и без
-        /// него в окне были бы видны ключи.
+        /// Build the row inside a panel column. <paramref name="fallbackLabel"/> is shown while
+        /// localization is not ready or has no translation, so raw keys never appear in the window.
         /// </summary>
         public static SettingsVolumeRow Create(Transform parent, TMP_FontAsset font, string fallbackLabel)
         {
@@ -111,8 +108,7 @@ namespace LongLeap.Settings.UI
         }
 
         /// <summary>
-        /// Показать значение, которое пришло не из ползунка, — например, после
-        /// кнопки «по умолчанию».
+        /// Show a value that did not come from the slider, for example after the "defaults" button.
         /// </summary>
         public void Refresh()
         {
@@ -141,8 +137,8 @@ namespace LongLeap.Settings.UI
         }
 
         /// <summary>
-        /// Диапазон 0..1 показываем процентами — так громкость читается привычнее,
-        /// чем «0,73». Остальные диапазоны — как есть.
+        /// A 0..1 range is shown as a percentage, which reads better for volume than "0.73".
+        /// Other ranges are shown as rounded numbers.
         /// </summary>
         private void ShowValue(float value)
         {

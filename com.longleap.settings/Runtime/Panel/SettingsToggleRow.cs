@@ -8,9 +8,8 @@ using UnityEngine.UI;
 namespace LongLeap.Settings.UI
 {
     /// <summary>
-    /// Строка-переключатель для настройки <c>bool</c>: подпись слева, кнопка
-    /// ON/OFF справа. Иерархию строит сама (<see cref="Create"/>) — окно
-    /// настроек собирается кодом, как и остальные строки.
+    /// Toggle row for a <c>bool</c> setting: label on the left, ON/OFF button on the right.
+    /// Builds its own hierarchy (<see cref="Create"/>), like the other rows of the code-built panel.
     /// </summary>
     public sealed class SettingsToggleRow : MonoBehaviour
     {
@@ -63,7 +62,7 @@ namespace LongLeap.Settings.UI
             Loc.OnLanguageChanged += ShowLabel;
         }
 
-        /// <summary>Показать текущее значение, если оно поменялось не здесь — например, «по умолчанию».</summary>
+        /// <summary>Show the current value when it changed elsewhere, for example after "defaults".</summary>
         public void Refresh()
         {
             if (_value == null || _setting == null) return;

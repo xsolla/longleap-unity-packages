@@ -7,15 +7,14 @@ using UnityEngine;
 namespace LongLeap.Settings.UI.Editor
 {
     /// <summary>
-    /// Ключ настройки выпадающим списком. Список собирается из всех классов
-    /// <see cref="ISettingsGroup"/> с конструктором без параметров, которые есть
-    /// в проекте, — новая группа или настройка появляется в нём сама. Ключ,
-    /// которого нет, остаётся в списке красной строкой «missing», чтобы опечатку
-    /// в конфиге было видно, а не потеряно молча.
+    /// Draws a setting key as a dropdown. The list is built from every <see cref="ISettingsGroup"/>
+    /// class in the project that has a parameterless constructor, so a new group or setting shows
+    /// up on its own. A key that does not exist stays in the list as a red "missing" entry, so a
+    /// typo in the config is visible instead of silently lost.
     ///
-    /// Группа с обязательными параметрами конструктора в список не попадёт:
-    /// редактор не знает, чем её создавать. Её ключи в конфиге всё равно
-    /// работают, просто выбираются как «missing» — или добавь группе пустой конструктор.
+    /// A group whose constructor requires arguments is not listed: the editor does not know how to
+    /// create it. Its keys still work in the config, they just show as "missing" — or give the
+    /// group a parameterless constructor.
     /// </summary>
     [CustomPropertyDrawer(typeof(SettingKeyAttribute))]
     public sealed class SettingKeyDrawer : PropertyDrawer
@@ -27,7 +26,7 @@ namespace LongLeap.Settings.UI.Editor
         {
             if (property.propertyType != SerializedPropertyType.String)
             {
-                EditorGUI.LabelField(position, label.text, "[SettingKey] работает только со string");
+                EditorGUI.LabelField(position, label.text, "[SettingKey] works only with string fields");
                 return;
             }
 
@@ -37,7 +36,7 @@ namespace LongLeap.Settings.UI.Editor
             int index = Array.IndexOf(_keys, current);
             bool missing = index < 0;
 
-            // Лишняя последняя строка — текущее значение, которого нет в игре.
+            // Extra last entry: the current value, which does not exist in the game.
             var labels = new List<string>(_labels);
             if (missing)
                 labels.Add(string.IsNullOrEmpty(current) ? "<not set>" : $"missing: {current}");
@@ -60,9 +59,8 @@ namespace LongLeap.Settings.UI.Editor
         }
 
         /// <summary>
-        /// Ключи берём у свежесозданных групп без сервиса и хранилища: редактору
-        /// не нужен запущенный игровой контейнер, а список совпадает с тем, что
-        /// регистрирует игра.
+        /// Keys come from freshly created groups, with no service or storage: the editor does not
+        /// need a running game container, and the list matches what the game registers.
         /// </summary>
         private static void EnsureKeys()
         {
@@ -84,7 +82,7 @@ namespace LongLeap.Settings.UI.Editor
                 }
                 catch (Exception e)
                 {
-                    Debug.LogWarning($"[Settings] не удалось создать группу {type.Name} для списка ключей: {e.Message}");
+                    Debug.LogWarning($"[Settings] failed to create group {type.Name} for the key list: {e.Message}");
                     continue;
                 }
 

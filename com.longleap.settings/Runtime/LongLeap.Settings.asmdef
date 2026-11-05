@@ -3,9 +3,7 @@
     "rootNamespace": "LongLeap.Settings",
     "references": [
         "LongLeap.Core",
-        "LongLeap.Localization",
-        "Newtonsoft.Json",
-        "Unity.TextMeshPro"
+        "LongLeap.Localization"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

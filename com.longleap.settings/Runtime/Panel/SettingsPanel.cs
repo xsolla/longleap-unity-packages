@@ -9,30 +9,27 @@ using UnityEngine.InputSystem;
 namespace LongLeap.Settings.UI
 {
     /// <summary>
-    /// Панель настроек, собранная кодом внутрь заданного <c>root</c>: затемнение,
-    /// панель, секции со строками, кнопки «по умолчанию» и «назад». Не привязана
-    /// к оконной системе: окно игры (в Darkslide — наследник <c>MenuPageWindow</c>)
-    /// только создаёт панель в своём Root и зовёт её в нужные моменты.
+    /// Settings panel built in code inside the given <c>root</c>: backdrop, panel, sections with
+    /// rows, and the "defaults" and "back" buttons. It is not tied to a window system: the game's
+    /// window only creates the panel in its root and calls it at the right moments.
     ///
-    /// Что показывать, решает <see cref="SettingsWindowConfig"/> — секции, строки,
-    /// подписи, шрифт и размер панели. Конфиг берётся из набора по глобальному профилю
-    /// устройства (<see cref="DeviceInfo.Profile"/>): ПК, мобильный, веб на ПК, веб на мобильном.
-    /// Строка в конфиге ссылается на настройку по ключу, а вид строки зависит
-    /// от типа настройки: число — ползунок (<see cref="SettingsVolumeRow"/>),
-    /// bool — переключатель (<see cref="SettingsToggleRow"/>), клавиша — кнопка
-    /// переназначения (<see cref="SettingsKeyRow"/>).
+    /// What to show is decided by <see cref="SettingsWindowConfig"/>: sections, rows, captions,
+    /// font and panel size. The config is picked from the set by the global device profile
+    /// (<see cref="DeviceInfo.Profile"/>): desktop, mobile, web on desktop, web on mobile.
+    /// A config row refers to a setting by key, and the row view depends on the setting type:
+    /// number — slider (<see cref="SettingsVolumeRow"/>), bool — toggle
+    /// (<see cref="SettingsToggleRow"/>), key — rebind button (<see cref="SettingsKeyRow"/>).
     ///
-    /// Настроек может не быть (<see cref="Bind"/> ещё не позвали) — тогда панель
-    /// честно говорит, что настройки недоступны: кнопка возврата работает в любом
-    /// случае. Строка с неизвестным ключом — ошибка в консоли, строка пропускается,
-    /// остальное собирается как обычно.
+    /// There may be no settings (<see cref="Bind"/> not called yet); then the panel says that
+    /// settings are unavailable, and the back button still works. A row with an unknown key logs
+    /// an error and is skipped; the rest is built as usual.
     ///
-    /// Запись в хранилище панель не делает: ползунок дёргается десятки раз, и
-    /// момент записи — закрытие окна — знает только окно.
+    /// The panel does not write to storage: a slider fires dozens of times, and only the window
+    /// knows the right moment to save (when it closes).
     /// </summary>
     public sealed class SettingsPanel : IDisposable
     {
-        /// <summary>Секция: заголовок, колонка со строками и подсказка.</summary>
+        /// <summary>Section: header, column of rows and hint.</summary>
         private sealed class SectionView
         {
             public SettingsWindowConfig.Section Config;
@@ -58,12 +55,12 @@ namespace LongLeap.Settings.UI
         private bool _rowsBuilt;
 
         /// <summary>
-        /// Собрать панель внутри <paramref name="root"/>. Строки появятся, когда
-        /// придут настройки (<see cref="Bind"/>), — раньше показывать нечего.
+        /// Build the panel inside <paramref name="root"/>. Rows appear once settings arrive
+        /// (<see cref="Bind"/>); before that there is nothing to show.
         /// </summary>
-        /// <param name="root">Корень, который растянут на окно: в него кладутся затемнение и панель.</param>
-        /// <param name="configs">Конфиги по профилям устройства; хватит одного заполненного.</param>
-        /// <param name="onBack">Нажали «назад».</param>
+        /// <param name="root">Root stretched over the window; the backdrop and panel go inside it.</param>
+        /// <param name="configs">Configs per device profile; one filled config is enough.</param>
+        /// <param name="onBack">Called when "back" is pressed.</param>
         public SettingsPanel(
             RectTransform root,
             SettingsWindowConfigSet configs,
@@ -80,12 +77,12 @@ namespace LongLeap.Settings.UI
         }
 
         // =========================================================
-        // ПОДКЛЮЧЕНИЕ
+        // BINDING
         // =========================================================
 
         /// <summary>
-        /// Отдать панели настройки. Зовёт загрузка, когда UI уже поднят: сборка UI
-        /// не знает про контейнер сервисов и сама его не достанет.
+        /// Give the panel its settings service. Called by the game once the service is ready;
+        /// the panel does not know about any service container and cannot fetch it itself.
         /// </summary>
         public void Bind(ISettingsService service)
         {
@@ -104,8 +101,8 @@ namespace LongLeap.Settings.UI
         }
 
         /// <summary>
-        /// Показать значения, которые поменялись мимо панели: кнопкой mute в
-        /// главном меню или чтением сейва. Окно зовёт при открытии.
+        /// Show values that changed outside the panel (for example, a mute button elsewhere or
+        /// loading a save). The window calls it when opened.
         /// </summary>
         public void Refresh()
         {
@@ -119,7 +116,7 @@ namespace LongLeap.Settings.UI
                 if (row != null) row.Refresh();
         }
 
-        /// <summary>Перестать ждать клавишу во всех строках. Окно зовёт на закрытии.</summary>
+        /// <summary>Stop listening for a key in all rows. The window calls it when closed.</summary>
         public void StopListening() => StopListening(null);
 
         public void Dispose()
@@ -131,15 +128,14 @@ namespace LongLeap.Settings.UI
         }
 
         // =========================================================
-        // КОНФИГ И ШРИФТ
+        // CONFIG AND FONT
         // =========================================================
 
         /// <summary>
-        /// Конфиг под устройство: по глобальному профилю (<see cref="DeviceInfo.Profile"/>).
-        /// Нет конфига для профиля — берём ближайший заполненный
-        /// (<see cref="SettingsWindowConfigSet.Resolve"/>), нет ни одного — панель
-        /// остаётся рабочей: заголовок, сообщение и кнопка возврата, иначе из
-        /// меню нельзя было бы выйти назад.
+        /// Config for the device, by the global profile (<see cref="DeviceInfo.Profile"/>).
+        /// No config for the profile: take the nearest filled one
+        /// (<see cref="SettingsWindowConfigSet.Resolve"/>). None at all: the panel still works
+        /// with a title, a message and the back button, otherwise the menu could not be left.
         /// </summary>
         private SettingsWindowConfig ResolveConfig(SettingsWindowConfigSet configs, DeviceProfile profile)
         {
@@ -151,26 +147,25 @@ namespace LongLeap.Settings.UI
                 if (used != profile)
                 {
                     Debug.LogWarning(
-                        $"[Settings] в окне настроек не назначен конфиг для профиля {profile}: " +
-                        $"взят конфиг для {used}.", _root);
+                        $"[Settings] The settings window has no config for profile {profile}: " +
+                        $"using the config for {used}.", _root);
                 }
 
                 return config;
             }
 
             Debug.LogError(
-                "[Settings] в окне настроек не назначен ни один конфиг: секций не будет. " +
-                "Проставь SettingsWindowConfig хотя бы в одном поле набора конфигов окна.", _root);
+                "[Settings] The settings window has no config assigned: no sections will be shown. " +
+                "Assign a SettingsWindowConfig to at least one field of the window's config set.", _root);
 
             return ScriptableObject.CreateInstance<SettingsWindowConfig>();
         }
 
         /// <summary>
-        /// Шрифт панели. Поле в конфиге — основной путь, но ссылку могли не
-        /// проставить, а TMP без шрифта роняет раскладку, если в проекте нет
-        /// стандартного шрифта (TMP Essentials не импортированы). Поэтому запасной
-        /// вариант — шрифт любого другого текста UI: он точно есть и точно
-        /// тот, которым написано остальное меню.
+        /// Panel font. The config field is the main source, but it may be left empty, and TMP
+        /// without a font breaks the layout when the project has no default font (TMP Essentials
+        /// not imported). So the fallbacks are the TMP default font, then the font of any other
+        /// UI text under the same canvas, which surely exists and matches the rest of the menu.
         /// </summary>
         private TMP_FontAsset ResolveFont()
         {
@@ -191,21 +186,20 @@ namespace LongLeap.Settings.UI
             }
 
             Debug.LogError(
-                "[Settings] шрифт не найден: подписи в окне настроек будут пустыми. " +
-                "Проставь шрифт в поле Font в SettingsWindowConfig.", _root);
+                "[Settings] No font found: settings window captions will be empty. " +
+                "Assign a font to the Font field of SettingsWindowConfig.", _root);
 
             return null;
         }
 
         // =========================================================
-        // СБОРКА
+        // BUILDING
         // =========================================================
 
         /// <summary>
-        /// Постоянная часть: затемнение, панель, заголовки секций и кнопки.
-        /// Строится сразу, до того как придут настройки, иначе окно, открытое
-        /// без них, было бы пустым прямоугольником. Строки секций добавятся позже,
-        /// в <see cref="BuildRows"/>, в уже готовые колонки.
+        /// Static part: backdrop, panel, section headers and buttons. Built right away, before
+        /// settings arrive, otherwise a window opened without them would be an empty rectangle.
+        /// Section rows are added later, in <see cref="BuildRows"/>, into the existing columns.
         /// </summary>
         private void BuildChrome()
         {
@@ -231,7 +225,7 @@ namespace LongLeap.Settings.UI
                 RuntimeUi.TextDim, TextAlignmentOptions.Center);
             RuntimeUi.SetSize(_unavailable.gameObject, preferredHeight: 40f);
 
-            // На таче клавиш нет: секции, помеченные HideOnTouch, не создаём.
+            // Touch devices have no keyboard: sections marked HideOnTouch are not created.
             foreach (var section in _config.Sections)
             {
                 if (section == null) continue;
@@ -299,9 +293,9 @@ namespace LongLeap.Settings.UI
         }
 
         /// <summary>
-        /// Строки появляются вместе с настройками: раньше показывать нечего.
-        /// Проходим по секциям конфига; строку с неизвестным ключом или
-        /// незнакомым типом настройки пропускаем с ошибкой, остальные не страдают.
+        /// Rows appear together with the settings; before that there is nothing to show.
+        /// Walks the config sections; a row with an unknown key or an unsupported setting type is
+        /// skipped with an error, and the other rows are not affected.
         /// </summary>
         private void BuildRows()
         {
@@ -319,7 +313,7 @@ namespace LongLeap.Settings.UI
 
                 FitColumn(section.Column, section.Rows);
 
-                // Секция без единой рабочей строки — пустой заголовок: прячем.
+                // A section without a single working row is an empty header: hide it.
                 if (section.Rows == 0)
                 {
                     section.Header.SetActive(false);
@@ -333,7 +327,7 @@ namespace LongLeap.Settings.UI
             Refresh();
         }
 
-        /// <summary>Создать строку для настройки из конфига. false — строки не вышло.</summary>
+        /// <summary>Create a row for a config entry. Returns false if no row was created.</summary>
         private bool AddRow(SectionView section, SettingsWindowConfig.Row row)
         {
             var setting = _service.FindSetting(row.SettingKey);
@@ -341,9 +335,9 @@ namespace LongLeap.Settings.UI
             if (setting == null)
             {
                 Debug.LogError(
-                    $"[Settings] в конфиге окна настроек (секция '{section.Config.Title}') " +
-                    $"нет настройки с ключом '{row.SettingKey}': строка пропущена. " +
-                    "Выбери ключ из списка в SettingsWindowConfig.", _root);
+                    $"[Settings] Settings window config (section '{section.Config.Title}'): " +
+                    $"no setting with key '{row.SettingKey}', row skipped. " +
+                    "Pick a key from the dropdown in SettingsWindowConfig.", _root);
 
                 return false;
             }
@@ -387,15 +381,15 @@ namespace LongLeap.Settings.UI
 
                 default:
                     Debug.LogError(
-                        $"[Settings] для настройки '{setting.Key}' (тип {setting.ValueType.Name}) " +
-                        "в окне нет строки: строка пропущена.", _root);
+                        $"[Settings] No row view for setting '{setting.Key}' " +
+                        $"(type {setting.ValueType.Name}): row skipped.", _root);
                     return false;
             }
         }
 
         /// <summary>
-        /// Колонка занимает ровно столько, сколько нужно её строкам: панель
-        /// фиксированной высоты, и колонка без своего размера схлопнулась бы.
+        /// The column takes exactly the height its rows need: the panel has a fixed height, and a
+        /// column without its own size would collapse.
         /// </summary>
         private static void FitColumn(RectTransform column, int rows)
         {
@@ -415,10 +409,10 @@ namespace LongLeap.Settings.UI
         }
 
         // =========================================================
-        // РЕАКЦИИ
+        // HANDLERS
         // =========================================================
 
-        /// <summary>Ждать клавишу может только одна строка, остальные гасим.</summary>
+        /// <summary>Only one row may listen for a key; stop the others.</summary>
         private void StopListening(SettingsKeyRow except)
         {
             foreach (var row in _keyRows)
@@ -430,8 +424,8 @@ namespace LongLeap.Settings.UI
         }
 
         /// <summary>
-        /// Значение поменялось в сервисе. Обновляем все строки, а не одну:
-        /// переназначение клавиши меняет ещё и ту строку, у которой её забрали.
+        /// A value changed in the service. Refresh all rows, not just one: a key rebind also
+        /// changes the row the key was taken from.
         /// </summary>
         private void OnSettingChanged(Setting setting) => Refresh();
 

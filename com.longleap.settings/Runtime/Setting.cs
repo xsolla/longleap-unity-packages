@@ -25,9 +25,8 @@ namespace LongLeap.Settings
         }
 
         /// <summary>
-        /// Вернуть значение по умолчанию через сервис (чтобы сработал OnChanged).
-        /// У нетипизированной настройки значения по умолчанию нет — его знает
-        /// только <see cref="Setting{T}"/>.
+        /// Restore the default value through the service, so <see cref="ISettingsService.OnChanged"/> fires.
+        /// An untyped setting has no default; only <see cref="Setting{T}"/> knows it.
         /// </summary>
         internal virtual void ResetToDefault(ISettingsService service) { }
     }

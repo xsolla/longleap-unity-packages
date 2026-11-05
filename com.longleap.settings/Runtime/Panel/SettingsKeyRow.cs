@@ -12,19 +12,18 @@ using UnityEngine.UI;
 namespace LongLeap.Settings.UI
 {
     /// <summary>
-    /// Строка управления: подпись действия и кнопка с текущей клавишей.
+    /// Key binding row: the action label and a button showing the current key.
     ///
-    /// Нажали кнопку — строка ждёт клавишу и подсвечивается. Следующая нажатая
-    /// клавиша становится новой; Esc отменяет. Занятая клавиша не теряется:
-    /// действия меняются ею местами (см. <see cref="Rebind"/>),
-    /// поэтому «пустых» действий после переназначения не бывает.
+    /// Clicking the button makes the row listen for a key and highlights it. The next key pressed
+    /// becomes the new binding; Esc cancels. A key that is already in use is not lost: the two
+    /// actions swap keys (see <see cref="Rebind"/>), so no action is left unbound after a rebind.
     ///
-    /// Ждать может только одна строка: начиная ждать, строка говорит об этом
-    /// событием <see cref="ListenRequested"/>, и окно гасит остальные.
+    /// Only one row can listen at a time: when a row starts listening it raises
+    /// <see cref="ListenRequested"/>, and the panel stops the others.
     /// </summary>
     public sealed class SettingsKeyRow : MonoBehaviour
     {
-        /// <summary>Строка начала ждать клавишу — остальным пора перестать.</summary>
+        /// <summary>This row started listening for a key; the others should stop.</summary>
         public event Action<SettingsKeyRow> ListenRequested;
 
         private ISettingsService _service;
@@ -42,15 +41,14 @@ namespace LongLeap.Settings.UI
         private bool _listening;
 
         /// <summary>
-        /// Кадр, в котором начали ждать: нажатие, которое открыло ожидание
-        /// (Enter или пробел на самой кнопке), не должно тут же стать новой
-        /// клавишей.
+        /// Frame in which listening started: the press that opened listening (Enter or Space on
+        /// the button itself) must not immediately become the new key.
         /// </summary>
         private int _listenFrame;
 
         private Color _idleColor;
 
-        /// <summary>Собрать строку внутри колонки окна.</summary>
+        /// <summary>Build the row inside a panel column.</summary>
         public static SettingsKeyRow Create(
             Transform parent, TMP_FontAsset font, string fallbackLabel, string listeningText)
         {
@@ -82,7 +80,7 @@ namespace LongLeap.Settings.UI
             return row;
         }
 
-        /// <summary>Привязать строку к клавише действия.</summary>
+        /// <summary>Bind the row to an action's key setting.</summary>
         public void Bind(ISettingsService service, Setting<Key> binding)
         {
             _service = service;
@@ -96,8 +94,8 @@ namespace LongLeap.Settings.UI
         }
 
         /// <summary>
-        /// Показать текущую клавишу. Зовёт окно, когда значение поменялось не
-        /// здесь: обменом с другой строкой или кнопкой «по умолчанию».
+        /// Show the current key. Called by the panel when the value changed elsewhere: by a swap
+        /// with another row or by the "defaults" button.
         /// </summary>
         public void Refresh()
         {
@@ -107,7 +105,7 @@ namespace LongLeap.Settings.UI
             _keyLabel.text = _binding != null ? KeyName(_binding.Value) : "-";
         }
 
-        /// <summary>Перестать ждать клавишу и вернуть кнопке обычный вид.</summary>
+        /// <summary>Stop listening for a key and restore the button's idle look.</summary>
         public void StopListening()
         {
             if (!_listening) return;
@@ -133,8 +131,8 @@ namespace LongLeap.Settings.UI
             if (_keyLabel != null)
                 _keyLabel.text = _listeningText;
 
-            // Кнопка остаётся выбранной, и пробел на ней сработал бы как
-            // повторное нажатие — снимаем выделение, пока ждём клавишу.
+            // The button stays selected, and Space on it would act as another click,
+            // so clear the selection while listening.
             if (EventSystem.current != null)
                 EventSystem.current.SetSelectedGameObject(null);
 
@@ -166,20 +164,20 @@ namespace LongLeap.Settings.UI
 
                 Rebind(_service, _binding, key);
 
-                // Обмен мог задеть соседнюю строку — обновить её должно окно,
-                // оно подписано на изменения сервиса.
+                // A swap may have changed another row; the panel refreshes it,
+                // since it is subscribed to service changes.
                 Refresh();
                 return;
             }
         }
 
         /// <summary>
-        /// Назначить клавишу. Если она уже занята другим действием, действия
-        /// меняются клавишами: так после любого нажатия набор остаётся полным и
-        /// без дублей — молча потерянных или «мёртвых» кнопок не появляется.
-        /// «Другие действия» — это все настройки-клавиши всех групп сервиса.
+        /// Assign a key. If another action already uses it, the two actions swap keys, so after
+        /// any press the set stays complete and without duplicates — no silently lost or dead keys.
+        /// "Other actions" means every <c>Setting&lt;Key&gt;</c> in every group of the service.
+        /// Internal for tests.
         /// </summary>
-        private static void Rebind(ISettingsService service, Setting<Key> binding, Key key)
+        internal static void Rebind(ISettingsService service, Setting<Key> binding, Key key)
         {
             if (service == null || binding == null || key == Key.None) return;
             if (binding.Value == key) return;
@@ -215,19 +213,18 @@ namespace LongLeap.Settings.UI
         }
 
         /// <summary>
-        /// Имя клавиши так, как она подписана на клавиатуре игрока: раскладка
-        /// у всех своя, и «Q» на ней может быть «Й».
+        /// Key name as printed on the player's keyboard: layouts differ, and "Q" may be a
+        /// different letter on a non-Latin layout.
         ///
-        /// Если шрифт окна такую подпись не нарисует, показываем имя клавиши
-        /// из Input System: оно латинское, всегда рисуется и совпадает со
-        /// второй раскладкой, напечатанной на самой клавише. Привязка всё
-        /// равно хранит физическую клавишу, а не букву на ней.
+        /// If the window font cannot render that name, the Input System key name is shown instead:
+        /// it is Latin, always renders and matches the second layout printed on the key itself.
+        /// The binding stores the physical key either way, not the letter on it.
         /// </summary>
         private string KeyName(Key key)
         {
             if (key == Key.None) return "-";
 
-            // Имя из Input System — то же самое на любой раскладке.
+            // The Input System name is the same on any layout.
             string fallback = key.ToString().ToUpperInvariant();
 
             var keyboard = Keyboard.current;
@@ -246,14 +243,12 @@ namespace LongLeap.Settings.UI
         }
 
         /// <summary>
-        /// Шрифт умеет нарисовать эту подпись. Шрифт меню статический и знает
-        /// только латиницу: кириллическая подпись с русской раскладки вышла бы
-        /// пустой строкой на экране, а не «неправильной буквой», — заметить
-        /// такое можно только запустив игру с этой раскладкой.
+        /// Whether the font can render this name. A static Latin-only font would draw a
+        /// non-Latin key name (for example, Cyrillic) as empty boxes or nothing, which is only
+        /// noticeable when running the game with that layout.
         ///
-        /// Запасные шрифты тоже учитываем, а динамическому разрешаем добрать
-        /// глиф: если в проект однажды добавят шрифт с кириллицей, подписи
-        /// станут настоящими сами, без правок здесь.
+        /// Fallback fonts are checked too, and a dynamic font may add the glyph, so once the
+        /// project gets a font with the needed characters, real names appear without changes here.
         /// </summary>
         private bool CanRender(string text)
         {

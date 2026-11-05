@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using LongLeap.Core.CloudSaves;
-using Newtonsoft.Json;
 using UnityEngine;
 
 namespace LongLeap.Settings
@@ -22,7 +21,7 @@ namespace LongLeap.Settings
         {
             if (!_storageKeys.Add(group.StorageKey))
                 throw new InvalidOperationException(
-                    $"SettingsService: повторяющийся StorageKey '{group.StorageKey}'");
+                    $"SettingsService: duplicate StorageKey '{group.StorageKey}'");
             _groups.Add(group);
         }
 
@@ -50,7 +49,7 @@ namespace LongLeap.Settings
                 catch (Exception e)
                 {
                     Debug.LogWarning(
-                        $"SettingsService: не удалось загрузить '{group.StorageKey}', используются значения по умолчанию. {e.Message}");
+                        $"SettingsService: failed to load '{group.StorageKey}', using default values. {e.Message}");
                 }
             }
         }
