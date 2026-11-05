@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using LongLeap.Core.Editor;
+using LongLeap.BuildManager.Options;
 using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;

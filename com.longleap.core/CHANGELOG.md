@@ -22,11 +22,23 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - All code comments, exception messages and test messages are now in English.
   Exception texts of `IdToken`, `UserId` and `CloudSaveKey` changed accordingly.
-- README rewritten to cover every module (leagues, ads/portal, shared types,
-  Editor project options) and to match current behaviour. CONTEXT.md updated.
+- README rewritten to cover every module (leagues, ads/portal, shared types)
+  and to match current behaviour. CONTEXT.md updated.
 
 ### Removed
 
+- Leaderboards (`LongLeap.Core.Leaderboards`) and leagues (`LongLeap.Core.Leagues`):
+  contracts, services and value types moved to `com.longleap.xsollaid` as
+  `LongLeap.XsollaId.Leaderboards` / `LongLeap.XsollaId.Leagues` (assembly
+  `LongLeap.XsollaId.Web`, only with `XSOLLA_ID`). Same types, same behaviour.
+  Replace the `using` lines and reference `LongLeap.XsollaId.Web`. Their tests moved too.
+- `LongLeap.Core.Editor` (assembly and namespace): the project options framework moved to
+  `com.longleap.buildmanager` as `LongLeap.BuildManager.Options` (same types, same
+  behaviour). In asmdefs reference `LongLeap.BuildManager.Options`, replace
+  `using LongLeap.Core.Editor;` with `using LongLeap.BuildManager.Options;`, and depend on
+  `com.longleap.buildmanager`.
+- `LongLeap.Core.Ads.NoPortalLocale`. Use `LongLeap.Null.NullPortalLocale` from
+  `com.longleap.nullproviders` instead (same behaviour).
 - `LongLeap.Core.Ads.NoAdsProvider`. Use `LongLeap.Null.NullAdsProvider` from
   `com.longleap.nullproviders` instead (same behaviour). Release together with
   `com.longleap.nullproviders` 0.1.0.

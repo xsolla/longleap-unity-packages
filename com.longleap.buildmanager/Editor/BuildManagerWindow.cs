@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using LongLeap.Core.Editor;
+using LongLeap.BuildManager.Options;
 using UnityEditor;
 using UnityEngine;
 
@@ -133,7 +133,7 @@ namespace LongLeap.BuildManager.Editor
             {
                 EditorGUILayout.HelpBox(
                     "No package registered any build options. A package declares them by " +
-                    "implementing IProjectOptionSectionProvider from LongLeap.Core.Editor.",
+                    "implementing IProjectOptionSectionProvider from LongLeap.BuildManager.Options.",
                     MessageType.Info);
             }
 

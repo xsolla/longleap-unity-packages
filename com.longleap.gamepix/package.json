@@ -6,6 +6,7 @@
   "unity": "6000.0",
   "keywords": ["gamepix", "ads", "portal", "webgl", "backend", "longleap"],
   "dependencies": {
+    "com.longleap.buildmanager": "0.1.0",
     "com.longleap.core": "0.1.0",
     "com.longleap.xsollaid": "0.1.0",
     "com.unity.nuget.newtonsoft-json": "3.0.2"

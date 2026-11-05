@@ -2,7 +2,7 @@
     "name": "LongLeap.Backpack.Editor",
     "rootNamespace": "LongLeap.Backpack.Editor",
     "references": [
-        "LongLeap.Core.Editor"
+        "LongLeap.BuildManager.Options"
     ],
     "includePlatforms": [
         "Editor"

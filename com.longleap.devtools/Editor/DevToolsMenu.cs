@@ -1,5 +1,5 @@
 #if UNITY_EDITOR
-using LongLeap.Core.Editor;
+using LongLeap.BuildManager.Options;
 using UnityEditor;
 
 namespace LongLeap.DevTools.EditorTools
@@ -16,8 +16,8 @@ namespace LongLeap.DevTools.EditorTools
     // У этой сборки НЕТ defineConstraints намеренно: скрипт, который включает
     // LONGLEAP_DEBUG, не может сам его требовать — иначе включить будет нечем.
     // То же самое сделано в LongLeap.XsollaId.Editor. Ссылка на
-    // LongLeap.Core.Editor этого не меняет: ссылка — не ограничение, а сама
-    // LongLeap.Core.Editor тоже ничем не ограничена.
+    // LongLeap.BuildManager.Options этого не меняет: ссылка — не ограничение, а сама
+    // LongLeap.BuildManager.Options тоже ничем не ограничена.
     //
     // Символы правятся только для WebGL: это единственная платформа, для
     // которой проект их вообще задаёт. Теперь это записано в одном месте —

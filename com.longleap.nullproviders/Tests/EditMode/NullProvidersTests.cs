@@ -2,7 +2,6 @@ using System.Threading.Tasks;
 using LongLeap.Core.Ads;
 using LongLeap.Core.Auth;
 using LongLeap.Core.CloudSaves;
-using LongLeap.Core.Leaderboards;
 using NUnit.Framework;
 
 namespace LongLeap.Null.Tests
@@ -50,47 +49,6 @@ namespace LongLeap.Null.Tests
             Assert.AreEqual("", provider.AccountId);
             AssertDone(provider.PeekAccountAsync("acc"), out var peek);
             Assert.AreEqual(0, peek.Count);
-        }
-
-        [Test]
-        public void Leaderboard_AcceptsSubmitsAndReturnsEmptyBoards()
-        {
-            var provider = new NullLeaderboardProvider();
-            var board = new BoardId("kills");
-            const SortDirection sort = SortDirection.Descending;
-
-            AssertDone(provider.SubmitScoreAsync(board, "uid", 100, "Player", sort), out bool accepted);
-            AssertDone(provider.GetTopAsync(board, sort, 10), out LeaderboardPage top);
-            AssertDone(provider.GetSurroundingsAsync(board, sort, "uid", 5), out LeaderboardPage around);
-            AssertDone(provider.GetPlayerRankAsync(board, sort, "uid"), out PlayerRank rank);
-
-            Assert.IsTrue(accepted);
-            Assert.AreEqual(0, top.Entries.Count);
-            Assert.IsFalse(top.HasMore);
-            Assert.AreEqual(0, around.Entries.Count);
-            Assert.IsNull(rank.Rank);
-            Assert.IsNull(rank.Score);
-            Assert.AreEqual(0, rank.TotalPlayers);
-            Assert.DoesNotThrow(provider.Dispose);
-        }
-
-        [Test]
-        public void League_ReturnsEmptyStateAndNoReward()
-        {
-            var provider = new NullLeagueProvider();
-
-            AssertDone(provider.GetStateAsync("weekly"), out var state);
-            AssertDone(provider.SubmitScoreAsync("weekly", 100, "Player"), out var afterSubmit);
-            AssertDone(provider.ClaimAsync("weekly", 1), out var claim);
-            AssertDone(provider.DebugFillGroupAsync("weekly"), out var filled);
-
-            Assert.AreEqual("weekly", state.LeagueId);
-            Assert.IsFalse(state.IsJoined);
-            Assert.AreEqual("weekly", afterSubmit.LeagueId);
-            Assert.IsFalse(claim.Claimed);
-            Assert.IsNull(filled);
-            Assert.IsTrue(provider.DebugClosePeriodAsync("weekly").IsCompleted);
-            Assert.DoesNotThrow(provider.Dispose);
         }
 
         [Test]

@@ -1,0 +1,26 @@
+{
+  "name": "LongLeap.Firebase.Leaderboards.Tests",
+  "rootNamespace": "",
+  "references": [
+    "LongLeap.Core",
+    "LongLeap.Firebase",
+    "LongLeap.Firebase.Leaderboards",
+    "LongLeap.XsollaId.Web",
+    "Newtonsoft.Json",
+    "UnityEngine.TestRunner",
+    "NUnit.Framework"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS",
+    "XSOLLA_ID"
+  ],
+  "versionDefines": []
+}

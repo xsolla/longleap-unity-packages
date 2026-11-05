@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using LongLeap.Core.Editor;
+using LongLeap.BuildManager.Options;
 using UnityEditor;
 
 namespace LongLeap.Backpack.Editor

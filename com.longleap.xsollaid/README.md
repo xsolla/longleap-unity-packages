@@ -9,7 +9,7 @@ callback page.
 | Where | What |
 |---|---|
 | `Runtime/` | contracts and orchestration, without a single network call |
-| `Runtime.Web/` | HTTP, the browser window and `XsollaId.jslib`. Compiled only under the `XSOLLA_ID` define |
+| `Runtime.Web/` | HTTP, the browser window and `XsollaId.jslib`, plus [leaderboards and leagues](#leaderboards-and-leagues). Compiled only under the `XSOLLA_ID` define |
 | `Runtime.UI/` | the account block widget |
 | `Runtime.Accounts/` | the startup account flow: account or guest, and the guest-to-account save merge (see [below](#startup-account-flow)) |
 | `UI/` | the widget prefab and sprites (see `UI/README.md`) |
@@ -296,6 +296,73 @@ var rules = new SaveMergeRules(SaveMergeRule.PreferAccount)   // default for unm
   also works with domain reload disabled.
 - Logs never include the account id.
 
+## Leaderboards and leagues
+
+Contracts, services and value types for leaderboards and leagues live in the `LongLeap.XsollaId.Web` assembly, so they exist **only with `XSOLLA_ID`**. Namespaces: `LongLeap.XsollaId.Leaderboards` and `LongLeap.XsollaId.Leagues`.
+
+| Backend | Leaderboards | Leagues | Assembly |
+|---|---|---|---|
+| Xsolla server | `XsollaLeaderboardProvider` (+ `XsollaAccountAuthProvider` to use the account id as uid) | `XsollaLeagueProvider` | `LongLeap.XsollaId.Web` |
+| Null | `NullLeaderboardProvider` | `NullLeagueProvider` | `LongLeap.Null.XsollaId` (`com.longleap.nullproviders`) |
+| Firebase RTDB | `FirebaseLeaderboardProvider` | — | `LongLeap.Firebase.Leaderboards` (`com.longleap.firebase`) |
+
+The null and Firebase assemblies are gated by `XSOLLA_ID` as well.
+
+### Leaderboards
+
+| Type | Kind | Purpose |
+|---|---|---|
+| `ILeaderboardService` | Interface | `GetBoard(BoardId, SortDirection)`, `FlushAsync`, `GetPlayerUidAsync`, `GetPlayerDisplayName`, event `OnTopRankAchieved(BoardId, rank)` |
+| `LeaderboardService` | Sealed class | `new LeaderboardService(prefix, ILeaderboardProvider, IAuthProvider, Func<string> displayName = null)` |
+| `ILeaderboard` | Interface | Per-board handle: `SubmitScoreAsync`, `GetTopAsync`, `GetMyRankAsync`, `GetSurroundingsAsync` |
+| `ILeaderboardProvider` | Interface | Backend seam; receives the prefixed board id and the uid |
+| `BoardId` | Readonly struct | `^[a-zA-Z][a-zA-Z0-9_-]{0,39}$`. An invalid id logs an error and becomes `"invalid_board_id"` (`IsValid == false`) |
+| `BoardDefinition` | Readonly struct | `Id` + `Sort` |
+| `SortDirection` | Enum | `Descending`, `Ascending` |
+| `SubmitResult` | Readonly struct | `IsAccepted`, `IsNewBest`, `Score` |
+| `PlayerRank` | Readonly struct | `Rank` (int?), `Score` (long?), `TotalPlayers` |
+| `LeaderboardEntry` | Readonly struct | `Uid`, `DisplayName`, `Score`, `Rank` (1-based), `Timestamp` |
+| `LeaderboardPage` | Sealed class | `Entries`, `Cursor`, `HasMore`, `Empty()` |
+
+```csharp
+var leaderboards = new LeaderboardService("dev_", leaderboardProvider, authProvider, () => playerName);
+var board = leaderboards.GetBoard(new BoardId("score"), SortDirection.Descending);
+await board.SubmitScoreAsync(1500);   // queued
+await leaderboards.FlushAsync();      // sent
+var top10 = await board.GetTopAsync(10);
+```
+
+#### How it works
+
+- **Batching.** `SubmitScoreAsync` only queues the score, keeping the best pending one per board (higher for `Descending`, lower for `Ascending`). `FlushAsync` sends the queue; failed boards are re-queued. `SubmitResult.IsAccepted` means "queued", not "accepted by the server".
+- **Prefix.** Every board id sent to the provider is `prefix + id` (e.g. `"dev_"` for development builds). Keep prefix + id within 40 characters.
+- **Uid.** Taken from `IAuthProvider.LoginAsync`; if auth fails, a GUID stored in `PlayerPrefs` under `longleap_device_id` is used. UI must compare row uids with `GetPlayerUidAsync()`.
+- **Display name.** From the resolver passed to the constructor; `"Player"` if none or empty.
+- **Caching.** Top and surroundings pages are cached per board for the lifetime of the service and dropped after the player's own accepted submit. On a failed request the cached page (or an empty one) is returned.
+- **Top-rank event.** After each accepted submit in `FlushAsync`, `OnTopRankAchieved` fires if the player's rank is 10 or better.
+
+### Leagues
+
+A weekly league for the current player: submit scores, read the state, receive rewards for closed periods.
+
+| Type | Kind | Purpose |
+|---|---|---|
+| `ILeagueService` | Interface | `LeagueId`, `State`, `RefreshAsync`, `SubmitScoreAsync`, events `StateChanged`, `RewardClaimed`; debug: `DebugFillGroupAsync`, `DebugClosePeriodAsync` |
+| `LeagueService` | Sealed class | `new LeagueService(prefix, leagueId, ILeagueProvider, Func<string> displayName = null)` |
+| `ILeagueProvider` | Interface | Backend seam; every method throws on a failed request |
+| `LeagueState` | Sealed class | `Tiers`, `Tier`, `Period`, `Group` (null until the player submits this period), `LastResult`, `Unclaimed` |
+| `LeaguePeriod`, `LeagueGroup`, `LeagueEntry`, `LeagueResult`, `LeagueClaim` | Model | Period timing, group standings and zones, closed-period results, claim reply |
+
+```csharp
+var league = new LeagueService("dev_", "weekly", leagueProvider, () => playerName);
+league.RewardClaimed += result => wallet.Add(result.Reward); // credit here, exactly once
+await league.RefreshAsync();
+await league.SubmitScoreAsync(runScore);
+```
+
+- A failed submit is kept and added to the next submit (within the same launch).
+- Whenever a state arrives with unclaimed results, the service claims them. `RewardClaimed` fires only when the server confirms this call claimed the reward, so a reward is credited once across devices.
+
 ## Tests
 
 EditMode tests, one assembly per runtime assembly:
@@ -303,7 +370,7 @@ EditMode tests, one assembly per runtime assembly:
 | Assembly | Covers | Needs |
 |---|---|---|
 | `LongLeap.XsollaId.Tests` | sign-in flow, PKCE, origin guard, redirect derivation, config, session and session store, value types | — |
-| `LongLeap.XsollaId.Web.Tests` | HTTP helpers, discovery, token client, browser callback receiver, avatar loader, cloud save provider and scope, leaderboard and league providers | `XSOLLA_ID` |
+| `LongLeap.XsollaId.Web.Tests` | HTTP helpers, discovery, token client, browser callback receiver, avatar loader, cloud save provider and scope, leaderboard and league services, providers and `BoardId` | `XSOLLA_ID` |
 | `LongLeap.XsollaId.UI.Tests` | account widget state logic | — |
 | `LongLeap.XsollaId.Accounts.Tests` | startup gate, save switch, merge rules | — |
 

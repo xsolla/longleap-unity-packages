@@ -5,6 +5,24 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Leaderboards and leagues, moved from `com.longleap.core`: `ILeaderboardService`,
+  `LeaderboardService`, `ILeaderboardProvider`, `ILeaderboard`, `BoardId` and the other
+  value types (namespace `LongLeap.XsollaId.Leaderboards`), and `ILeagueService`,
+  `LeagueService`, `ILeagueProvider`, `LeagueState` and its model (namespace
+  `LongLeap.XsollaId.Leagues`). They live in `LongLeap.XsollaId.Web`, so they exist only
+  with `XSOLLA_ID`. Behaviour is unchanged. `BoardIdTests`, `LeaderboardServiceTests` and
+  `LeagueServiceTests` moved to `LongLeap.XsollaId.Web.Tests`.
+
+### Changed
+
+- The editor assembly now references `LongLeap.BuildManager.Options` (from
+  `com.longleap.buildmanager`, new dependency) instead of `LongLeap.Core.Editor`,
+  which moved there.
+
 ## [0.1.0] - 2026-11-02
 
 First release.

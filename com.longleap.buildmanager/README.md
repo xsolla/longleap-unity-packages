@@ -8,7 +8,13 @@ Open it from **LongLeap / Build Manager**.
 
 - Unity 6000.0 or newer. Editor only: nothing from this package goes into a
   player build.
-- Depends on `com.longleap.core` (the `LongLeap.Core.Editor` contract).
+- No package dependencies.
+- Two editor assemblies:
+  - `LongLeap.BuildManager.Options` (`Options/`): the contract other packages
+    implement — option kinds, presets, build targets, warnings, menu helpers.
+    Reference this one to declare options.
+  - `LongLeap.BuildManager.Editor` (`Editor/`): the window, settings, default
+    presets and the WebGL build target. Not auto-referenced.
 - Scripting defines are written for **WebGL** only (see [Limits](#limits)).
 - Addressables is optional.
 
@@ -34,8 +40,8 @@ applies them in one batch, and lets packages declare named presets.
   and says why. Building then would compile `#if`-gated code against the old
   defines.
 - **Options come from other packages.** Options, presets, warnings and build
-  targets arrive from other assemblies through `LongLeap.Core.Editor`,
-  discovered with `TypeCache`. This package references only that contract, so
+  targets arrive from other assemblies through `LongLeap.BuildManager.Options`,
+  discovered with `TypeCache`. The window references only that contract, so
   it drops into a project with none of the feature packages and shows no
   options.
 
@@ -70,12 +76,12 @@ the whole team builds to the same folder.
 ## Quick start: declare an option
 
 Implement a provider in an editor assembly that references
-`LongLeap.Core.Editor`. It is found automatically; nothing has to be
+`LongLeap.BuildManager.Options`. It is found automatically; nothing has to be
 registered.
 
 ```csharp
 using System.Collections.Generic;
-using LongLeap.Core.Editor;
+using LongLeap.BuildManager.Options;
 
 namespace MyGame.Editor
 {
@@ -155,7 +161,7 @@ for a preset that touches only the options it names.
 
 - An editor assembly that *enables* a define must never carry that define in
   its own `defineConstraints`, or it disappears exactly when you need it. That
-  is why `LongLeap.Core.Editor` has empty `references` and `defineConstraints`,
+  is why `LongLeap.BuildManager.Options` has empty `references` and `defineConstraints`,
   and why asset fields are reached by string-named `SerializedProperty` rather
   than a typed reference. Feature editor assemblies that declare options
   follow the same rule.

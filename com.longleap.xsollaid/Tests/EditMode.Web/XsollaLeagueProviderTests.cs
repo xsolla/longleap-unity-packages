@@ -1,6 +1,6 @@
 using System;
 using System.Threading.Tasks;
-using LongLeap.Core.Leagues;
+using LongLeap.XsollaId.Leagues;
 using NUnit.Framework;
 
 namespace LongLeap.XsollaId.Web.Tests

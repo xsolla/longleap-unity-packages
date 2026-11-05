@@ -1,5 +1,5 @@
 using System.IO;
-using LongLeap.Core.Editor;
+using LongLeap.BuildManager.Options;
 using UnityEditor;
 using UnityEngine;
 

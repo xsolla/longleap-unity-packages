@@ -1,4 +1,4 @@
-using LongLeap.Core.Editor;
+using LongLeap.BuildManager.Options;
 using UnityEditor;
 
 namespace LongLeap.GamePix.Editor
@@ -31,8 +31,8 @@ namespace LongLeap.GamePix.Editor
     // require GAMEPIX, or it would vanish exactly when it is needed. For the
     // same reason it lives in the package rather than in Assets/Plugins/GamePix:
     // updating the plugin means deleting that folder entirely, and the menu
-    // would go with it. Referencing LongLeap.Core.Editor does not break the
-    // rule: a reference is not a constraint, and LongLeap.Core.Editor is not
+    // would go with it. Referencing LongLeap.BuildManager.Options does not break the
+    // rule: a reference is not a constraint, and LongLeap.BuildManager.Options is not
     // constrained either.
     public static class GamePixPluginMenu
     {

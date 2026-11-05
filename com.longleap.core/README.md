@@ -2,10 +2,11 @@
 
 Foundation package for LongLeap. It holds:
 
-- the **contracts** other packages implement (auth, cloud saves, leaderboards, leagues, ads, storage, A/B experiments);
-- the **backend-agnostic services** built on those contracts (`CloudSaveService`, `LeaderboardService`, `LeagueService`);
-- small **shared types** (`RewardKey`, `ResetSchedule`) and the Unity implementations of the storage contracts;
-- an **Editor framework** for project options, presets, build targets and warnings, used by the Build Manager window.
+- the **contracts** other packages implement (auth, cloud saves, ads, storage, A/B experiments);
+- the **backend-agnostic service** built on them: `CloudSaveService`;
+- small **shared types** (`RewardKey`, `ResetSchedule`) and the Unity implementations of the storage contracts.
+
+Elsewhere: leaderboards and leagues are in `com.longleap.xsollaid` (`LongLeap.XsollaId.Leaderboards` / `.Leagues`, only with `XSOLLA_ID`); the Editor framework for project options and build presets is in `com.longleap.buildmanager` (`LongLeap.BuildManager.Options`).
 
 Backends live in other packages: `com.longleap.firebase`, `com.longleap.xsollaid`, `com.longleap.gamepix`, and null backends in `com.longleap.nullproviders`. Terms are defined in [CONTEXT.md](CONTEXT.md).
 
@@ -22,10 +23,7 @@ Requires Unity 6000.0+ and `com.unity.nuget.newtonsoft-json`.
 | Shared types | `LongLeap.Core` | `RewardKey`, `ResetSchedule` | used by daily rewards and daily quests |
 | Auth | `LongLeap.Core.Auth` | `IAuthProvider`, `AuthResult`, `UserId`, `IdToken` | null, Firebase, Xsolla ID |
 | Cloud saves | `LongLeap.Core.CloudSaves` | `ICloudSaveService`, `ICloudSaveProvider`, `CloudSaveService`, scope/batch/bulk interfaces | null, Firebase, Xsolla ID |
-| Leaderboards | `LongLeap.Core.Leaderboards` | `ILeaderboardService`, `ILeaderboardProvider`, `LeaderboardService`, value types | null, Firebase, Xsolla ID |
-| Leagues | `LongLeap.Core.Leagues` | `ILeagueService`, `ILeagueProvider`, `LeagueService`, `LeagueState` model | null, Xsolla ID |
-| Ads / portal | `LongLeap.Core.Ads` | `IAdsProvider`, `AdResult`, `AdsDebug`, `IPortalLocale`, `NoPortalLocale` | null, GamePix |
-| Editor | `LongLeap.Core.Editor` | project options, presets, build targets, warnings | Build Manager, GamePix, DevTools, BackPack |
+| Ads / portal | `LongLeap.Core.Ads` | `IAdsProvider`, `AdResult`, `AdsDebug`, `IPortalLocale` | null (`NullAdsProvider`, `NullPortalLocale`), GamePix |
 | Polyfill | `System.Runtime.CompilerServices` | `IsExternalInit` (C# 9 records / `init`) | — |
 
 ---
@@ -110,61 +108,6 @@ string value = await saves.GetStringAsync(key);
 - **Pushing.** Without a batch provider, each write awaits a per-key push. With `ICloudSaveBatchProvider`, writes return immediately and dirty keys go out together after a 500 ms pause, split into chunks of up to ~3M characters. A failed push leaves keys dirty for the next attempt. `FlushPendingAsync` pushes now and waits.
 - **Identity switch.** `ResetLocalCacheAsync` forgets the local mirror and leaves the cloud untouched; the service then counts as not initialized. `DeleteAllAsync` erases the owner's save in the cloud too.
 
-## Leaderboards
-
-| Type | Kind | Purpose |
-|---|---|---|
-| `ILeaderboardService` | Interface | `GetBoard(BoardId, SortDirection)`, `FlushAsync`, `GetPlayerUidAsync`, `GetPlayerDisplayName`, event `OnTopRankAchieved(BoardId, rank)` |
-| `LeaderboardService` | Sealed class | `new LeaderboardService(prefix, ILeaderboardProvider, IAuthProvider, Func<string> displayName = null)` |
-| `ILeaderboard` | Interface | Per-board handle: `SubmitScoreAsync`, `GetTopAsync`, `GetMyRankAsync`, `GetSurroundingsAsync` |
-| `ILeaderboardProvider` | Interface | Backend seam; receives the prefixed board id and the uid |
-| `BoardId` | Readonly struct | `^[a-zA-Z][a-zA-Z0-9_-]{0,39}$`. An invalid id logs an error and becomes `"invalid_board_id"` (`IsValid == false`) |
-| `BoardDefinition` | Readonly struct | `Id` + `Sort` |
-| `SortDirection` | Enum | `Descending`, `Ascending` |
-| `SubmitResult` | Readonly struct | `IsAccepted`, `IsNewBest`, `Score` |
-| `PlayerRank` | Readonly struct | `Rank` (int?), `Score` (long?), `TotalPlayers` |
-| `LeaderboardEntry` | Readonly struct | `Uid`, `DisplayName`, `Score`, `Rank` (1-based), `Timestamp` |
-| `LeaderboardPage` | Sealed class | `Entries`, `Cursor`, `HasMore`, `Empty()` |
-
-```csharp
-var leaderboards = new LeaderboardService("dev_", leaderboardProvider, authProvider, () => playerName);
-var board = leaderboards.GetBoard(new BoardId("score"), SortDirection.Descending);
-await board.SubmitScoreAsync(1500);   // queued
-await leaderboards.FlushAsync();      // sent
-var top10 = await board.GetTopAsync(10);
-```
-
-### How it works
-
-- **Batching.** `SubmitScoreAsync` only queues the score, keeping the best pending one per board (higher for `Descending`, lower for `Ascending`). `FlushAsync` sends the queue; failed boards are re-queued. `SubmitResult.IsAccepted` means "queued", not "accepted by the server".
-- **Prefix.** Every board id sent to the provider is `prefix + id` (e.g. `"dev_"` for development builds). Keep prefix + id within 40 characters.
-- **Uid.** Taken from `IAuthProvider.LoginAsync`; if auth fails, a GUID stored in `PlayerPrefs` under `longleap_device_id` is used. UI must compare row uids with `GetPlayerUidAsync()`.
-- **Display name.** From the resolver passed to the constructor; `"Player"` if none or empty.
-- **Caching.** Top and surroundings pages are cached per board for the lifetime of the service and dropped after the player's own accepted submit. On a failed request the cached page (or an empty one) is returned.
-- **Top-rank event.** After each accepted submit in `FlushAsync`, `OnTopRankAchieved` fires if the player's rank is 10 or better.
-
-## Leagues
-
-A weekly league for the current player: submit scores, read the state, receive rewards for closed periods.
-
-| Type | Kind | Purpose |
-|---|---|---|
-| `ILeagueService` | Interface | `LeagueId`, `State`, `RefreshAsync`, `SubmitScoreAsync`, events `StateChanged`, `RewardClaimed`; debug: `DebugFillGroupAsync`, `DebugClosePeriodAsync` |
-| `LeagueService` | Sealed class | `new LeagueService(prefix, leagueId, ILeagueProvider, Func<string> displayName = null)` |
-| `ILeagueProvider` | Interface | Backend seam; every method throws on a failed request |
-| `LeagueState` | Sealed class | `Tiers`, `Tier`, `Period`, `Group` (null until the player submits this period), `LastResult`, `Unclaimed` |
-| `LeaguePeriod`, `LeagueGroup`, `LeagueEntry`, `LeagueResult`, `LeagueClaim` | Model | Period timing, group standings and zones, closed-period results, claim reply |
-
-```csharp
-var league = new LeagueService("dev_", "weekly", leagueProvider, () => playerName);
-league.RewardClaimed += result => wallet.Add(result.Reward); // credit here, exactly once
-await league.RefreshAsync();
-await league.SubmitScoreAsync(runScore);
-```
-
-- A failed submit is kept and added to the next submit (within the same launch).
-- Whenever a state arrives with unclaimed results, the service claims them. `RewardClaimed` fires only when the server confirms this call claimed the reward, so a reward is credited once across devices.
-
 ## Ads and portal
 
 | Type | Kind | Purpose |
@@ -173,48 +116,10 @@ await league.SubmitScoreAsync(runScore);
 | `AdResult` | Enum | `Completed` (grant the reward), `Failed`, `Unavailable` |
 | `AdsDebug` | Static class | Last 12 ad events for an on-screen overlay (`Lines`, `Changed`); also written to the console |
 | `IPortalLocale` | Interface | `TryGetLocale(out twoLetterCode)` — the language the portal chose |
-| `NoPortalLocale` | Sealed class | `IPortalLocale` that always returns `false` |
 
 - `onComplete` is called exactly once per show.
 - Call `Tick()` every frame: portals do not report a show that never happened, so providers time out stale requests themselves.
 - Gate code that runs on unscaled time with `IsAdShowing`; the portal pauses only scaled time and audio.
-
-## Editor: project options
-
-`LongLeap.Core.Editor` is a small framework that lets packages describe build-affecting project settings as data. The Build Manager window (`com.longleap.buildmanager`) and package menus read the same descriptions, so they always agree.
-
-Packages contribute by implementing a provider interface with a public parameterless constructor. Providers are discovered with `TypeCache`, so the order assemblies load in does not matter. Do not query the registries from `[InitializeOnLoad]` code.
-
-| Provider interface | Supplies | Registry |
-|---|---|---|
-| `IProjectOptionSectionProvider` | `ProjectOptionSection` — a titled group of options and actions | `ProjectOptionRegistry` |
-| `IProjectOptionPresetProvider` | `ProjectOptionPreset` — a named set of option values | `ProjectOptionPresets` |
-| `IProjectBuildTargetProvider` | `ProjectBuildTarget` — one way to build; highest applicable `Priority` wins | `ProjectBuildTargets` |
-| `IProjectWarningProvider` | `ProjectWarning` — a configuration problem, optionally blocking the build and offering a fix | `ProjectWarnings` |
-
-Option kinds (every value is a string: `"1"`/`"0"` for toggles, an enum member name for choices):
-
-- `DefineOption` — a scripting define symbol; can switch dependent symbols off with it (`cascadeOffSymbols`).
-- `AssetEnumOption` — an enum field in an asset, written through `SerializedObject` by field name.
-- `CustomOption` — arbitrary read/write delegates (e.g. patching a vendor plugin's asmdefs).
-
-Options can declare availability (with a mandatory reason when blocked), a confirmation dialog, and notes logged after applying. Writes go through `ProjectWriteContext`, which applies all asset changes and one define change in a single `Flush()`, so applying many options costs one recompile. `ProjectOptionMenu` wires an option to a `[MenuItem]` in one line.
-
-> **WebGL only.** `ScriptingDefines` reads and writes defines for `NamedBuildTarget.WebGL`.
-
-```csharp
-public sealed class MyOptions : IProjectOptionSectionProvider
-{
-    public IEnumerable<ProjectOptionSection> GetSections()
-    {
-        yield return new ProjectOptionSection("my-package", "My Package", order: 100, new ProjectOption[]
-        {
-            new DefineOption("my-debug", "MY_DEBUG", "Debug overlay",
-                "Shows the debug overlay. Turn off before release.", required: false, order: 0),
-        });
-    }
-}
-```
 
 ## Tests
 

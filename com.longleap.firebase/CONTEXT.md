@@ -16,6 +16,7 @@ Production Firebase backends for LongLeap services, pure REST, no Firebase SDK. 
 
 ## Relationships
 
-- **Firebase → Core**: Implements `IAuthProvider`, `ICloudSaveProvider`, `IAccountCloudSaveScope`, `ILeaderboardProvider`; uses `IPlayerPrefs` and `CloudSaveEnvelope`.
+- **Firebase → Core**: Implements `IAuthProvider`, `ICloudSaveProvider`, `IAccountCloudSaveScope`; uses `IPlayerPrefs` and `CloudSaveEnvelope`.
+- **Firebase → XsollaId** (optional): `LongLeap.Firebase.Leaderboards` implements `ILeaderboardProvider` from `com.longleap.xsollaid` and compiles only with `XSOLLA_ID`.
 - **Firebase → RemoteConfig**: Implements `IRemoteConfigProvider`. Tests use `InMemoryPlayerPrefs` from `com.longleap.core`.
 - **XsollaId → Firebase**: `com.longleap.xsollaid` drives `IAccountCloudSaveScope` on sign-in/sign-out and shares the `longleap_cloudsave_scope` prefs key.

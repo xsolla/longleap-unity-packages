@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using LongLeap.Core.Leaderboards;
+using LongLeap.XsollaId.Leaderboards;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEngine;

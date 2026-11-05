@@ -5,6 +5,16 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- `FirebaseLeaderboardProvider` moved to the new `LongLeap.Firebase.Leaderboards` assembly
+  (`Runtime.Leaderboards/`, namespace still `LongLeap.Firebase`), which compiles only with
+  `XSOLLA_ID`: `ILeaderboardProvider` now lives in `com.longleap.xsollaid`. Reference
+  `LongLeap.Firebase.Leaderboards` to use it. Its tests moved to
+  `LongLeap.Firebase.Leaderboards.Tests` (class renamed to `FirebaseLeaderboardProviderTests`).
+
 ## [0.1.0] - 2026-11-04
 
 First release.

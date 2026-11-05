@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using LongLeap.Core.Leagues;
+using LongLeap.XsollaId.Leagues;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 

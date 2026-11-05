@@ -1,5 +1,5 @@
 #if UNITY_EDITOR
-using LongLeap.Core.Editor;
+using LongLeap.BuildManager.Options;
 using UnityEditor;
 using UnityEngine;
 
@@ -32,8 +32,8 @@ namespace LongLeap.XsollaId.Editor
     //
     // This assembly deliberately has NO defineConstraints: the script that
     // turns XSOLLA_ID on cannot itself require it, or there would be nothing
-    // left to turn it on with. The reference to LongLeap.Core.Editor does not
-    // break this: a reference is not a constraint, and LongLeap.Core.Editor is
+    // left to turn it on with. The reference to LongLeap.BuildManager.Options does not
+    // break this: a reference is not a constraint, and LongLeap.BuildManager.Options is
     // unconstrained as well.
     public static class XsollaIdMenu
     {

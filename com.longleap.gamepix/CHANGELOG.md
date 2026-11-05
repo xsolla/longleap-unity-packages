@@ -26,6 +26,9 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prefixes now name the class that writes them (`GamePixOptions`,
   `GamePixAsmdefConstraints`) instead of `GamePixPluginMenu`.
 - `package.json` description lists everything the package contains.
+- The editor assembly now references `LongLeap.BuildManager.Options` (from
+  `com.longleap.buildmanager`, new dependency) instead of `LongLeap.Core.Editor`,
+  which moved there.
 
 ## [0.1.0]
 

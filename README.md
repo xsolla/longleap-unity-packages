@@ -90,7 +90,7 @@ Consequences worth knowing before you add anything:
 
 | Package | What it is |
 |---|---|
-| `com.longleap.core` | All contracts and domain types, plus the `CloudSaveService` and `LeaderboardService` implementations and the Unity storage implementations (`UnityPlayerPrefsAdapter`, `PlayerPrefsPersistentStorage`, `FilePersistentStorage`). Everything depends on this. |
+| `com.longleap.core` | Core contracts and domain types (auth, cloud saves, ads/portal, storage, experiments), plus the `CloudSaveService` implementation and the Unity storage implementations (`UnityPlayerPrefsAdapter`, `PlayerPrefsPersistentStorage`, `FilePersistentStorage`). Everything depends on this. |
 | `com.longleap.localization` | `Loc` static facade over Unity.Localization, `LocKey` newtype, `LocalizedText` component. |
 | `com.longleap.tools` | `DeviceInfo` — the one place that decides the device profile (desktop / mobile / web desktop / web mobile); `RuntimeUi` — code-built UI bricks for the settings and UI windows, styled by a per-game `RuntimeUiTheme` asset; `WebGlPagePostprocessor` — WebGL `index.html` page mode (fixed / free aspect), rotate-device overlay in the browser's language, mobile pixel ratio, stored in `ProjectSettings/LongLeapWebGlPage.asset`; `PageVisibility` — browser tab hidden/shown event (the WebGL replacement for focus/pause as the "player left" signal). |
 
@@ -110,8 +110,8 @@ Consequences worth knowing before you add anything:
 
 | Package | What it is | Depends on | Gate |
 |---|---|---|---|
-| `com.longleap.firebase` | Production: anonymous auth, cloud saves, leaderboards, remote config. REST only, no Firebase SDK. | core, remoteconfig | — |
-| `com.longleap.nullproviders` | Null-object backends for the core seams: auth, cloud saves, leaderboards, leagues, ads. Guest play, offline builds, builds without ads, tests. Feature seams keep their null backend in their own package. | core | — |
+| `com.longleap.firebase` | Production: anonymous auth, cloud saves, remote config, and leaderboards (`LongLeap.Firebase.Leaderboards`, only with `XSOLLA_ID`). REST only, no Firebase SDK. | core, remoteconfig | — |
+| `com.longleap.nullproviders` | Null-object backends for the core seams: auth, cloud saves, ads, portal locale; plus leaderboards and leagues (`LongLeap.Null.XsollaId`, only with `XSOLLA_ID`). Guest play, offline builds, builds without ads, tests. Feature seams keep their null backend in their own package. | core | — |
 | `com.longleap.gamepix` | GamePix portal: interstitial + rewarded ads, portal language, Xsolla ID sign-in through the portal SDK, GamePix build tooling and HTML5 packaging. | core, xsollaid | `GAMEPIX` + the GamePix plugin at `Assets/Plugins/GamePix` |
 
 **Platform**
@@ -137,7 +137,7 @@ built by the game; these only carry the plumbing and the screens.
 
 | Package | What it is | Gate |
 |---|---|---|
-| `com.longleap.buildmanager` | One editor window (**LongLeap / Build Manager**) staging every build option, applying them in a single batch, dispatching the build. Discovers options through `LongLeap.Core.Editor` — never references the feature packages. | — |
+| `com.longleap.buildmanager` | One editor window (**LongLeap / Build Manager**) staging every build option, applying them in a single batch, dispatching the build. Discovers options through `LongLeap.BuildManager.Options` — never references the feature packages. | — |
 | `com.longleap.devtools` | In-build debug widgets; currently a cloud save viewer. | `LONGLEAP_DEBUG` |
 
 ---
@@ -170,7 +170,7 @@ All four are **WebGL-target** defines, matching this project's only platform.
 
 The rule that keeps this workable: **an editor assembly that enables a define
 must never carry that define in its own `defineConstraints`** — it would
-disappear exactly when you need it. That is why `LongLeap.Core.Editor` keeps
+disappear exactly when you need it. That is why `LongLeap.BuildManager.Options` keeps
 `references: []` and `defineConstraints: []` permanently.
 
 ---

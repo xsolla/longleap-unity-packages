@@ -6,6 +6,7 @@
   "unity": "6000.0",
   "keywords": ["debug", "devtools", "cloudsave", "longleap"],
   "dependencies": {
+    "com.longleap.buildmanager": "0.1.0",
     "com.longleap.core": "0.1.0"
   }
 }

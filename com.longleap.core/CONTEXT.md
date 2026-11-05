@@ -1,11 +1,11 @@
 # LongLeap Core
 
-Foundation interfaces and types shared across all LongLeap packages, plus the backend-agnostic services (cloud saves, leaderboards, leagues), the Unity implementations of the storage contracts, and the Editor framework for project options.
+Foundation interfaces and types shared across all LongLeap packages, plus the backend-agnostic cloud save service and the Unity implementations of the storage contracts. Leaderboards and leagues live in `com.longleap.xsollaid`.
 
 ## Cross-cutting concepts
 
 **Service**:
-A feature module exposed to game code (auth, cloud saves, leaderboards, leagues, achievements, daily rewards). Defined by its interface. Game code holds services, typically through the `ServiceContainer` of `com.longleap.bootstrap`.
+A feature module exposed to game code (auth, cloud saves, leaderboards, leagues, achievements, daily rewards; not all of them are defined here). Defined by its interface. Game code holds services, typically through the `ServiceContainer` of `com.longleap.bootstrap`.
 _Avoid_: Manager, controller, system
 
 **Backend**:
@@ -13,15 +13,12 @@ A swappable implementation of one or more provider interfaces. Null backends of 
 _Avoid_: Adapter, provider implementation
 
 **Provider**:
-The interface contract a backend implements (e.g. `ICloudSaveProvider`, `IAuthProvider`, `ILeaderboardProvider`, `ILeagueProvider`). The seam at which the service can swap implementations.
+The interface contract a backend implements (e.g. `ICloudSaveProvider`, `IAuthProvider`, `IAdsProvider`). The seam at which the service can swap implementations.
 _Avoid_: Driver, connector
 
 **Null backend**:
 A backend that does nothing and returns a safe default (success where that is harmless, otherwise "unavailable" / "not found"). Core-seam null backends ship in `com.longleap.nullproviders`; feature seams keep theirs next to the interface. Explicitly opted into at construction time — never a silent fallback.
 _Avoid_: Stub, mock, no-op backend
-
-**Prefix**:
-A string prepended to board and league ids (e.g. `"dev_"`) so development builds play on a separate copy of the data.
 
 ## Auth
 
@@ -63,37 +60,6 @@ Forgets the local copy of the save and touches **nothing** in the cloud. Not to 
 **Batch push** (`ICloudSaveBatchProvider`):
 When the provider supports it, dirty keys are collected for a short pause and sent in a few large requests instead of one request per key.
 
-## Leaderboards
-
-**Board**:
-A named leaderboard with a unique `BoardId` and sort direction. The game defines boards (e.g. "Score", "Survival Time"); the service handles submission and retrieval.
-
-**Entry**:
-A single row on a leaderboard: rank, display name, score, and user identifier.
-
-**Rank**:
-Player's 1-based position on a board. The service can query "my rank" and "entries around my rank" without fetching the entire board.
-
-**Flush**:
-Sending queued scores. `SubmitScoreAsync` only queues (keeping the best score per board); `FlushAsync` sends.
-
-## Leagues
-
-**League**:
-A recurring competition (e.g. weekly) with ordered **tiers**. Identified by a league id (prefix included).
-
-**Period**:
-One round of the league, with a start and end time. Numbered.
-
-**Group**:
-The set of players a player competes against in a period. A player joins a group by submitting their first score of the period. Places at the top are the **promotion zone**, places at the bottom the **demotion zone**.
-
-**Result**:
-How a closed period ended for the player: place, score, outcome (promoted / stayed / demoted) and reward.
-
-**Claim**:
-Taking a result's reward. The server confirms exactly one claim per result, so the reward is credited once even across devices.
-
 ## Ads and portal
 
 **Portal**:
@@ -124,23 +90,3 @@ Exposes `ActiveExperiments` (`IReadOnlyList<AbExperimentInfo>`) for analytics au
 
 **AbExperimentInfo**:
 `ExperimentId` and `VariantIndex` of an active A/B experiment.
-
-## Editor
-
-**Project option**:
-One build-affecting setting described as data: a define symbol, an enum field in an asset, or custom read/write code. Has a stable `Id`, a label, a tooltip, and is either **required** (needed for a working build) or **optional** (debug; keep out of release builds).
-
-**Section**:
-A package's group of options and **actions** (buttons with no stored value).
-
-**Preset**:
-A named set of option values (e.g. "GamePix build"). An **exhaustive** preset turns every option it does not name to its off value.
-
-**Saved vs staged state**:
-Saved state is what the project holds now (menus use it). Staged state is saved state plus unapplied edits (the Build Manager window uses it). Availability and warnings are computed against whichever state is passed in.
-
-**Build target**:
-One way to build the game. The applicable target with the highest priority builds.
-
-**Project warning**:
-A configuration problem reported by a package; may block the build and may offer a fix.

@@ -1,6 +1,6 @@
 using System;
 using System.Threading.Tasks;
-using LongLeap.Core.Leaderboards;
+using LongLeap.XsollaId.Leaderboards;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;

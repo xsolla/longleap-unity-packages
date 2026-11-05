@@ -1,8 +1,8 @@
 # LongLeap Null Providers
 
-`com.longleap.nullproviders` · assembly and namespace `LongLeap.Null`
+`com.longleap.nullproviders` · namespace `LongLeap.Null` · assemblies `LongLeap.Null` and `LongLeap.Null.XsollaId`
 
-Null-object backends for the service seams defined in `com.longleap.core`. Each one
+Null-object backends for the service seams defined in `com.longleap.core` (and, for leaderboards and leagues, in `com.longleap.xsollaid`). Each one
 does nothing, makes no network calls, keeps no state and completes synchronously
 with a safe default. The services on top keep working without null checks or
 special cases.
@@ -16,9 +16,12 @@ It is never a silent fallback for a real backend that failed.
 |---|---|---|
 | `NullAuthProvider` | `IAuthProvider` | `LoginAsync()` succeeds with `IdToken.None` and a fixed user id: `"anonymous"` (`DefaultUserId`) or the id passed to the constructor. |
 | `NullCloudSaveProvider` | `ICloudSaveProvider`, `IAccountCloudSaveScope` | Writes and deletes are dropped; reads return null / false / empty. Never account-scoped: `UseAccount` / `UseGuest` are no-ops, `PeekAccountAsync` returns an empty save. |
-| `NullLeaderboardProvider` | `ILeaderboardProvider` | Submits return `true` and are dropped; top and surroundings are `LeaderboardPage.Empty()`; rank is `PlayerRank(null, null, 0)`. |
-| `NullLeagueProvider` | `ILeagueProvider` | Every read and submit returns an empty, not-joined state in the lowest tier with period 0; claims return `LeagueClaim(false, 0)`; debug calls do nothing. |
+| `NullLeaderboardProvider`¹ | `ILeaderboardProvider` | Submits return `true` and are dropped; top and surroundings are `LeaderboardPage.Empty()`; rank is `PlayerRank(null, null, 0)`. |
+| `NullLeagueProvider`¹ | `ILeagueProvider` | Every read and submit returns an empty, not-joined state in the lowest tier with period 0; claims return `LeagueClaim(false, 0)`; debug calls do nothing. |
 | `NullAdsProvider` | `IAdsProvider` | Not available, never ready or showing. `ShowRewarded` / `ShowInterstitial` call back once, synchronously, with `AdResult.Unavailable` and log to `AdsDebug`. |
+| `NullPortalLocale` | `IPortalLocale` | `TryGetLocale` always returns `false`, so the game's own language setting applies. |
+
+¹ In the `LongLeap.Null.XsollaId` assembly (`Runtime.XsollaId/`), compiled only with `XSOLLA_ID`: the leaderboard and league interfaces live in `com.longleap.xsollaid` and exist only with that define. This package does not declare a dependency on `com.longleap.xsollaid`; that assembly needs it present.
 
 The null backends for other seams live next to their interfaces, so this package
 does not pull in feature packages:

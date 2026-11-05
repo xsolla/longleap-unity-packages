@@ -2,7 +2,7 @@
   "name": "LongLeap.GamePix.Editor",
   "rootNamespace": "LongLeap.GamePix.Editor",
   "references": [
-    "LongLeap.Core.Editor"
+    "LongLeap.BuildManager.Options"
   ],
   "includePlatforms": [
     "Editor"

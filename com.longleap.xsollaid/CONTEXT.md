@@ -118,3 +118,37 @@ _Avoid_: Conflict resolution strategy
 - Sign-in is Xsolla ID only (`IXsollaIdAuth`).
 - No "which save do you want to keep?" dialog: saves are merged key by key.
 - Glob patterns support `*` only.
+
+## Leaderboards (`LongLeap.XsollaId.Leaderboards`, `XSOLLA_ID` only)
+
+**Board**:
+A named leaderboard with a unique `BoardId` and sort direction. The game defines boards (e.g. "Score", "Survival Time"); the service handles submission and retrieval.
+
+**Entry**:
+A single row on a leaderboard: rank, display name, score, and user identifier.
+
+**Rank**:
+Player's 1-based position on a board. The service can query "my rank" and "entries around my rank" without fetching the entire board.
+
+**Flush**:
+Sending queued scores. `SubmitScoreAsync` only queues (keeping the best score per board); `FlushAsync` sends.
+
+## Leagues (`LongLeap.XsollaId.Leagues`, `XSOLLA_ID` only)
+
+**League**:
+A recurring competition (e.g. weekly) with ordered **tiers**. Identified by a league id (prefix included).
+
+**Period**:
+One round of the league, with a start and end time. Numbered.
+
+**Group**:
+The set of players a player competes against in a period. A player joins a group by submitting their first score of the period. Places at the top are the **promotion zone**, places at the bottom the **demotion zone**.
+
+**Result**:
+How a closed period ended for the player: place, score, outcome (promoted / stayed / demoted) and reward.
+
+**Claim**:
+Taking a result's reward. The server confirms exactly one claim per result, so the reward is credited once even across devices.
+
+**Prefix**:
+A string prepended to board and league ids (e.g. `"dev_"`) so development builds play on a separate copy of the data.

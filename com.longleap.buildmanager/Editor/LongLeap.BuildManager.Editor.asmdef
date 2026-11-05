@@ -2,7 +2,7 @@
   "name": "LongLeap.BuildManager.Editor",
   "rootNamespace": "LongLeap.BuildManager.Editor",
   "references": [
-    "LongLeap.Core.Editor"
+    "LongLeap.BuildManager.Options"
   ],
   "includePlatforms": [
     "Editor"

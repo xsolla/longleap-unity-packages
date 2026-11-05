@@ -2,9 +2,9 @@
   "name": "com.longleap.core",
   "version": "0.2.0",
   "displayName": "LongLeap Core",
-  "description": "Foundation of the LongLeap packages: service contracts (auth, cloud saves, leaderboards, leagues, ads, storage), backend-agnostic services built on them, shared types, and an Editor framework for project options and build presets.",
+  "description": "Foundation of the LongLeap packages: service contracts (auth, cloud saves, ads, storage, A/B experiments), the backend-agnostic cloud save service, and shared types.",
   "unity": "6000.0",
-  "keywords": ["longleap", "core", "services", "auth", "cloud-save", "leaderboard", "league", "ads", "storage"],
+  "keywords": ["longleap", "core", "services", "auth", "cloud-save", "ads", "storage"],
   "dependencies": {
     "com.unity.nuget.newtonsoft-json": "3.0.2"
   }
