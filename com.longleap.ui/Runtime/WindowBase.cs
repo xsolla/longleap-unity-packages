@@ -5,62 +5,62 @@ using UnityEngine;
 namespace LongLeap.UI
 {
     /// <summary>
-    /// База для окон.
+    /// Base class for windows.
     ///
-    /// Окно — отдельный префаб, на корне которого этот компонент; сервис создаёт его сам
-    /// (см. <see cref="WindowEntry"/>) и может уничтожить после закрытия, поэтому живёт
-    /// окно не вечно: ни на что внутри него не стоит рассчитывать между показами.
+    /// A window is a separate prefab with this component on its root; the service creates it itself
+    /// (see <see cref="WindowEntry"/>) and may destroy it after closing, so a window
+    /// doesn't live forever: don't rely on anything inside it between showings.
     ///
-    /// Объект самого окна включён всегда: на нём живёт компонент, поэтому окно может
-    /// держать ссылки, слушать события и считать что-то, пока закрыто. Включается и
-    /// гаснет только <see cref="Root"/> — дочерний объект со всем содержимым окна:
-    /// канвасом, графикой, кнопками.
+    /// The window object itself is always enabled: the component lives on it, so the window can
+    /// hold references, listen to events and compute things while closed. Only
+    /// <see cref="Root"/> is enabled and disabled — the child object with all of the window's content:
+    /// canvas, graphics, buttons.
     ///
-    /// Иерархия окна в префабе UI:
+    /// Window hierarchy in the UI prefab:
     /// <code>
-    /// IntroWindow   (компонент окна, всегда включён)
-    /// └── Root      (Canvas и всё содержимое, включается на открытии)
+    /// IntroWindow   (window component, always enabled)
+    /// └── Root      (Canvas and all content, enabled on open)
     ///     ├── ...
     /// </code>
     ///
-    /// Нужна анимация — переопредели <see cref="OpenAsync"/>/<see cref="CloseAsync"/>:
-    /// на открытии сначала <c>base.OpenAsync()</c>, потом проигрыш появления;
-    /// на закрытии наоборот — сначала анимация ухода, и только потом <c>base.CloseAsync()</c>,
-    /// иначе гасить будет нечего. Сервис дождётся обоих.
+    /// Need an animation — override <see cref="OpenAsync"/>/<see cref="CloseAsync"/>:
+    /// on open, call <c>base.OpenAsync()</c> first, then play the appear animation;
+    /// on close, the other way round — the exit animation first, and only then <c>base.CloseAsync()</c>,
+    /// otherwise there will be nothing left to disable. The service waits for both.
     /// </summary>
     public abstract class WindowBase : MonoBehaviour, IWindow
     {
-        [Tooltip("Корень содержимого окна: включается при открытии, гаснет при закрытии.")]
+        [Tooltip("Root of the window content: enabled on open, disabled on close.")]
         [SerializeField] private GameObject _root;
 
         /// <summary>
-        /// Содержимое окна. Никогда не null: если ссылку забыли проставить,
-        /// окно управляет собственным объектом — работать будет, но компонент
-        /// вместе с содержимым будет гаснуть.
+        /// The window content. Never null: if the reference wasn't assigned,
+        /// the window controls its own object — it will work, but the component
+        /// will be disabled along with the content.
         /// </summary>
         protected GameObject Root => _root != null ? _root : gameObject;
 
-        /// <summary>Содержимое включено прямо сейчас.</summary>
+        /// <summary>The content is enabled right now.</summary>
         public bool IsOpen => Root.activeSelf;
 
         /// <summary>
-        /// Сервис, в котором это окно зарегистрировано. Проставляется при создании окна
-        /// (после Awake, до первого показа), поэтому окно может открыть следующее за собой,
-        /// не зная, кто его открыл:
+        /// The service this window is registered in. Assigned when the window is created
+        /// (after Awake, before the first show), so the window can open the next one itself
+        /// without knowing who opened it:
         /// <c>Windows.OpenAsync&lt;NextWindow&gt;()</c>.
         /// </summary>
         protected IWindowService Windows { get; private set; }
 
-        /// <summary>Зовёт только <see cref="WindowService"/> при создании окна.</summary>
+        /// <summary>Called only by <see cref="WindowService"/> when the window is created.</summary>
         internal void Bind(IWindowService service) => Windows = service;
 
-        /// <summary>Закрыть себя — когда окно уводит игрока дальше и уходит следом.</summary>
+        /// <summary>Close itself — when the window sends the player onward and leaves after them.</summary>
         protected Task CloseSelfAsync() => Windows != null ? Windows.CloseAsync(this) : Task.CompletedTask;
 
         /// <summary>
-        /// Запустить переход из обработчика кнопки: у <c>onClick</c> нет await,
-        /// а молча проглатывать исключение нельзя — иначе окно «не откроется»
-        /// без единого следа в логе.
+        /// Start a transition from a button handler: <c>onClick</c> has no await,
+        /// and an exception must not be silently swallowed — otherwise the window "won't open"
+        /// without a single trace in the log.
         /// </summary>
         protected static async void Forget(Task task)
         {
@@ -87,8 +87,8 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Закрыть без анимации и без ожидания. Нужно сервису при создании окна: начальное
-        /// состояние окон задаёт код, а не то, каким сохранили префаб.
+        /// Close without animation and without waiting. Needed by the service when creating a window: the initial
+        /// state of windows is set by code, not by how the prefab was saved.
         /// </summary>
         public void CloseImmediate()
         {
@@ -99,7 +99,7 @@ namespace LongLeap.UI
         {
             if (_root == null)
                 Debug.LogError(
-                    $"[Windows] у окна {GetType().Name} не задан Root — гаснуть будет сам объект окна.",
+                    $"[Windows] window {GetType().Name} has no Root set — the window object itself will be disabled.",
                     this);
         }
     }

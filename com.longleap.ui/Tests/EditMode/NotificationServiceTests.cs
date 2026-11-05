@@ -28,7 +28,7 @@ namespace LongLeap.Notifications.Tests
         }
 
         [Test]
-        public void ShowWhileBusy_EnqueuesData()
+        public void ShowWhileBusy_QueuesUntilComplete_ThenFiresNext()
         {
             var service = new NotificationService();
             var invoked = new List<(NotificationData data, Action onComplete)>();
@@ -37,19 +37,8 @@ namespace LongLeap.Notifications.Tests
             service.Show(new NotificationData("First"));
             service.Show(new NotificationData("Second"));
 
-            Assert.AreEqual(1, invoked.Count);
+            Assert.AreEqual(1, invoked.Count, "Second must wait while First is on screen.");
             Assert.AreEqual("First", invoked[0].data.Title);
-        }
-
-        [Test]
-        public void OnViewComplete_WithQueuedItem_FiresNextEvent()
-        {
-            var service = new NotificationService();
-            var invoked = new List<(NotificationData data, Action onComplete)>();
-            service.OnShowRequest += (data, onComplete) => invoked.Add((data, onComplete));
-
-            service.Show(new NotificationData("First"));
-            service.Show(new NotificationData("Second"));
 
             invoked[0].onComplete();
 
@@ -148,38 +137,29 @@ namespace LongLeap.Notifications.Tests
         }
 
         [Test]
-        public void HighPriority_AfterLowPriority_WhileBusy_ShowsHighFirst()
+        public void Queue_OrdersByPriorityThenFifo_WithoutPreemptingActive()
         {
             var service = new NotificationService();
             var invoked = new List<(NotificationData data, Action onComplete)>();
             service.OnShowRequest += (data, onComplete) => invoked.Add((data, onComplete));
 
-            service.Show(new NotificationData("Low1", "", TimeSpan.FromSeconds(3), NotificationPriority.Low));
-            service.Show(new NotificationData("Low2", "", TimeSpan.FromSeconds(3), NotificationPriority.Low));
-            service.Show(new NotificationData("High", "", TimeSpan.FromSeconds(3), NotificationPriority.Critical));
+            NotificationData Make(string title, NotificationPriority priority) =>
+                new NotificationData(title, "", TimeSpan.FromSeconds(3), priority);
 
-            invoked[0].onComplete();
+            service.Show(Make("Active", NotificationPriority.Low));
+            service.Show(Make("Low", NotificationPriority.Low));
+            service.Show(Make("Default1", NotificationPriority.Default));
+            service.Show(Make("Critical", NotificationPriority.Critical));
+            service.Show(Make("Default2", NotificationPriority.Default));
 
-            Assert.AreEqual(2, invoked.Count);
-            Assert.AreEqual("High", invoked[1].data.Title);
-        }
+            Assert.AreEqual(1, invoked.Count, "A queued Critical must not interrupt the active notification.");
 
-        [Test]
-        public void SamePriority_DequeuesFifo()
-        {
-            var service = new NotificationService();
-            var invoked = new List<(NotificationData data, Action onComplete)>();
-            service.OnShowRequest += (data, onComplete) => invoked.Add((data, onComplete));
+            for (var i = 0; i < 4; i++)
+                invoked[i].onComplete();
 
-            service.Show(new NotificationData("First"));
-            service.Show(new NotificationData("Second"));
-            service.Show(new NotificationData("Third"));
-
-            invoked[0].onComplete();
-            Assert.AreEqual("Second", invoked[1].data.Title);
-
-            invoked[1].onComplete();
-            Assert.AreEqual("Third", invoked[2].data.Title);
+            CollectionAssert.AreEqual(
+                new[] { "Active", "Critical", "Default1", "Default2", "Low" },
+                invoked.ConvertAll(call => call.data.Title));
         }
 
         [Test]

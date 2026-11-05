@@ -6,43 +6,44 @@ using UnityEngine;
 namespace LongLeap.UI
 {
     /// <summary>
-    /// Панель «PLAYER STATS / DAILY QUESTS» в главном меню.
+    /// The "PLAYER STATS / DAILY QUESTS" panel in the main menu.
     ///
-    /// Две части, обе — вертикальные списки:
+    /// Two parts, both vertical lists:
     /// <list type="bullet">
-    /// <item>сверху статы игрока — какие именно, решает игра (<see cref="IPlayerStatsSource"/>:
-    /// например, очки за всё время, за сегодня и деньги);</item>
-    /// <item>снизу активные ежедневные квесты: статус и название
+    /// <item>top: player stats — which ones is up to the game (<see cref="IPlayerStatsSource"/>:
+    /// e.g. all-time score, today's score and money);</item>
+    /// <item>bottom: active daily quests, with status and title
     /// (<see cref="DailyQuestItemView"/>). Rewards wait for an explicit click
     /// on the completed quest row or its ACTIVATE badge.</item>
     /// </list>
     ///
-    /// Строки статов и квестов создаются из префабов в Awake / при смене набора.
-    /// Сервис квестов и источник статов приносит меню игры, а ему — загрузка: пакет UI
-    /// не знает про контейнер сервисов. Без квестов нижняя часть пуста, без статов —
-    /// верхняя; остальное работает.
+    /// Stat and quest rows are instantiated from prefabs in Awake / when the set changes.
+    /// The quest service and stats source are passed in by the game menu, which gets them
+    /// from the game's loading sequence: the UI package doesn't know about the service
+    /// container. Without quests the bottom part is empty, without stats the top one;
+    /// everything else still works.
     /// </summary>
     public sealed class DailyQuestPanel : MonoBehaviour
     {
         // =========================================================
-        // СТАТЫ
+        // STATS
         // =========================================================
 
         [Header("Stats")]
         [SerializeField] private PlayerStatRowView _statRowPrefab;
 
-        [Tooltip("Куда класть строки статов — объект с VerticalLayoutGroup.")]
+        [Tooltip("Parent for stat rows — an object with a VerticalLayoutGroup.")]
         [SerializeField] private RectTransform _statsRoot;
 
         // =========================================================
-        // КВЕСТЫ
+        // QUESTS
         // =========================================================
 
         [Header("Quests")]
         [SerializeField] private DailyQuestItemView _questItemPrefab;
         [SerializeField] private TMPro.TMP_FontAsset _rewardFlyoutFont;
 
-        [Tooltip("Куда класть строки квестов — объект с VerticalLayoutGroup.")]
+        [Tooltip("Parent for quest rows — an object with a VerticalLayoutGroup.")]
         [SerializeField] private RectTransform _questsRoot;
 
         private readonly List<DailyQuestItemView> _questItems = new();
@@ -55,14 +56,14 @@ namespace LongLeap.UI
 
         public void BindSounds(IUiSounds sounds) => _sounds = sounds;
 
-        /// <summary>Награды уже забираются — повторный вызов ничего не делает.</summary>
+        /// <summary>A reward claim is already in progress — repeated calls do nothing.</summary>
         private bool _claiming;
 
         // =========================================================
-        // ПРИВЯЗКА
+        // BINDING
         // =========================================================
 
-        /// <summary>Отдать панели сервис квестов; <c>null</c> — отписаться.</summary>
+        /// <summary>Give the panel the quest service; <c>null</c> unsubscribes.</summary>
         public void BindQuests(IDailyQuestService quests)
         {
             if (_quests == quests) return;
@@ -78,7 +79,7 @@ namespace LongLeap.UI
             ShowQuests();
         }
 
-        /// <summary>Отдать панели статы игрока; <c>null</c> — отписаться и убрать строки.</summary>
+        /// <summary>Give the panel the player stats; <c>null</c> unsubscribes and removes the rows.</summary>
         public void BindStats(IPlayerStatsSource stats)
         {
             if (_stats == stats) return;
@@ -95,8 +96,8 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Перечитать прогресс выполненных в заезде квестов. Зовёт меню
-        /// при открытии: после заезда очки и квесты другие.
+        /// Re-read the progress of quests completed during the run. Called by the menu
+        /// when it opens: after a run, the score and quests have changed.
         /// </summary>
         public void Refresh()
         {
@@ -112,7 +113,7 @@ namespace LongLeap.UI
 
         private void OnEnable() => Refresh();
 
-        /// <summary>Пока панель на экране, следим за сменой суток — новый набор квестов.</summary>
+        /// <summary>While the panel is on screen, watch for the day rollover — a new set of quests.</summary>
         private void Update() => _quests?.Tick();
 
         private void OnDestroy()
@@ -122,10 +123,10 @@ namespace LongLeap.UI
         }
 
         // =========================================================
-        // СТАТЫ
+        // STATS
         // =========================================================
 
-        /// <summary>Строки статов заново — по набору, который отдал источник.</summary>
+        /// <summary>Recreate the stat rows from the set provided by the source.</summary>
         private void RebuildStats()
         {
             foreach (var (_, row) in _statRows)
@@ -156,12 +157,12 @@ namespace LongLeap.UI
         }
 
         // =========================================================
-        // КВЕСТЫ
+        // QUESTS
         // =========================================================
 
         /// <summary>
-        /// Прогресс квестов меняется и во время заезда, когда меню закрыто, —
-        /// тогда перерисовывать незачем: панель перечитает всё в OnEnable.
+        /// Quest progress also changes during a run, while the menu is closed;
+        /// there's no point redrawing then: the panel re-reads everything in OnEnable.
         /// Completion updates the row; rewards still wait for a click.
         /// </summary>
         private void OnQuestsChanged()
@@ -217,7 +218,7 @@ namespace LongLeap.UI
             try
             {
                 if (!await _quests.ClaimAsync(status.Id))
-                    Debug.LogWarning($"[DailyQuests] награда за '{status.Id.Value}' не забрана.", this);
+                    Debug.LogWarning($"[DailyQuests] failed to claim reward for '{status.Id.Value}'.", this);
                 else
                     DailyQuestRewardFlyout.Play(transform, status.Definition, _rewardFlyoutFont, _sounds);
             }

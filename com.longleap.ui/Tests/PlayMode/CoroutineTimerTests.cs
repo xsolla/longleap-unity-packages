@@ -121,17 +121,11 @@ namespace LongLeap.Notifications.Tests
         }
 
         [Test]
-        public void Constructor_NullHost_Throws()
+        public void NullArguments_Throw()
         {
-            Assert.Throws<ArgumentNullException>(() => new CoroutineTimer(null));
-        }
-
-        [Test]
-        public void Start_NullCallback_Throws()
-        {
-            var timer = new CoroutineTimer(_host);
-
-            Assert.Throws<ArgumentNullException>(() => timer.Start(TimeSpan.Zero, null));
+            Assert.Throws<ArgumentNullException>(() => new CoroutineTimer(null), "Null host.");
+            Assert.Throws<ArgumentNullException>(
+                () => new CoroutineTimer(_host).Start(TimeSpan.Zero, null), "Null callback.");
         }
 
         [Test]

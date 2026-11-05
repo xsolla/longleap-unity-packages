@@ -6,19 +6,19 @@ using UnityEngine.Networking;
 namespace LongLeap.UI
 {
     /// <summary>
-    /// Картинки по адресу: скачать один раз и отдавать готовый спрайт.
+    /// Images by URL: download once and hand out a ready sprite.
     ///
-    /// Нужен <see cref="UserBackPackWindow"/>: иконки предметов рюкзака приходят с
-    /// сервера ссылкой (iconUrl), а не спрайтом в проекте. Окно переоткрывают на
-    /// каждом заезде — без кэша каждый раз качали бы те же картинки заново.
+    /// Needed by <see cref="UserBackPackWindow"/>: backpack item icons come from the
+    /// server as a link (iconUrl), not as a sprite in the project. The window is reopened on
+    /// every run — without a cache the same images would be downloaded again each time.
     ///
-    /// В кэше лежит задача, а не спрайт: две карточки с одной иконкой, открытые
-    /// одновременно, дождутся одной загрузки, а не запустят две. Неудачная
-    /// загрузка из кэша убирается — при следующем открытии попробуем снова.
+    /// The cache holds a task, not a sprite: two cards with the same icon opened
+    /// at the same time will wait for one download instead of starting two. A failed
+    /// download is removed from the cache — we'll try again on the next open.
     ///
-    /// Ожидание — <c>while (!op.isDone) await Task.Yield()</c>, как в BackPackService:
-    /// под WebGL потоков нет. Там же картинке нужен CORS на стороне хоста иконок,
-    /// иначе браузер её не отдаст.
+    /// Waiting is <c>while (!op.isDone) await Task.Yield()</c>, as in BackPackService:
+    /// there are no threads under WebGL. There the image also needs CORS on the icon host side,
+    /// otherwise the browser won't hand it over.
     /// </summary>
     public sealed class RemoteSpriteCache
     {
@@ -26,7 +26,7 @@ namespace LongLeap.UI
 
         private readonly Dictionary<string, Task<Sprite>> _loads = new Dictionary<string, Task<Sprite>>();
 
-        /// <summary>Спрайт по адресу или null, если скачать не вышло (причина — в логе).</summary>
+        /// <summary>Sprite by URL, or null if the download failed (reason is in the log).</summary>
         public async Task<Sprite> GetAsync(string url)
         {
             if (string.IsNullOrEmpty(url)) return null;
@@ -45,7 +45,7 @@ namespace LongLeap.UI
             return sprite;
         }
 
-        /// <summary>Отпустить всё скачанное: текстуры сами из памяти не уйдут.</summary>
+        /// <summary>Release everything downloaded: textures won't leave memory on their own.</summary>
         public void Clear()
         {
             foreach (var load in _loads.Values)
@@ -72,7 +72,7 @@ namespace LongLeap.UI
 
             if (request.result != UnityWebRequest.Result.Success)
             {
-                Debug.LogWarning($"[BackPack] иконка не скачалась: {url} — {request.error}");
+                Debug.LogWarning($"[BackPack] icon failed to download: {url} — {request.error}");
                 return null;
             }
 

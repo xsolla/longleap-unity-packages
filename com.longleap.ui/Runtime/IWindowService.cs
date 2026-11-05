@@ -4,66 +4,66 @@ using System.Threading.Tasks;
 namespace LongLeap.UI
 {
     /// <summary>
-    /// Сервис окон: открывает и закрывает окна, а ещё решает, когда окно создаётся
-    /// и когда выгружается — это задаёт <see cref="WindowEntry"/> в каталоге сервиса.
-    /// Окно адресуется своим типом: <c>OpenAsync&lt;SettingsWindow&gt;()</c>.
-    /// Реализация — <see cref="WindowService"/>.
+    /// Window service: opens and closes windows, and also decides when a window is created
+    /// and when it is unloaded — this is set by <see cref="WindowEntry"/> in the service catalog.
+    /// A window is addressed by its type: <c>OpenAsync&lt;SettingsWindow&gt;()</c>.
+    /// Implementation — <see cref="WindowService"/>.
     ///
-    /// Раз окно может ещё не существовать (создаётся при открытии) или уже не
-    /// существовать (выгружено при закрытии), экземпляр нельзя считать вечным:
+    /// Since a window may not exist yet (created on open) or may no longer
+    /// exist (unloaded on close), the instance can't be treated as permanent:
     /// <list type="bullet">
-    /// <item>подготовить окно данными — <see cref="OnCreated{TWindow}"/>: сработает на
-    /// каждый созданный экземпляр, до показа;</item>
-    /// <item>получить экземпляр, не показывая, — <see cref="LoadAsync{TWindow}"/>;</item>
-    /// <item><see cref="TryGet{TWindow}"/> отвечает только за уже созданные окна.</item>
+    /// <item>to feed the window data — <see cref="OnCreated{TWindow}"/>: fires for
+    /// every created instance, before it is shown;</item>
+    /// <item>to get an instance without showing it — <see cref="LoadAsync{TWindow}"/>;</item>
+    /// <item><see cref="TryGet{TWindow}"/> only covers windows that are already created.</item>
     /// </list>
     /// </summary>
     public interface IWindowService
     {
-        /// <summary>Окно есть в каталоге сервиса (создано оно сейчас или нет — неважно).</summary>
+        /// <summary>The window is in the service catalog (whether it is currently created or not doesn't matter).</summary>
         bool IsRegistered<TWindow>() where TWindow : class, IWindow;
 
         /// <summary>
-        /// Окно, если оно создано прямо сейчас. Для окон, которые выгружаются или
-        /// создаются при открытии, вернёт <c>false</c> в промежутках между показами —
-        /// объектам сцены, которым окно нужно синхронно, оно должно быть Preload.
+        /// The window, if it is created right now. For windows that are unloaded or
+        /// created on open, returns <c>false</c> between showings —
+        /// for scene objects that need the window synchronously, it must be Preload.
         /// </summary>
         bool TryGet<TWindow>(out TWindow window) where TWindow : class, IWindow;
 
         /// <summary>
-        /// Создать окно (если ещё нет), не открывая, и вернуть экземпляр: положить
-        /// в него данные или подписаться на события до показа. Кидает исключение, если окна
-        /// нет в каталоге или префаб не загрузился.
+        /// Create the window (if not yet created) without opening it, and return the instance: to put
+        /// data into it or subscribe to events before it is shown. Throws if the window
+        /// is not in the catalog or the prefab failed to load.
         /// </summary>
         Task<TWindow> LoadAsync<TWindow>() where TWindow : class, IWindow;
 
         /// <summary>
-        /// Выгрузить окно сейчас, не дожидаясь правила: закрыть, если открыто,
-        /// уничтожить экземпляр и отпустить префаб.
+        /// Unload the window now, without waiting for the rule: close it if open,
+        /// destroy the instance and release the prefab.
         /// </summary>
         Task UnloadAsync<TWindow>() where TWindow : class, IWindow;
 
         /// <summary>
-        /// Подготовка окна: <paramref name="setup"/> вызывается для уже созданного экземпляра
-        /// сразу, а для созданных позже — каждый раз сразу после создания, до открытия.
-        /// Так данные доходят до окна, какое бы правило жизни ему ни задали: выгруженное
-        /// окно при следующем открытии снова родится «пустым», и подготовка повторится.
-        /// Окна нет в каталоге — пишет ошибку в лог и ничего не делает.
+        /// Window setup: <paramref name="setup"/> is called immediately for an already created instance,
+        /// and for ones created later — each time right after creation, before opening.
+        /// This way data reaches the window whatever lifetime rule it has: an unloaded
+        /// window is born "empty" again on its next open, and the setup runs again.
+        /// If the window is not in the catalog — logs an error and does nothing.
         /// </summary>
         void OnCreated<TWindow>(Action<TWindow> setup) where TWindow : class, IWindow;
 
-        /// <summary>Открыть окно (создав, если нужно) и дождаться его анимации появления.</summary>
+        /// <summary>Open the window (creating it if needed) and wait for its appear animation.</summary>
         Task<TWindow> OpenAsync<TWindow>() where TWindow : class, IWindow;
 
         /// <summary>
-        /// Закрыть окно и дождаться его анимации ухода. Выгрузится ли оно после этого,
-        /// решает <see cref="WindowEntry.UnloadOnClose"/>.
+        /// Close the window and wait for its exit animation. Whether it is unloaded afterwards
+        /// is decided by <see cref="WindowEntry.UnloadOnClose"/>.
         /// </summary>
         Task CloseAsync<TWindow>() where TWindow : class, IWindow;
 
         /// <summary>
-        /// То же по экземпляру — когда тип известен только в рантайме:
-        /// например, окно закрывает само себя (<see cref="WindowBase.CloseSelfAsync"/>).
+        /// Same, by instance — when the type is only known at runtime:
+        /// for example, a window closing itself (<see cref="WindowBase.CloseSelfAsync"/>).
         /// </summary>
         Task CloseAsync(IWindow window);
 
@@ -72,12 +72,12 @@ namespace LongLeap.UI
         bool IsOpen<TWindow>() where TWindow : class, IWindow;
 
         /// <summary>
-        /// Задать домашнее окно — куда возвращаются страницы меню по «назад»
-        /// (<see cref="MenuPageWindow"/>). Обычно главное меню; задаёт игра при загрузке.
+        /// Set the home window — where menu pages return on "back"
+        /// (<see cref="MenuPageWindow"/>). Usually the main menu; set by the game during loading.
         /// </summary>
         void SetHome<TWindow>() where TWindow : class, IWindow;
 
-        /// <summary>Открыть домашнее окно. Не задано — предупреждение в лог, ничего не открывается.</summary>
+        /// <summary>Open the home window. If not set — a warning is logged and nothing opens.</summary>
         Task OpenHomeAsync();
     }
 }

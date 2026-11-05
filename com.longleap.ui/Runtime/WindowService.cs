@@ -11,63 +11,63 @@ using UnityEngine.SceneManagement;
 namespace LongLeap.UI
 {
     /// <summary>
-    /// Корень UI и он же <see cref="IWindowService"/>.
+    /// The UI root, which is also the <see cref="IWindowService"/>.
     ///
-    /// Окна в префабе корня не лежат. Корень держит каталог <c>Windows</c> — список
-    /// <see cref="WindowEntry"/>: ссылка на префаб окна в проекте плюс правила его жизни.
-    /// Сервис сам создаёт окно под своим корнем, когда оно нужно, и уничтожает, когда
-    /// не нужно (ссылки — Addressables, поэтому выгруженное окно освобождает и память
-    /// префаба, а не только экземпляр):
+    /// Windows are not stored in the root prefab. The root holds the <c>Windows</c> catalog — a list of
+    /// <see cref="WindowEntry"/>: a reference to the window prefab in the project plus its lifetime rules.
+    /// The service itself creates a window under its root when it is needed and destroys it when it is
+    /// not (the references are Addressables, so an unloaded window frees the prefab's memory too,
+    /// not just the instance):
     /// <list type="bullet">
-    /// <item><b>Preload</b> — создаётся при старте (<see cref="InitializeAsync"/>), живёт до выхода;</item>
-    /// <item>без галок — создаётся при первом открытии, дальше живёт до выхода;</item>
-    /// <item><b>Unload On Close</b> — создаётся при открытии, уничтожается при закрытии.</item>
+    /// <item><b>Preload</b> — created at startup (<see cref="InitializeAsync"/>), lives until exit;</item>
+    /// <item>no flags — created on first open, then lives until exit;</item>
+    /// <item><b>Unload On Close</b> — created on open, destroyed on close.</item>
     /// </list>
     ///
-    /// Порядок строк каталога — порядок отрисовки: нижняя строка рисуется поверх верхней,
-    /// в каком бы порядке окна ни создавались.
+    /// Catalog row order is draw order: a lower row is drawn on top of an upper one,
+    /// regardless of the order in which windows were created.
     ///
-    /// Префаб корня инстанцируется один раз задачей <c>WindowServiceTask</c>, живёт до
-    /// выхода из игры (DontDestroyOnLoad) и переживает смену сцен. Загрузка покадровая,
-    /// без потоков — WebGL-safe. async у открытия и закрытия — ещё и затем, чтобы окно
-    /// могло проиграть свою анимацию, а вызывающий её дождался.
+    /// The root prefab is instantiated once by the <c>WindowServiceTask</c> task, lives until
+    /// the game exits (DontDestroyOnLoad) and survives scene changes. Loading is frame-by-frame,
+    /// without threads — WebGL-safe. Open and close are async also so that a window
+    /// can play its animation and the caller can wait for it.
     ///
-    /// Активностью объектов сервис не управляет: показать и спрятать себя — дело окна
-    /// (<see cref="WindowBase"/> включает и гасит свой Root). Сервис решает, какое окно
-    /// создано и открыто, и ждёт его анимаций. Новое окно он сразу закрывает кодом,
-    /// поэтому неважно, каким сохранили префаб окна.
+    /// The service does not manage object activity: showing and hiding itself is the window's job
+    /// (<see cref="WindowBase"/> enables and disables its Root). The service decides which window
+    /// is created and open, and waits for its animations. It closes a new window from code right away,
+    /// so it doesn't matter in what state the window prefab was saved.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class WindowService : MonoBehaviour, IWindowService
     {
         /// <summary>
-        /// Адрес префаба корня в Addressables по умолчанию — по нему его грузит загрузка игры
-        /// (может взять и свой ключ).
-        /// Совпадает с путём ассета: именно такой адрес Addressables ставит по умолчанию,
-        /// когда префаб помечают галкой Addressable.
+        /// Default Addressables address of the root prefab — the game's loading sequence loads it by this key
+        /// (it can also use its own key).
+        /// Matches the asset path: this is exactly the address Addressables assigns by default
+        /// when the prefab's Addressable checkbox is ticked.
         /// </summary>
         public const string AddressableKey = "Assets/Content/Prefab/UI/WindowServiceCanvas.prefab";
 
-        [Tooltip("Каталог окон: префаб + правила (предзагрузка, выгрузка при закрытии). " +
-                 "Порядок строк — порядок отрисовки, нижнее окно поверх верхних.")]
+        [Tooltip("Window catalog: prefab + rules (preload, unload on close). " +
+                 "Row order is draw order: a lower window is drawn on top of the ones above it.")]
         [SerializeField] private WindowEntry[] _windows;
 
-        /// <summary>Рабочее состояние одной строки каталога.</summary>
+        /// <summary>Runtime state of a single catalog row.</summary>
         private sealed class Slot
         {
             public WindowEntry Entry;
             public Type Type;
 
-            /// <summary>Позиция в каталоге — она же порядок отрисовки.</summary>
+            /// <summary>Position in the catalog — which is also the draw order.</summary>
             public int Order;
 
-            /// <summary>Созданный экземпляр; null, пока окно не создано или уже выгружено.</summary>
+            /// <summary>The created instance; null until the window is created or after it is unloaded.</summary>
             public WindowBase Instance;
 
-            /// <summary>Загрузка префаба, под которую создан <see cref="Instance"/>: отпускается при выгрузке.</summary>
+            /// <summary>The prefab load that <see cref="Instance"/> was created from: released on unload.</summary>
             public AsyncOperationHandle<GameObject> Handle;
 
-            /// <summary>Создание идёт прямо сейчас: параллельные вызовы ждут одну и ту же задачу.</summary>
+            /// <summary>Creation in progress right now: concurrent calls await the same task.</summary>
             public Task<WindowBase> Loading;
 
             public readonly List<Action<WindowBase>> Setups = new List<Action<WindowBase>>();
@@ -77,16 +77,16 @@ namespace LongLeap.UI
         private readonly List<Slot> _ordered = new List<Slot>();
         private readonly HashSet<Type> _open = new HashSet<Type>();
 
-        /// <summary>Куда ведёт «назад» страниц меню. Задаёт игра: <see cref="SetHome{TWindow}"/>.</summary>
+        /// <summary>Where "back" on menu pages leads. Set by the game: <see cref="SetHome{TWindow}"/>.</summary>
         private Func<Task> _openHome;
 
-        /// <summary>EventSystem, через который работает UI: свой или найденный в сцене.</summary>
+        /// <summary>The EventSystem the UI works through: its own or one found in the scene.</summary>
         private EventSystem _eventSystem;
 
         /// <summary>
-        /// Создать окна с галкой Preload. Зовёт WindowServiceTask после инстанцирования
-        /// корня. Ошибка одного окна не останавливает остальные: она уходит в лог,
-        /// а открытие этого окна позже попробует создать его снова.
+        /// Create windows flagged Preload. Called by WindowServiceTask after the root is
+        /// instantiated. A failure of one window doesn't stop the others: it goes to the log,
+        /// and opening that window later will try to create it again.
         /// </summary>
         public Task InitializeAsync()
         {
@@ -121,8 +121,8 @@ namespace LongLeap.UI
 
             await CloseAsync(slot.Type);
 
-            // Окно могли как раз создавать: дожидаемся, иначе выгружать будет нечего,
-            // а созданное следом останется висеть.
+            // The window may be in the middle of being created: wait for it, otherwise there would be
+            // nothing to unload, and the instance created right after would be left hanging.
             if (slot.Loading != null)
             {
                 try
@@ -131,7 +131,7 @@ namespace LongLeap.UI
                 }
                 catch
                 {
-                    // Не создалось — выгружать нечего; причину уже видел тот, кто его создавал.
+                    // Not created — nothing to unload; whoever was creating it has already seen the reason.
                 }
             }
 
@@ -146,8 +146,8 @@ namespace LongLeap.UI
             if (!_slots.TryGetValue(typeof(TWindow), out var slot))
             {
                 Debug.LogError(
-                    $"[Windows] {typeof(TWindow).Name}: подготовку окна некуда повесить — " +
-                    $"его нет в каталоге Windows на префабе {AddressableKey}.");
+                    $"[Windows] {typeof(TWindow).Name}: nowhere to attach the window setup — " +
+                    $"it is not in the Windows catalog on prefab {AddressableKey}.");
                 return;
             }
 
@@ -163,7 +163,7 @@ namespace LongLeap.UI
         {
             var slot = Resolve<TWindow>();
 
-            // Флаг ставим до await: два параллельных OpenAsync не проиграют анимацию дважды.
+            // Set the flag before await: two concurrent OpenAsync calls won't play the animation twice.
             var first = _open.Add(slot.Type);
 
             WindowBase window;
@@ -173,19 +173,19 @@ namespace LongLeap.UI
             }
             catch
             {
-                // Не создали — окно не открыто, и повторное открытие должно попробовать снова.
+                // Not created — the window isn't open, and a repeated open should try again.
                 if (first)
                     _open.Remove(slot.Type);
 
                 throw;
             }
 
-            // Пока окно создавалось, его могли закрыть — показывать уже нечего.
+            // The window may have been closed while it was being created — nothing to show anymore.
             if (first && _open.Contains(slot.Type))
             {
-                // Включить свой Root — забота окна: см. WindowBase.OpenAsync.
+                // Enabling its Root is the window's job: see WindowBase.OpenAsync.
                 await window.OpenAsync();
-                Debug.Log($"[Windows] открыто {typeof(TWindow).Name}");
+                Debug.Log($"[Windows] opened {typeof(TWindow).Name}");
             }
 
             return window as TWindow;
@@ -213,7 +213,7 @@ namespace LongLeap.UI
         {
             if (_openHome != null) return _openHome();
 
-            Debug.LogWarning("[Windows] домашнее окно не задано (SetHome) — «назад» некуда вести.");
+            Debug.LogWarning("[Windows] home window is not set (SetHome) — 'back' has nowhere to go.");
             return Task.CompletedTask;
         }
 
@@ -228,7 +228,7 @@ namespace LongLeap.UI
             if (GetComponent<MenuClickAudioBinder>() == null)
                 gameObject.AddComponent<MenuClickAudioBinder>();
 
-            // Игровая сцена грузится позже UI и может принести свой EventSystem.
+            // The game scene loads after the UI and may bring its own EventSystem.
             SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
@@ -238,14 +238,14 @@ namespace LongLeap.UI
         }
 
 #if UNITY_EDITOR
-        /// <summary>Подменить каталог целиком. Нужно только инструменту переноса окон из корня.</summary>
+        /// <summary>Replace the whole catalog. Only needed by the tool that migrates windows out of the root.</summary>
         public void SetCatalog(WindowEntry[] entries)
         {
             _windows = entries;
             UnityEditor.EditorUtility.SetDirty(this);
         }
 
-        /// <summary>Тип и подпись строки берутся из префаба — руками их не вводят.</summary>
+        /// <summary>A row's type and label are taken from the prefab — they are not entered by hand.</summary>
         private void OnValidate()
         {
             if (_windows == null) return;
@@ -258,8 +258,8 @@ namespace LongLeap.UI
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode) => DisableForeignEventSystems();
 
         /// <summary>
-        /// Раскладывает каталог по типам окон. Сами окна тут не создаются — только
-        /// проверяется, что у каждой строки есть префаб и известный тип.
+        /// Indexes the catalog by window type. Windows themselves are not created here — it only
+        /// checks that every row has a prefab and a known type.
         /// </summary>
         private void Index()
         {
@@ -271,7 +271,7 @@ namespace LongLeap.UI
 
                 if (entry == null || entry.Prefab == null || !entry.Prefab.RuntimeKeyIsValid())
                 {
-                    Debug.LogError($"[Windows] в строке {i} каталога окон префаба '{name}' не задан префаб.");
+                    Debug.LogError($"[Windows] row {i} of the window catalog on prefab '{name}' has no prefab set.");
                     continue;
                 }
 
@@ -279,15 +279,15 @@ namespace LongLeap.UI
                 if (type == null || !typeof(WindowBase).IsAssignableFrom(type))
                 {
                     Debug.LogError(
-                        $"[Windows] строка {i} каталога ('{entry.Label}'): тип окна не определён. " +
-                        $"Открой префаб {AddressableKey} в редакторе — тип подтянется из префаба окна.");
+                        $"[Windows] catalog row {i} ('{entry.Label}'): window type is not resolved. " +
+                        $"Open prefab {AddressableKey} in the editor — the type will be picked up from the window prefab.");
                     continue;
                 }
 
                 if (_slots.ContainsKey(type))
                 {
                     Debug.LogError(
-                        $"[Windows] {type.Name} в каталоге дважды — вторая строка открываться не будет.");
+                        $"[Windows] {type.Name} is in the catalog twice — the second row will not open.");
                     continue;
                 }
 
@@ -301,14 +301,14 @@ namespace LongLeap.UI
         {
             if (!_slots.TryGetValue(type, out var slot)) return;
 
-            // Из открытых убираем до await: повторный CloseAsync не станет ждать анимацию второй раз.
+            // Remove from open before await: a repeated CloseAsync won't wait for the animation a second time.
             if (!_open.Remove(type)) return;
 
-            // Закрыли, пока окно ещё создавалось: показывать его не начинали, так что
-            // анимации ухода нет — дожидаемся создания лишь затем, чтобы применить правило выгрузки.
+            // Closed while the window was still being created: showing never started, so there is
+            // no exit animation — we wait for creation only to apply the unload rule.
             if (slot.Instance != null)
             {
-                // Погасить свой Root — забота окна: см. WindowBase.CloseAsync.
+                // Disabling its Root is the window's job: see WindowBase.CloseAsync.
                 await slot.Instance.CloseAsync();
             }
             else if (slot.Loading != null)
@@ -319,12 +319,12 @@ namespace LongLeap.UI
                 }
                 catch
                 {
-                    // Не создалось — выгружать нечего; причину увидит тот, кто открывал.
+                    // Not created — nothing to unload; whoever opened it will see the reason.
                     return;
                 }
             }
 
-            // Пока закрывалось, окно могли открыть снова — выгружать его нельзя.
+            // The window may have been reopened while closing — it must not be unloaded.
             if (slot.Entry.UnloadOnClose && !_open.Contains(type))
                 Unload(slot);
         }
@@ -334,8 +334,8 @@ namespace LongLeap.UI
             if (_slots.TryGetValue(typeof(TWindow), out var slot)) return slot;
 
             throw new InvalidOperationException(
-                $"Окно {typeof(TWindow).Name} не подключено: добавь его префаб в каталог Windows " +
-                $"на префабе {AddressableKey}.");
+                $"Window {typeof(TWindow).Name} is not registered: add its prefab to the Windows catalog " +
+                $"on prefab {AddressableKey}.");
         }
 
         private async Task PreloadAsync(Slot slot)
@@ -350,7 +350,7 @@ namespace LongLeap.UI
             }
         }
 
-        /// <summary>Созданное окно или идущее создание; иначе начинает создавать.</summary>
+        /// <summary>The created window or the creation in progress; otherwise starts creating it.</summary>
         private Task<WindowBase> LoadSlotAsync(Slot slot)
         {
             if (slot.Instance != null)
@@ -361,7 +361,7 @@ namespace LongLeap.UI
 
             var loading = CreateAsync(slot);
 
-            // Закончилась на месте — запоминать нечего (и finally в CreateAsync уже отработал).
+            // Completed synchronously — nothing to remember (and the finally in CreateAsync has already run).
             if (!loading.IsCompleted)
                 slot.Loading = loading;
 
@@ -369,9 +369,9 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Грузит префаб и ставит экземпляр под корень. Всё после загрузки — в одном куске
-        /// без await: окно создаётся, закрывается и получает подготовку в том же кадре,
-        /// поэтому не мелькает на экране включённым.
+        /// Loads the prefab and places an instance under the root. Everything after the load is in one block
+        /// without await: the window is created, closed and set up in the same frame,
+        /// so it never flashes on screen enabled.
         /// </summary>
         private async Task<WindowBase> CreateAsync(Slot slot)
         {
@@ -382,15 +382,15 @@ namespace LongLeap.UI
                 while (!handle.IsDone)
                     await Task.Yield();
 
-                // Корень снесли, пока грузилось (выход из игры): создавать некуда.
+                // The root was destroyed while loading (game exit): nowhere to create it.
                 if (this == null)
                     throw new OperationCanceledException();
 
                 if (handle.Status != AsyncOperationStatus.Succeeded || handle.Result == null)
                 {
-                    var reason = handle.OperationException?.Message ?? "ассет не найден в Addressables";
+                    var reason = handle.OperationException?.Message ?? "asset not found in Addressables";
                     throw new InvalidOperationException(
-                        $"Окно {slot.Type.Name} не загрузилось ({slot.Entry.Prefab.RuntimeKey}): {reason}");
+                        $"Window {slot.Type.Name} failed to load ({slot.Entry.Prefab.RuntimeKey}): {reason}");
                 }
 
                 var instance = Instantiate(handle.Result, transform, false);
@@ -400,21 +400,21 @@ namespace LongLeap.UI
                 {
                     Destroy(instance);
                     throw new InvalidOperationException(
-                        $"На корне префаба окна '{handle.Result.name}' нет компонента {slot.Type.Name}: " +
-                        "каталог устарел — открой префаб сервиса в редакторе, чтобы он обновился.");
+                        $"The root of window prefab '{handle.Result.name}' has no {slot.Type.Name} component: " +
+                        "the catalog is outdated — open the service prefab in the editor to refresh it.");
                 }
 
-                // Объект окна включён всегда (см. WindowBase): сохранённое выключенным
-                // ему не подходит — на нём живёт компонент.
+                // The window object is always enabled (see WindowBase): being saved disabled
+                // doesn't work for it — the component lives on it.
                 if (!instance.activeSelf)
                     instance.SetActive(true);
 
                 instance.name = slot.Type.Name;
 
-                // Чтобы окно могло открыть следующее за собой: см. WindowBase.Windows.
+                // So the window can open the next one itself: see WindowBase.Windows.
                 window.Bind(this);
 
-                // Начальное состояние окон задаёт код, а не то, каким сохранили префаб.
+                // The initial state of windows is set by code, not by how the prefab was saved.
                 window.CloseImmediate();
 
                 slot.Instance = window;
@@ -429,7 +429,7 @@ namespace LongLeap.UI
             }
             catch
             {
-                // Handle ушёл в слот только вместе с экземпляром — иначе отпускать его нам.
+                // The handle went into the slot only together with the instance — otherwise it's ours to release.
                 if (slot.Instance == null && handle.IsValid())
                     Addressables.Release(handle);
 
@@ -442,8 +442,8 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Окна создаются в произвольном порядке, а рисуются в порядке каталога:
-        /// ставим новое сразу за ближайшим выше по списку из уже созданных.
+        /// Windows are created in arbitrary order but drawn in catalog order:
+        /// place the new one right after the nearest already-created window above it in the list.
         /// </summary>
         private void PlaceInOrder(Slot slot)
         {
@@ -469,12 +469,12 @@ namespace LongLeap.UI
             }
             catch (Exception exception)
             {
-                // Сломанная подготовка не должна оставить окно несозданным.
+                // A broken setup must not leave the window uncreated.
                 Debug.LogException(exception);
             }
         }
 
-        /// <summary>Уничтожить экземпляр и отпустить префаб. Окно создастся заново при следующем открытии.</summary>
+        /// <summary>Destroy the instance and release the prefab. The window will be recreated on the next open.</summary>
         private void Unload(Slot slot)
         {
             if (slot.Instance == null) return;
@@ -485,14 +485,14 @@ namespace LongLeap.UI
             slot.Instance = null;
             slot.Handle = default;
 
-            Debug.Log($"[Windows] выгружено {slot.Type.Name}");
+            Debug.Log($"[Windows] unloaded {slot.Type.Name}");
 
             _ = ReleaseAfterDestroyAsync(handle);
         }
 
         /// <summary>
-        /// Префаб отпускаем кадром позже: Destroy срабатывает в конце кадра, а выгрузка
-        /// бандла прямо сейчас утащила бы ассеты из-под экземпляра, доживающего этот кадр.
+        /// The prefab is released one frame later: Destroy takes effect at the end of the frame, and unloading
+        /// the bundle right now would pull assets out from under the instance that is still alive this frame.
         /// </summary>
         private static async Task ReleaseAfterDestroyAsync(AsyncOperationHandle<GameObject> handle)
         {
@@ -503,8 +503,8 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// UI поднимается ещё в стартовой сцене, где EventSystem может не быть, —
-        /// без него кнопки не нажимаются. Свой EventSystem живёт вместе с корнем UI.
+        /// The UI comes up already in the startup scene, where there may be no EventSystem —
+        /// without one, buttons can't be pressed. Our own EventSystem lives together with the UI root.
         /// </summary>
         private void EnsureEventSystem()
         {
@@ -515,11 +515,11 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// EventSystem в игре должен быть ровно один. UI живёт с DontDestroyOnLoad и
-        /// поднимается раньше игровой сцены, поэтому свой EventSystem в сцене — это
-        /// второй: два InputSystemUIInputModule делят один набор input actions,
-        /// новый забирает его себе, и кнопки UI перестают нажиматься. Гасим лишние
-        /// и говорим об этом в лог — в сцене такой объект держать не надо.
+        /// There must be exactly one EventSystem in the game. The UI lives with DontDestroyOnLoad and
+        /// comes up before the game scene, so an EventSystem of the scene's own is a
+        /// second one: two InputSystemUIInputModules share one set of input actions,
+        /// the new one takes it over, and UI buttons stop responding. We disable the extra ones
+        /// and report it in the log — such an object shouldn't be kept in the scene.
         /// </summary>
         private void DisableForeignEventSystems()
         {
@@ -531,8 +531,8 @@ namespace LongLeap.UI
                 if (system == null || system == _eventSystem) continue;
 
                 Debug.LogWarning(
-                    $"[Windows] в сцене нашёлся лишний EventSystem '{system.name}' — выключаю его, " +
-                    "иначе кнопки UI перестанут нажиматься. Удали этот объект из сцены.",
+                    $"[Windows] found an extra EventSystem '{system.name}' in the scene — disabling it, " +
+                    "otherwise UI buttons will stop responding. Remove this object from the scene.",
                     system);
 
                 foreach (var module in system.GetComponents<BaseInputModule>())
@@ -541,7 +541,7 @@ namespace LongLeap.UI
                 system.enabled = false;
             }
 
-            // На всякий случай: current мог указывать на выключенный — вернём наш.
+            // Just in case: current may have pointed to the disabled one — restore ours.
             if (_eventSystem != null)
                 EventSystem.current = _eventSystem;
         }

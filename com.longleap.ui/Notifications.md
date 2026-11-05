@@ -9,7 +9,7 @@ Part of `com.longleap.ui`, split into two assemblies:
 | `LongLeap.Notifications` | `Runtime/Notifications/Core` | Service, data, `NotificationSystemView` base, `ITimer` + `CoroutineTimer`. No LongLeap dependencies — usable on its own with a custom view. |
 | `LongLeap.UI.Notifications` | `Runtime/Notifications` | Ready-made `GameNotificationView`, `NotificationPopup`, and `NotificationBootstrapper` (static `Show`, buffers calls until ready). |
 
-Tests: `Tests/EditMode` (`LongLeap.Notifications.Tests`).
+Tests: `Tests/EditMode` (`LongLeap.Notifications.Tests`) and `Tests/PlayMode` (`LongLeap.Notifications.PlayModeTests`, `CoroutineTimer`).
 
 ## Data Sources
 

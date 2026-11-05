@@ -7,26 +7,26 @@ using UnityEngine;
 namespace LongLeap.UI
 {
     /// <summary>
-    /// Окно настроек — оконная обёртка над <see cref="SettingsPanel"/> из пакета настроек.
+    /// Settings window — a window wrapper around <see cref="SettingsPanel"/> from the settings package.
     ///
-    /// Окно ничего не собирает само: в префабе у него только пустой Root, панель
-    /// строится в нём кодом. Что показать — секции, строки, подписи, шрифт и размер —
-    /// решает <see cref="SettingsWindowConfig"/>, а какой из конфигов взять, решает
-    /// профиль устройства (ПК, мобильный, веб на ПК, веб на мобильном) — см.
-    /// <see cref="SettingsWindowConfigSet"/>. Другая раскладка под платформу —
-    /// другой конфиг, а не правка кода.
+    /// The window builds nothing itself: its prefab has only an empty Root, and the panel
+    /// is built inside it in code. What to show — sections, rows, labels, font and size —
+    /// is decided by <see cref="SettingsWindowConfig"/>, and which config to use is decided
+    /// by the device profile (PC, mobile, web on PC, web on mobile) — see
+    /// <see cref="SettingsWindowConfigSet"/>. A different layout for a platform means
+    /// a different config, not a code change.
     ///
-    /// Сервис настроек окну приносит загрузка (<see cref="Bind"/>). Настроек может
-    /// не быть — тогда окно открывается и честно говорит, что настройки недоступны:
-    /// кнопка возврата работает в любом случае.
+    /// The settings service is passed in by the game's loading sequence (<see cref="Bind"/>).
+    /// Settings may be missing — then the window still opens and plainly says settings are
+    /// unavailable: the back button works either way.
     ///
-    /// Значение применяется сразу, пока тянут ползунок; в хранилище всё уезжает
-    /// на закрытии окна — одной записью, а не на каждое движение.
+    /// Values apply immediately while the slider is dragged; everything is written to storage
+    /// when the window closes — in a single write, not on every movement.
     /// </summary>
     public sealed class SettingsWindow : MenuPageWindow
     {
-        [Tooltip("Конфиги окна по профилям устройства. Достаточно одного: " +
-                 "незаполненный профиль берёт ближайший заполненный.")]
+        [Tooltip("Window configs per device profile. One is enough: " +
+                 "an empty profile falls back to the nearest filled one.")]
         [SerializeField] private SettingsWindowConfigSet _configs = new SettingsWindowConfigSet();
 
         private SettingsPanel _panel;
@@ -35,15 +35,15 @@ namespace LongLeap.UI
         public Func<Task> ReturnToPause { get; set; }
 
         // =========================================================
-        // ПОДКЛЮЧЕНИЕ
+        // BINDING
         // =========================================================
 
         /// <summary>
-        /// Отдать окну настройки игры. Зовёт загрузка, когда UI уже поднят: пакет UI
-        /// не знает про контейнер сервисов и сам их не достанет.
+        /// Give the window the game settings. Called by the game's loading sequence once the UI
+        /// is up: the UI package doesn't know about the service container and can't fetch them itself.
         /// </summary>
-        /// <param name="service">Сервис настроек: строки панели пишут в него и слушают его.</param>
-        /// <param name="save">Сохранение на закрытии окна. Null — не сохраняем.</param>
+        /// <param name="service">Settings service: panel rows write to it and listen to it.</param>
+        /// <param name="save">Save on window close. Null means no saving.</param>
         public void Bind(ISettingsService service, Func<Task> save = null)
         {
             _save = save;
@@ -70,16 +70,16 @@ namespace LongLeap.UI
 
         public override Task OpenAsync()
         {
-            // Значения могли поменяться мимо окна: кнопкой mute в главном меню
-            // или чтением сейва.
+            // Values may have changed outside the window: via the mute button in the main menu
+            // or by loading a save.
             _panel.Refresh();
 
             return base.OpenAsync();
         }
 
         /// <summary>
-        /// Закрытие — момент записи: пока окно открыто, ползунок дёргается
-        /// десятки раз, и писать в хранилище на каждое движение незачем.
+        /// Closing is when we write: while the window is open, a slider moves
+        /// dozens of times, and there's no point writing to storage on every movement.
         /// </summary>
         public override async Task CloseAsync()
         {

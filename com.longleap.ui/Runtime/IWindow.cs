@@ -3,9 +3,9 @@ using System.Threading.Tasks;
 namespace LongLeap.UI
 {
     /// <summary>
-    /// Контракт любого окна. Открытие и закрытие асинхронные — чтобы окно могло
-    /// проиграть анимацию появления/ухода, а сервис дождался её конца.
-    /// Готовая реализация по умолчанию — <see cref="WindowBase"/>.
+    /// Contract for any window. Opening and closing are asynchronous — so that the window can
+    /// play an appear/exit animation and the service can wait for it to finish.
+    /// Ready-made default implementation — <see cref="WindowBase"/>.
     /// </summary>
     public interface IWindow
     {

@@ -12,97 +12,97 @@ using UnityEngine.UI;
 namespace LongLeap.UI
 {
     /// <summary>
-    /// Рюкзак игрока: показывает, что у игрока есть на сервере, — перед заездом.
+    /// The player's backpack: shows what the player has on the server — before a run.
     ///
-    /// Содержимое приходит с BackPack-сервера (<see cref="IBackPackService.GetRewardsAsync"/>,
-    /// GET {baseUrl}/rewards?xsollaId=…&amp;gameId=…) и перечитывается на каждом
-    /// открытии: рюкзак меняется и вне игры (награды за ачивки выдаёт сервер).
-    /// Сервис приносит загрузка игры, как и всем остальным окнам, —
-    /// окно само про контейнер сервисов не знает.
+    /// Contents come from the BackPack server (<see cref="IBackPackService.GetRewardsAsync"/>,
+    /// GET {baseUrl}/rewards?xsollaId=…&amp;gameId=…) and are reloaded on every
+    /// open: the backpack also changes outside the game (the server grants achievement rewards).
+    /// The service is provided by game loading, as for all other windows —
+    /// the window itself knows nothing about the service container.
     ///
-    /// Пункты — сетка карточек (<see cref="BackPackItemView"/>): картинка, название,
-    /// описание, награды столбиком (иконка и что получит игрок) и кнопка «активировать».
+    /// Entries are a grid of cards (<see cref="BackPackItemView"/>): image, title,
+    /// description, rewards in a column (icon and what the player gets) and an "activate" button.
     ///
-    /// Что даёт предмет, решает игра, а не сервер: сервер прикладывает к предмету
-    /// ключи наград (Rewards, из reward_items.json по SKU), и ключ — это id товара
-    /// товара (<see cref="IBackPackProduct.Id"/>, каталог — <see cref="IBackPackProductCatalog"/>).
-    /// Активировать предмет — значит выдать игроку эти товары.
+    /// What an item grants is decided by the game, not the server: the server attaches
+    /// reward keys to the item (Rewards, from reward_items.json by SKU), and a key is a product id
+    /// (<see cref="IBackPackProduct.Id"/>, catalog — <see cref="IBackPackProductCatalog"/>).
+    /// Activating an item means granting these products to the player.
     ///
-    /// Активация в два шага, и оба несущие:
+    /// Activation takes two steps, and both are load-bearing:
     /// <list type="number">
-    /// <item>«Активировать» в окне только ВЫБИРАЕТ предмет — на сервер ничего не
-    /// уходит. Применимо ли товар, можно узнать только у идущего заезда
-    /// (<see cref="IBackPackProduct.CanApply"/>), а до старта его нет, и сам старт
-    /// сбросил бы выданное. Если же
-    /// окно открыто посреди заезда, неприменимый прямо сейчас товар
-    /// выбрать не дадим.</item>
-    /// <item>Когда товар есть куда выдать (сразу после старта заезда), открывший окно зовёт
-    /// <see cref="ActivateSelectedAsync"/>: по каждому выбранному предмету
-    /// проверяем, применим ли товар; неприменимый НЕ тратим — предмет остаётся
-    /// в рюкзаке. Применимый удаляем на сервере, и товар выдаём ТОЛЬКО после
-    /// подтверждённого удаления: не удалось — не выдаём, предмет остаётся.</item>
+    /// <item>"Activate" in the window only SELECTS the item — nothing is sent
+    /// to the server. Whether a product is applicable can only be asked of an ongoing run
+    /// (<see cref="IBackPackProduct.CanApply"/>), and before the start there is none, and the start itself
+    /// would reset whatever was granted. If, however, the
+    /// window is opened mid-run, a product that is not applicable right now
+    /// cannot be selected.</item>
+    /// <item>Once there is somewhere to grant the product (right after the run starts), whoever opened the window calls
+    /// <see cref="ActivateSelectedAsync"/>: for each selected item
+    /// we check whether the product is applicable; an inapplicable one is NOT spent — the item stays
+    /// in the backpack. An applicable one is deleted on the server, and the product is granted ONLY after
+    /// a confirmed deletion: if it fails, nothing is granted and the item stays.</item>
     /// </list>
-    /// Выбрать нельзя предмет, чью награду игра не знает (нет товара с таким id),
-    /// чей товар не годится для момента, в который открыли окно
-    /// (<see cref="IBackPackProduct.IsUsableIn"/>), и сверх того, сколько товара можно держать разом
+    /// An item cannot be selected if the game doesn't know its reward (no product with that id),
+    /// if its product doesn't fit the moment the window was opened for
+    /// (<see cref="IBackPackProduct.IsUsableIn"/>), or beyond how much of the product can be held at once
     /// (<see cref="IBackPackProduct.Max"/>).
     ///
-    /// Рюкзак есть только у вошедшего игрока, поэтому у окна две панели, и на
-    /// экране всегда ровно одна: нет xsollaID — панель входа (призыв войти и
-    /// кнопка входа через Xsolla ID, см. <see cref="BindAuth"/>), есть — панель
-    /// предметов. После входа окно само переключается на предметы и перечитывает
-    /// рюкзак. Кнопка сайта BackPack (там рюкзак целиком, со всеми играми) видна
-    /// в обоих случаях.
+    /// Only a signed-in player has a backpack, so the window has two panels, and
+    /// exactly one is always on screen: no xsollaID — the sign-in panel (a sign-in prompt and
+    /// a Xsolla ID sign-in button, see <see cref="BindAuth"/>), otherwise — the items
+    /// panel. After sign-in the window switches to items by itself and reloads the
+    /// backpack. The BackPack site button (the full backpack there, across all games) is visible
+    /// in both cases.
     ///
-    /// Связь с сервером проверяет не окно, а тот, кто его открывает
-    /// (<see cref="CheckConnectionAsync"/>): без связи рюкзак открывать незачем.
+    /// The server connection is checked not by the window but by whoever opens it
+    /// (<see cref="CheckConnectionAsync"/>): without a connection there is no point opening the backpack.
     ///
-    /// Открывающий сперва отдаёт через <see cref="Prepare"/>, в какой момент будут
-    /// выданы товары, что делать по «Продолжить» и по «назад». Например, главное меню
-    /// по кнопке «играть»: <see cref="ProductUseContext.RunStart"/>, «Продолжить»
-    /// начинает заезд, «назад» возвращает в меню. Само окно про заезд
-    /// ничего не знает — поэтому его может открыть перед собой и любое другое окно.
+    /// The opener first passes via <see cref="Prepare"/> the moment at which products will
+    /// be granted, and what to do on "Continue" and on "back". For example, the main menu
+    /// on the "play" button: <see cref="ProductUseContext.RunStart"/>, "Continue"
+    /// starts the run, "back" returns to the menu. The window itself knows nothing
+    /// about runs — so any other window can open it in front of itself.
     /// </summary>
     public sealed class UserBackPackWindow : MenuPageWindow
     {
-        [Header("Панели")]
+        [Header("Panels")]
 
-        [Tooltip("Панель предметов: сетка карточек и строка состояния. Видна вошедшему игроку.")]
+        [Tooltip("Items panel: card grid and status line. Visible to a signed-in player.")]
         [SerializeField] private GameObject _itemsPanel;
 
-        [Tooltip("Панель входа: призыв войти и кнопка входа. Видна, пока у игрока нет xsollaID.")]
+        [Tooltip("Sign-in panel: sign-in prompt and sign-in button. Visible while the player has no xsollaID.")]
         [SerializeField] private GameObject _signInPanel;
 
-        [Header("Список предметов")]
+        [Header("Item list")]
 
-        [Tooltip("Шаблон карточки предмета (обычно отдельный префаб). Лежит в сцене — держи " +
-                 "выключенным: включённый останется на экране лишней карточкой.")]
+        [Tooltip("Item card template (usually a separate prefab). If it lives in the scene, keep it " +
+                 "disabled: an enabled one stays on screen as an extra card.")]
         [SerializeField] private BackPackItemView _itemTemplate;
 
-        [Tooltip("Куда класть карточки (объект с GridLayoutGroup). Пусто — родитель шаблона.")]
+        [Tooltip("Where to put cards (object with a GridLayoutGroup). Empty — the template's parent.")]
         [SerializeField] private Transform _itemsRoot;
 
-        [Header("Состояние")]
+        [Header("Status")]
 
-        [Tooltip("Строка вместо списка: загрузка, пусто, ошибка. Необязательна.")]
+        [Tooltip("Line shown instead of the list: loading, empty, error. Optional.")]
         [SerializeField] private TMP_Text _statusLabel;
 
         [SerializeField] private string _loadingText = "LOADING...";
 
-        [Tooltip("Рюкзак пуст — подходящих этой игре предметов в нём нет.")]
+        [Tooltip("Backpack is empty — it has no items compatible with this game.")]
         [SerializeField] private string _emptyText = "NO COMPATIBLE ITEMS";
 
         [SerializeField] private string _errorText = "COULDN'T LOAD YOUR BACKPACK";
 
-        [Header("Вход через Xsolla ID")]
+        [Header("Xsolla ID sign-in")]
 
-        [Tooltip("Надпись на панели входа: призыв войти, «проверяем аккаунт», причина неудачи.")]
+        [Tooltip("Text on the sign-in panel: sign-in prompt, 'checking account', failure reason.")]
         [SerializeField] private TMP_Text _signInMessage;
 
-        [Tooltip("Кнопка «войти». Видна только гостю и только когда вход вообще доступен.")]
+        [Tooltip("'Sign in' button. Visible only to a guest and only when sign-in is available at all.")]
         [SerializeField] private Button _signInButton;
 
-        [Tooltip("Подпись кнопки входа: меняется на «входим…», пока открыто окно входа. Необязательна.")]
+        [Tooltip("Sign-in button label: changes to 'signing in...' while the sign-in window is open. Optional.")]
         [SerializeField] private TMP_Text _signInLabel;
 
         [SerializeField] private string _signInText = "SIGN IN";
@@ -113,94 +113,94 @@ namespace LongLeap.UI
         [SerializeField] private string _signInFailedText = "SIGN-IN FAILED. PLEASE TRY AGAIN";
         [SerializeField] private string _popupBlockedText = "POP-UP BLOCKED. ALLOW POP-UPS AND TRY AGAIN";
 
-        [Tooltip("Сколько ждать, пока восстановится прошлая сессия, прежде чем показать гостя.")]
+        [Tooltip("How long to wait for the previous session to restore before showing the guest state.")]
         [Min(1f)] [SerializeField] private float _readyTimeoutSeconds = 12f;
 
-        [Header("Сайт BackPack")]
+        [Header("BackPack site")]
 
-        [Tooltip("Кнопка «открыть BackPack»: сайт с рюкзаком игрока.")]
+        [Tooltip("'Open BackPack' button: the site with the player's backpack.")]
         [SerializeField] private Button _openBackPackButton;
 
         [SerializeField] private string _backPackUrl = "https://backpack.xsolla.com/";
 
-        [Header("Продолжить")]
+        [Header("Continue")]
 
-        [Tooltip("Кнопка «Продолжить»: отдаёт управление тому, кто открыл окно (см. Prepare).")]
+        [Tooltip("'Continue' button: hands control back to whoever opened the window (see Prepare).")]
         [SerializeField] private Button _continueButton;
 
         private readonly List<BackPackItemView> _itemViews = new List<BackPackItemView>();
 
-        /// <summary>Выбранные на заезд предметы, в порядке выбора — в нём же и активируются.</summary>
+        /// <summary>Items selected for the run, in selection order — they are activated in that order too.</summary>
         private readonly List<BackPackRewardItem> _selected = new List<BackPackRewardItem>();
 
-        /// <summary>Под товары одного предмета, чтобы не заводить список на каждую проверку.</summary>
+        /// <summary>For one item's products, so a list isn't allocated on every check.</summary>
         private readonly List<IBackPackProduct> _productsScratch = new List<IBackPackProduct>();
 
-        /// <summary>Под строки наград одной карточки — карточка разбирает их сразу.</summary>
+        /// <summary>For one card's reward rows — the card consumes them immediately.</summary>
         private readonly List<BackPackRewardEntry> _rewardsScratch = new List<BackPackRewardEntry>();
 
         private readonly RemoteSpriteCache _icons = new RemoteSpriteCache();
 
         /// <summary>
-        /// Приносит загрузка игры — окно само про контейнер сервисов не знает. До того
-        /// (и если не принесли) — <see cref="NullBackPackService"/>: выключенный BackPack.
+        /// Provided by game loading — the window itself knows nothing about the service container. Until then
+        /// (and if not provided) — <see cref="NullBackPackService"/>: BackPack disabled.
         /// </summary>
         private IBackPackService _backPack = NullBackPackService.Instance;
 
-        /// <summary>Вход через Xsolla ID. Приносит загрузка, как и <see cref="_backPack"/>.</summary>
+        /// <summary>Xsolla ID sign-in. Provided by loading, like <see cref="_backPack"/>.</summary>
         private IXsollaIdAuth _auth;
 
-        /// <summary>Товары — их id и есть ключи наград. Приносит загрузка.</summary>
+        /// <summary>Products — their ids are the reward keys. Provided by loading.</summary>
         private IBackPackProductCatalog _catalog;
 
-        /// <summary>Идёт ли заезд, когда выдаём товар. Приносит загрузка.</summary>
+        /// <summary>Whether a run is in progress when the product is granted. Provided by loading.</summary>
         private Func<bool> _isRunActive;
 
-        /// <summary>Окно входа открыто и ждёт игрока.</summary>
+        /// <summary>The sign-in window is open and waiting for the player.</summary>
         private Task<XsollaIdResult> _signInTask;
 
-        /// <summary>Что сказать гостю о последней неудачной попытке входа. Null — ничего.</summary>
+        /// <summary>What to tell the guest about the last failed sign-in attempt. Null — nothing.</summary>
         private string _signInError;
 
-        /// <summary>Ждём, пока восстановится прошлая сессия: события об этом у IXsollaIdAuth нет.</summary>
+        /// <summary>Waiting for the previous session to restore: IXsollaIdAuth has no event for that.</summary>
         private Coroutine _readyWatch;
         private bool _readyTimedOut;
 
-        /// <summary>Что делать по «Продолжить» — задаёт открывающее окно в <see cref="Prepare"/>.</summary>
+        /// <summary>What to do on "Continue" — set by the opening window in <see cref="Prepare"/>.</summary>
         private Func<Task> _onContinue;
 
-        /// <summary>Куда вернуться по «назад». Не задано — в главное меню, как у любой страницы меню.</summary>
+        /// <summary>Where to go on "back". Not set — to the main menu, like any menu page.</summary>
         private Func<Task> _onBack;
 
         /// <summary>
-        /// В какой момент будут выданы выбранные товары — задаёт открывающее окно в
-        /// <see cref="Prepare"/>. До этого None: выбрать нельзя ничего.
+        /// The moment at which the selected products will be granted — set by the opening window in
+        /// <see cref="Prepare"/>. Until then None: nothing can be selected.
         /// </summary>
         private ProductUseContext _context = ProductUseContext.None;
 
         /// <summary>
-        /// Номер загрузки списка. Ответ на устаревший запрос (окно успели закрыть и
-        /// открыть снова) отбрасываем по нему, иначе старый список лёг бы поверх нового.
+        /// List load number. A reply to a stale request (the window was closed and
+        /// reopened meanwhile) is discarded by it, otherwise the old list would land on top of the new one.
         /// </summary>
         private int _loadVersion;
 
         /// <summary>
-        /// Отмена идущей загрузки списка: новая загрузка, закрытие и уничтожение окна
-        /// обрывают запрос, а не ждут ответа, который всё равно выбросят.
+        /// Cancellation of the ongoing list load: a new load, closing or destroying the window
+        /// abort the request instead of waiting for a reply that would be thrown away anyway.
         /// </summary>
         private CancellationTokenSource _loadCancellation;
 
         private bool _warnedNoService;
 
-        /// <summary>Выбранные на заезд предметы — активируются в <see cref="ActivateSelectedAsync"/>.</summary>
+        /// <summary>Items selected for the run — activated in <see cref="ActivateSelectedAsync"/>.</summary>
         public IReadOnlyList<BackPackRewardItem> SelectedItems => _selected;
 
-        /// <summary>Предмет активирован: сервер подтвердил удаление, и его товары выданы.</summary>
+        /// <summary>An item was activated: the server confirmed the deletion and its products were granted.</summary>
         public event Action<BackPackRewardItem> ItemActivated;
 
         /// <summary>
-        /// Отдать окну сервис BackPack-сервера. Зовёт загрузка; без него (или с
-        /// выключенным) окно покажет ошибку вместо списка, а «Продолжить» работает как обычно.
+        /// Give the window the BackPack server service. Called by loading; without it (or with
+        /// a disabled one) the window shows an error instead of the list, and "Continue" works as usual.
         /// </summary>
         public void BindBackPack(IBackPackService backPack)
         {
@@ -211,12 +211,12 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Отдать окну вход через Xsolla ID. Зовёт загрузка; без него кнопки входа
-        /// нет, и гость просто видит, что вход недоступен.
+        /// Give the window Xsolla ID sign-in. Called by loading; without it there is no
+        /// sign-in button, and the guest simply sees that sign-in is unavailable.
         ///
-        /// На вход и выход подписываемся сразу и насовсем: объект окна живёт всю
-        /// игру (см. <see cref="WindowBase"/>), и вошедшему игроку открытое окно
-        /// должно перечитать рюкзак тут же, не дожидаясь переоткрытия.
+        /// We subscribe to sign-in and sign-out immediately and permanently: the window object lives for the whole
+        /// game (see <see cref="WindowBase"/>), and for a player who just signed in an open window
+        /// must reload the backpack right away, without waiting to be reopened.
         /// </summary>
         public void BindAuth(IXsollaIdAuth auth)
         {
@@ -237,19 +237,19 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Задать, что делать по кнопкам окна. Зовёт открывающее окно до
-        /// <c>OpenAsync</c>. Закрывается окно само — после того, как отработает
-        /// переданное действие, так что на экране не мелькнёт пустота.
+        /// Set what the window's buttons do. Called by the opening window before
+        /// <c>OpenAsync</c>. The window closes itself — after the passed action
+        /// has run, so no empty screen flashes in between.
         /// </summary>
         /// <param name="context">
-        /// В какой момент будут выданы выбранные товары: предметы с товаром, который
-        /// для этого момента не отмечен (<see cref="IBackPackProduct.IsUsableIn"/>), выбрать нельзя.
+        /// The moment at which the selected products will be granted: items whose product is
+        /// not marked for this moment (<see cref="IBackPackProduct.IsUsableIn"/>) cannot be selected.
         /// </param>
-        /// <param name="onContinue">«Продолжить»: например, начать заезд.</param>
-        /// <param name="onBack">«Назад»: например, снова открыть выбор уровня. Null — в главное меню.</param>
+        /// <param name="onContinue">"Continue": e.g. start the run.</param>
+        /// <param name="onBack">"Back": e.g. reopen level selection. Null — to the main menu.</param>
         public void Prepare(ProductUseContext context, Func<Task> onContinue, Func<Task> onBack)
         {
-            // Выбор делали под другой момент — в новом он может быть неприменим.
+            // The selection was made for a different moment — it may be inapplicable in the new one.
             if (context != _context)
                 _selected.Clear();
 
@@ -262,16 +262,16 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Есть ли связь с BackPack-сервером. Зовёт тот, кто собирается открыть
-        /// окно: без связи рюкзак показать нечем, и игрока лучше сразу пустить
-        /// дальше. BackPack выключен — связи тоже нет.
+        /// Whether the BackPack server is reachable. Called by whoever is about to open
+        /// the window: without a connection there is nothing to show, and the player is better let
+        /// straight through. BackPack disabled — no connection either.
         /// </summary>
         public Task<BackPackConnectionResult> CheckConnectionAsync(CancellationToken cancellationToken = default) =>
             _backPack.CheckConnectionAsync(cancellationToken);
 
         /// <summary>
-        /// Отдать окну каталог товаров (их id — ключи наград предметов) и способ узнать,
-        /// идёт ли заезд, в который их выдавать. Зовёт загрузка.
+        /// Give the window the product catalog (their ids are the items' reward keys) and a way to tell
+        /// whether the run to grant them into is in progress. Called by loading.
         /// </summary>
         public void BindRewards(IBackPackProductCatalog catalog, Func<bool> isRunActive)
         {
@@ -283,23 +283,23 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Активировать выбранные предметы. Зовёт тот, кто открыл окно, когда заезд
-        /// идёт: СРАЗУ ПОСЛЕ его старта (до старта заезда нет, и проверять
-        /// применимость не у чего, а сам старт сбросил бы выданное).
-        /// Возвращает, сколько предметов активировано.
+        /// Activate the selected items. Called by whoever opened the window while the run
+        /// is in progress: RIGHT AFTER it starts (before the start there is no run to check
+        /// applicability against, and the start itself would reset whatever was granted).
+        /// Returns how many items were activated.
         ///
-        /// По каждому предмету, по очереди (выданный щит меняет применимость
-        /// следующего):
+        /// For each item, one at a time (a granted shield changes the applicability
+        /// of the next one):
         /// <list type="number">
-        /// <item>товар сейчас неприменим — предмет НЕ тратим, он остаётся в рюкзаке;</item>
-        /// <item>удаляем предмет на сервере — по id экземпляра: по sku сервер снёс бы
-        /// все предметы этого типа;</item>
-        /// <item>товар выдаём, только если сервер ПОДТВЕРДИЛ удаление именно этого
-        /// экземпляра (outcome "item_deleted" в отчёте, а не просто 200). Нет связи,
-        /// ошибка, таймаут — не выдаём, предмет остаётся.</item>
+        /// <item>product is currently inapplicable — the item is NOT spent, it stays in the backpack;</item>
+        /// <item>delete the item on the server — by instance id: by sku the server would wipe
+        /// all items of that type;</item>
+        /// <item>grant the product only if the server CONFIRMED deletion of exactly this
+        /// instance (outcome "item_deleted" in the report, not just 200). No connection,
+        /// error, timeout — nothing is granted, the item stays.</item>
         /// </list>
-        /// Выбор при этом забирается из окна сразу: второй раз тот же предмет не
-        /// пойдёт на сервер, даже если окно откроют, пока идут запросы.
+        /// The selection is taken from the window right away: the same item won't
+        /// go to the server a second time, even if the window is opened while requests are in flight.
         /// </summary>
         public async Task<int> ActivateSelectedAsync()
         {
@@ -312,8 +312,8 @@ namespace LongLeap.UI
             if (_catalog == null || _isRunActive == null || !_backPack.IsAvailable)
             {
                 Debug.LogError(
-                    $"[BackPack] {items.Length} выбранных предметов не активировать: окну не принесли " +
-                    "каталог товаров, заезд (BindRewards) или BackPack выключен. Предметы остаются в рюкзаке.", this);
+                    $"[BackPack] {items.Length} selected items can't be activated: the window wasn't given " +
+                    "the product catalog or run state (BindRewards), or BackPack is disabled. Items stay in the backpack.", this);
                 return 0;
             }
 
@@ -325,46 +325,46 @@ namespace LongLeap.UI
                 if (!TryResolveProducts(item, products))
                 {
                     Debug.LogWarning(
-                        $"[BackPack] предмет «{item.Sku}»: награды [{Describe(item.Rewards)}] нет среди " +
-                        "товаров каталога — не тратим, предмет остаётся в рюкзаке.", this);
+                        $"[BackPack] item '{item.Sku}': rewards [{Describe(item.Rewards)}] are not among " +
+                        "the catalog products — not spending it, the item stays in the backpack.", this);
                     continue;
                 }
 
-                // Проверяем ДО удаления: неприменимый товар — не повод тратить предмет.
+                // Check BEFORE deleting: an inapplicable product is no reason to spend the item.
                 if (!CanApplyAll(products, out var blocked))
                 {
                     Debug.LogWarning(
-                        $"[BackPack] предмет «{item.Sku}»: товар «{blocked.Id}» сейчас неприменим — " +
-                        "не тратим, предмет остаётся в рюкзаке.", this);
+                        $"[BackPack] item '{item.Sku}': product '{blocked.Id}' is currently inapplicable — " +
+                        "not spending it, the item stays in the backpack.", this);
                     continue;
                 }
 
-                // Без отмены: оборванный DELETE мог уже удалить предмет на сервере,
-                // и тогда игрок остался бы и без предмета, и без товара.
+                // No cancellation: an aborted DELETE may already have deleted the item on the server,
+                // and then the player would be left with neither the item nor the product.
                 var deleted = await _backPack.DeleteItemAsync(item.Id);
 
                 if (this == null) return activated;
 
                 if (!deleted.IsDeleted)
                 {
-                    // «Уже не было» — не наша трата: предмет потратили в другом месте
-                    // (вторая вкладка, другое устройство), и выдать за него товар — подарить его.
+                    // "Already gone" is not our spend: the item was spent elsewhere
+                    // (another tab, another device), and granting a product for it would be giving it away.
                     Debug.LogWarning(
                         deleted.Outcome == BackPackDeleteResult.OutcomeAlreadyGone
-                            ? $"[BackPack] предмета «{item.Sku}» ({item.Id}) уже нет в рюкзаке — товар не выдаём."
-                            : $"[BackPack] предмет «{item.Sku}» ({item.Id}) не удалён на сервере ({deleted.Error}) — " +
-                              "товар не выдаём, предмет остаётся в рюкзаке.",
+                            ? $"[BackPack] item '{item.Sku}' ({item.Id}) is no longer in the backpack — not granting the product."
+                            : $"[BackPack] item '{item.Sku}' ({item.Id}) was not deleted on the server ({deleted.Error}) — " +
+                              "not granting the product, the item stays in the backpack.",
                         this);
                     continue;
                 }
 
-                // Удалён точно — выдаём. Применимость не перепроверяем: предмет уже
-                // потрачен, и за доли секунды ответа отнять у игрока его товар нельзя.
+                // Definitely deleted — grant. Applicability is not rechecked: the item is already
+                // spent, and the player can't be denied its product over a fraction of a second of reply time.
                 if (!_isRunActive())
                 {
                     Debug.LogError(
-                        $"[BackPack] предмет «{item.Sku}» удалён, но заезд закончился раньше, чем " +
-                        "ответил сервер, — товар выдать некуда.", this);
+                        $"[BackPack] item '{item.Sku}' was deleted, but the run ended before " +
+                        "the server replied — nowhere to grant the product.", this);
                     continue;
                 }
 
@@ -373,7 +373,7 @@ namespace LongLeap.UI
 
                 activated++;
                 Debug.Log(
-                    $"[BackPack] предмет «{item.Sku}» активирован: удалён на сервере, выдано " +
+                    $"[BackPack] item '{item.Sku}' activated: deleted on the server, granted " +
                     $"[{Describe(item.Rewards)}].", this);
                 ItemActivated?.Invoke(item);
             }
@@ -385,7 +385,7 @@ namespace LongLeap.UI
         {
             await base.OpenAsync();
 
-            // Не ждём: окно появляется сразу со строкой «загрузка», список дорисуется по ответу.
+            // Don't await: the window appears immediately with the "loading" line; the list is drawn when the reply arrives.
             Forget(ReloadAsync());
         }
 
@@ -395,7 +395,7 @@ namespace LongLeap.UI
             return base.CloseAsync();
         }
 
-        /// <summary>«Назад» ведёт туда, откуда пришли (см. <see cref="Prepare"/>), а не сразу в меню.</summary>
+        /// <summary>"Back" leads to where we came from (see <see cref="Prepare"/>), not straight to the menu.</summary>
         public override async Task BackAsync()
         {
             if (_onBack == null)
@@ -445,10 +445,10 @@ namespace LongLeap.UI
         }
 
         // =========================================================
-        // СПИСОК
+        // LIST
         // =========================================================
 
-        /// <summary>Перечитать рюкзак с сервера и перестроить карточки.</summary>
+        /// <summary>Reload the backpack from the server and rebuild the cards.</summary>
         private async Task ReloadAsync()
         {
             var version = ++_loadVersion;
@@ -458,16 +458,16 @@ namespace LongLeap.UI
             ClearItems();
             RefreshSignInButton();
 
-            // Выключенный BackPack — не повод звать гостя входить: и после входа
-            // показать будет нечего.
+            // A disabled BackPack is no reason to ask the guest to sign in: even after sign-in
+            // there would be nothing to show.
             if (!_backPack.IsAvailable)
             {
                 if (!_warnedNoService)
                 {
                     _warnedNoService = true;
                     Debug.LogWarning(
-                        $"[BackPack] рюкзак выключен ({_backPack}): конфиг не заполнен или BackPackTask " +
-                        "не отработал — показать нечего.", this);
+                        $"[BackPack] backpack is disabled ({_backPack}): config not filled in or BackPackTask " +
+                        "didn't run — nothing to show.", this);
                 }
 
                 ShowPanel(signedIn: true);
@@ -475,11 +475,11 @@ namespace LongLeap.UI
                 return;
             }
 
-            // Гость — не поломка: рюкзак есть только у вошедшего игрока. Вместо
-            // предметов — панель входа.
+            // A guest is not a failure: only a signed-in player has a backpack. Instead of
+            // items — the sign-in panel.
             if (!_backPack.HasXsollaId)
             {
-                // Выбор принадлежал вышедшему игроку — следующему он не достаётся.
+                // The selection belonged to the player who signed out — the next one doesn't inherit it.
                 _selected.Clear();
 
                 ShowPanel(signedIn: false);
@@ -501,20 +501,20 @@ namespace LongLeap.UI
             }
             catch (OperationCanceledException)
             {
-                // Загрузку оборвали намеренно (новая загрузка, закрытие) — сказать нечего.
+                // The load was aborted on purpose (new load, closing) — nothing to report.
                 return;
             }
 
-            // Пока шёл запрос, окно закрыли, переоткрыли или уничтожили — этот ответ уже никому не нужен.
+            // While the request was in flight the window was closed, reopened or destroyed — nobody needs this reply anymore.
             if (this == null || version != _loadVersion || !IsOpen) return;
 
             if (!reply.Success)
             {
-                // Списка на экране нет — и активировать игроку нечего: незаметный
-                // выбор, ушедший на сервер после старта, стал бы для него сюрпризом.
+                // No list on screen — so nothing for the player to activate either: an unseen
+                // selection sent to the server after the start would come as a surprise to them.
                 _selected.Clear();
 
-                Debug.LogWarning($"[BackPack] рюкзак не загрузился: {reply}", this);
+                Debug.LogWarning($"[BackPack] backpack failed to load: {reply}", this);
                 ShowStatus(_errorText);
                 return;
             }
@@ -546,8 +546,8 @@ namespace LongLeap.UI
             {
                 if (string.IsNullOrEmpty(item.Sku))
                 {
-                    Debug.LogError($"[BackPack] у предмета «{item.Id}» в ответе сервера нет sku — " +
-                                   "активировать его не получится, в список он не попадёт.", this);
+                    Debug.LogError($"[BackPack] item '{item.Id}' has no sku in the server reply — " +
+                                   "it can't be activated and won't be added to the list.", this);
                     continue;
                 }
 
@@ -559,8 +559,8 @@ namespace LongLeap.UI
                 if (view.ActivateButton != null)
                     view.ActivateButton.onClick.AddListener(() => OnActivate(view));
                 else
-                    Debug.LogError($"[BackPack] у карточки «{item.Sku}» нет кнопки «активировать» — " +
-                                   "активировать предмет не получится.", this);
+                    Debug.LogError($"[BackPack] card '{item.Sku}' has no 'activate' button — " +
+                                   "the item can't be activated.", this);
 
                 _itemViews.Add(view);
                 Forget(LoadIconAsync(view, item.IconUrl));
@@ -571,7 +571,7 @@ namespace LongLeap.UI
         {
             var sprite = await _icons.GetAsync(url);
 
-            // Пока качали, список могли перестроить — карточки уже нет.
+            // The list may have been rebuilt during the download — the card is gone.
             if (view != null && sprite != null)
                 view.SetIcon(sprite);
         }
@@ -588,16 +588,16 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Шаблон карточки. В сцене его гасим: включённым он остался бы на экране
-        /// лишней карточкой. Шаблон-префаб (не на сцене) не трогаем — это ассет.
+        /// The card template. In the scene it is disabled: if enabled it would remain on screen
+        /// as an extra card. A prefab template (not in the scene) is left alone — it's an asset.
         /// </summary>
         private BackPackItemView ResolveTemplate()
         {
             if (_itemTemplate == null)
             {
                 Debug.LogError(
-                    "[BackPack] рюкзаку не задан шаблон карточки (Item Template) — " +
-                    "список останется пустым.", this);
+                    "[BackPack] the backpack has no card template (Item Template) — " +
+                    "the list will stay empty.", this);
                 return null;
             }
 
@@ -607,7 +607,7 @@ namespace LongLeap.UI
             return _itemTemplate;
         }
 
-        /// <summary>Ровно одна панель на экране: предметы вошедшему, вход — гостю.</summary>
+        /// <summary>Exactly one panel on screen: items for a signed-in player, sign-in for a guest.</summary>
         private void ShowPanel(bool signedIn)
         {
             if (_itemsPanel != null)
@@ -623,7 +623,7 @@ namespace LongLeap.UI
                 _signInMessage.text = text ?? "";
         }
 
-        /// <summary>Строка состояния вместо списка. Пусто — строку прячем, виден список.</summary>
+        /// <summary>Status line instead of the list. Empty — the line is hidden and the list is visible.</summary>
         private void ShowStatus(string text)
         {
             if (_statusLabel == null) return;
@@ -636,10 +636,10 @@ namespace LongLeap.UI
         }
 
         // =========================================================
-        // ВЫБОР НА ЗАЕЗД
+        // SELECTION FOR THE RUN
         // =========================================================
 
-        /// <summary>«Активировать» — выбрать предмет на заезд или снять выбор.</summary>
+        /// <summary>"Activate" — select the item for the run or deselect it.</summary>
         private void OnActivate(BackPackItemView view)
         {
             var item = view != null ? view.Item : null;
@@ -655,7 +655,7 @@ namespace LongLeap.UI
             RefreshItemStates();
         }
 
-        /// <summary>Перерисовать все карточки: выбор одной меняет доступность других (лимит товара).</summary>
+        /// <summary>Redraw all cards: selecting one changes the availability of others (product limit).</summary>
         private void RefreshItemStates()
         {
             foreach (var view in _itemViews)
@@ -666,9 +666,9 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Показать на карточках, что игрок получит при активации. Иконки и подписи
-        /// знает только каталог товаров, а он может прийти позже списка — поэтому зовём
-        /// и из <see cref="BindRewards"/>.
+        /// Show on the cards what the player gets on activation. Icons and labels
+        /// are known only to the product catalog, which may arrive after the list — so this is also called
+        /// from <see cref="BindRewards"/>.
         /// </summary>
         private void RefreshItemRewards()
         {
@@ -680,14 +680,14 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Награды предмета строками для карточки: строки товара из каталога
-        /// (<see cref="IBackPackProduct.Rewards"/>, «+$100»). Повтор товара —
-        /// «x2» к каждой его строке. Эффектам нечего показать — строка с названием
-        /// товара, чтобы награда не пропала с карточки молча. Ключи, которых игра
-        /// не знает, пропускаем: показать их нечем, а выбрать такой предмет и так
-        /// нельзя (см. <see cref="StateOf"/>).
+        /// The item's rewards as rows for the card: the product's rows from the catalog
+        /// (<see cref="IBackPackProduct.Rewards"/>, "+$100"). A repeated product —
+        /// "x2" on each of its rows. If the effects have nothing to show — a row with the product
+        /// title, so the reward doesn't silently vanish from the card. Keys the game
+        /// doesn't know are skipped: there's nothing to show for them, and such an item can't
+        /// be selected anyway (see <see cref="StateOf"/>).
         ///
-        /// Список общий на все карточки: карточка разбирает его сразу, не храня.
+        /// The list is shared by all cards: the card consumes it immediately without storing it.
         /// </summary>
         private IReadOnlyList<BackPackRewardEntry> RewardEntries(BackPackRewardItem item)
         {
@@ -707,7 +707,7 @@ namespace LongLeap.UI
             {
                 var product = _productsScratch[i];
 
-                // Повтор уже посчитан на первом вхождении.
+                // The repeat was already counted at the first occurrence.
                 if (_productsScratch.IndexOf(product) < i) continue;
 
                 var count = CountOf(_productsScratch, product);
@@ -741,32 +741,32 @@ namespace LongLeap.UI
             if (IndexOfSelected(item) >= 0)
                 return BackPackItemState.Selected;
 
-            // Без id экземпляра потратить ровно этот предмет нельзя: по sku сервер
-            // удалил бы все предметы этого типа.
+            // Without an instance id this exact item can't be spent: by sku the server
+            // would delete all items of that type.
             if (string.IsNullOrEmpty(item.Id))
                 return BackPackItemState.Unavailable;
 
             if (!TryResolveProducts(item, _productsScratch))
                 return BackPackItemState.Unavailable;
 
-            // Хоть один товар не годится для этого момента — при выдаче предмет
-            // оказался бы неприменим.
+            // If even one product doesn't fit this moment, the item would turn out
+            // inapplicable when granted.
             foreach (var product in _productsScratch)
             {
                 if (!product.IsUsableIn(_context))
                     return BackPackItemState.Unavailable;
             }
 
-            // Уже выбранное плюс то, что даст этот предмет, — не больше, чем товара
-            // можно держать разом (Max). А если заезд уже идёт, то и не больше, чем
-            // он примет прямо сейчас. Лишний предмет при выдаче оказался бы неприменим.
+            // What's already selected plus what this item grants — no more than can be
+            // held of the product at once (Max). And if a run is already in progress, no more than
+            // it will accept right now. An extra item would turn out inapplicable when granted.
             var runActive = _isRunActive != null && _isRunActive();
 
             for (var i = 0; i < _productsScratch.Count; i++)
             {
                 var product = _productsScratch[i];
 
-                // Повтор уже посчитан на первом вхождении.
+                // The repeat was already counted at the first occurrence.
                 if (_productsScratch.IndexOf(product) < i) continue;
 
                 var wanted = CountSelected(product.Id) + CountOf(_productsScratch, product);
@@ -783,9 +783,9 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Товары, которые выдаёт предмет, — по одному на каждый ключ его наград.
-        /// Хотя бы один ключ игре неизвестен — false: выдать предмет наполовину
-        /// и потратить целиком нельзя.
+        /// The products an item grants — one per each of its reward keys.
+        /// If even one key is unknown to the game — false: an item can't be granted halfway
+        /// and spent in full.
         /// </summary>
         private bool TryResolveProducts(BackPackRewardItem item, List<IBackPackProduct> products)
         {
@@ -823,7 +823,7 @@ namespace LongLeap.UI
             return true;
         }
 
-        /// <summary>Сколько раз товар встречается в списке — повтор ключа в наградах одного предмета.</summary>
+        /// <summary>How many times the product occurs in the list — a repeated key in one item's rewards.</summary>
         private static int CountOf(List<IBackPackProduct> products, IBackPackProduct product)
         {
             var count = 0;
@@ -837,7 +837,7 @@ namespace LongLeap.UI
             return count;
         }
 
-        /// <summary>Сколько раз товар встречается в наградах уже выбранных предметов.</summary>
+        /// <summary>How many times the product occurs in the rewards of already selected items.</summary>
         private int CountSelected(string productId)
         {
             var count = 0;
@@ -857,8 +857,8 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Выбор переживает перечитывание рюкзака: объекты предметов приходят новые,
-        /// поэтому сверяем по id экземпляра. Чего в рюкзаке больше нет — из выбора уходит.
+        /// The selection survives a backpack reload: item objects arrive as new ones,
+        /// so we match by instance id. Whatever is no longer in the backpack leaves the selection.
         /// </summary>
         private void KeepSelectionOf(IReadOnlyList<BackPackRewardItem> items)
         {
@@ -895,7 +895,7 @@ namespace LongLeap.UI
             return null;
         }
 
-        /// <summary>Тот же экземпляр в рюкзаке: по id, а без id — тот же объект.</summary>
+        /// <summary>The same instance in the backpack: by id, and without an id — the same object.</summary>
         private static bool IsSame(BackPackRewardItem a, BackPackRewardItem b) =>
             ReferenceEquals(a, b) ||
             (!string.IsNullOrEmpty(a.Id) && string.Equals(a.Id, b.Id, StringComparison.Ordinal));
@@ -904,16 +904,16 @@ namespace LongLeap.UI
             keys == null || keys.Length == 0 ? "" : string.Join(", ", keys);
 
         // =========================================================
-        // ВХОД ЧЕРЕЗ XSOLLA ID
+        // XSOLLA ID SIGN-IN
         // =========================================================
 
-        /// <summary>Что показать гостю вместо списка.</summary>
+        /// <summary>What to show the guest instead of the list.</summary>
         private string GuestStatus()
         {
             if (_auth == null || !_auth.IsAvailable)
                 return _signInUnavailableText;
 
-            // Прошлая сессия ещё восстанавливается: объявлять игрока гостем рано.
+            // The previous session is still being restored: too early to declare the player a guest.
             if (!_auth.IsReady && !_readyTimedOut)
                 return _checkingText;
 
@@ -921,9 +921,9 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Кнопка входа видна только гостю, когда вход доступен и прошлая сессия
-        /// уже не восстанавливается, — иначе игрок нажал бы «войти», будучи уже
-        /// почти вошедшим.
+        /// The sign-in button is visible only to a guest, when sign-in is available and the previous session
+        /// is no longer being restored — otherwise the player might press "sign in" while already
+        /// almost signed in.
         /// </summary>
         private void RefreshSignInButton()
         {
@@ -943,15 +943,15 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// ВНИМАНИЕ: SignInAsync зовём СИНХРОННО, прямо из нажатия, без единого
-        /// await до него — иначе браузер сочтёт окно входа непрошеным и
-        /// заблокирует (как в XsollaIdAccountWidget).
+        /// WARNING: SignInAsync is called SYNCHRONOUSLY, straight from the click, without a single
+        /// await before it — otherwise the browser treats the sign-in window as unsolicited and
+        /// blocks it (as in XsollaIdAccountWidget).
         /// </summary>
         private void OnSignIn()
         {
             if (_auth == null || !_auth.IsAvailable) return;
 
-            // Окно входа уже открыто — второе не нужно.
+            // The sign-in window is already open — no need for a second one.
             if (_signInTask != null && !_signInTask.IsCompleted) return;
 
             var task = _auth.SignInAsync();
@@ -967,8 +967,8 @@ namespace LongLeap.UI
         {
             XsollaIdResult result;
 
-            // Из IXsollaIdAuth исключения не летят, но задача, сорванная чем-то
-            // посторонним, не должна оставить кнопку в «входим…» навсегда.
+            // IXsollaIdAuth doesn't throw, but a task broken by something
+            // external must not leave the button stuck in "signing in..." forever.
             try
             {
                 result = await task;
@@ -985,10 +985,10 @@ namespace LongLeap.UI
 
             RefreshSignInButton();
 
-            // Удачный вход перечитает рюкзак сам — через событие SignedIn.
+            // A successful sign-in reloads the backpack on its own — via the SignedIn event.
             if (!(result is XsollaIdResult.Failure failure)) return;
 
-            Debug.LogWarning($"[BackPack] вход через Xsolla ID не состоялся — {failure.Code}: {failure.Message}", this);
+            Debug.LogWarning($"[BackPack] Xsolla ID sign-in failed — {failure.Code}: {failure.Message}", this);
 
             _signInError = SignInErrorText(failure.Code);
 
@@ -997,8 +997,8 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Игрок сам закрыл окно входа — это не ошибка, жаловаться не на что.
-        /// Остальное игроку неотличимо: вход не состоялся, стоит повторить.
+        /// The player closed the sign-in window themselves — not an error, nothing to complain about.
+        /// The rest is indistinguishable to the player: sign-in failed, worth trying again.
         /// </summary>
         private string SignInErrorText(XsollaIdErrorCode code)
         {
@@ -1017,9 +1017,9 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Игрок вошёл — здесь или в блоке аккаунта главного меню. xsollaID для
-        /// BackPack к этому моменту уже записан: XsollaIdTask подписался на это
-        /// событие раньше окна и записывает его в BackPackIdentity первым.
+        /// The player signed in — here or in the main menu account block. The xsollaID for
+        /// BackPack is already stored by this point: XsollaIdTask subscribed to this
+        /// event before the window and writes it to BackPackIdentity first.
         /// </summary>
         private void OnSignedIn(XsollaIdSession session)
         {
@@ -1030,7 +1030,7 @@ namespace LongLeap.UI
                 Forget(ReloadAsync());
         }
 
-        /// <summary>Игрок вышел: чужой рюкзак на экране оставлять нельзя.</summary>
+        /// <summary>The player signed out: someone else's backpack must not stay on screen.</summary>
         private void OnSignedOut()
         {
             RefreshSignInButton();
@@ -1048,9 +1048,9 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// У IsReady нет события, а восстановление, которому нечего было
-        /// восстанавливать, не пришлёт и SignedOut, — поэтому, как и блок
-        /// аккаунта, опрашиваем, пока ответ не станет окончательным.
+        /// IsReady has no event, and a restore that had nothing to
+        /// restore won't send SignedOut either — so, like the account
+        /// block, we poll until the answer is final.
         /// </summary>
         private void StartReadyWatch()
         {
@@ -1062,7 +1062,7 @@ namespace LongLeap.UI
 
         private IEnumerator WatchReady()
         {
-            // Реальное время: меню может жить при замороженном игровом.
+            // Real time: the menu may be running while game time is frozen.
             var deadline = Time.unscaledTime + _readyTimeoutSeconds;
 
             while (!_auth.IsReady)
@@ -1071,8 +1071,8 @@ namespace LongLeap.UI
                 {
                     _readyTimedOut = true;
                     Debug.LogWarning(
-                        $"[BackPack] сессия Xsolla ID не восстановилась за {_readyTimeoutSeconds:0} с — " +
-                        "показываем гостя.", this);
+                        $"[BackPack] Xsolla ID session wasn't restored within {_readyTimeoutSeconds:0} s — " +
+                        "showing the guest state.", this);
                     break;
                 }
 
@@ -1088,12 +1088,12 @@ namespace LongLeap.UI
         }
 
         // =========================================================
-        // САЙТ BACKPACK
+        // BACKPACK SITE
         // =========================================================
 
         /// <summary>
-        /// Открываем прямо из нажатия: в WebGL браузер разрешает новую вкладку
-        /// только как непосредственную реакцию на жест игрока.
+        /// Open straight from the click: in WebGL the browser allows a new tab
+        /// only as a direct response to a player gesture.
         /// </summary>
         private void OnOpenBackPack()
         {
@@ -1102,10 +1102,10 @@ namespace LongLeap.UI
         }
 
         // =========================================================
-        // ПРОДОЛЖИТЬ
+        // CONTINUE
         // =========================================================
 
-        /// <summary>Без действия «Продолжить» жать нечего — окно открыли, не позвав <see cref="Prepare"/>.</summary>
+        /// <summary>Without a "Continue" action there's nothing to press — the window was opened without calling <see cref="Prepare"/>.</summary>
         private void UpdateContinueButton()
         {
             if (_continueButton != null)
@@ -1119,8 +1119,8 @@ namespace LongLeap.UI
             if (_onContinue == null)
             {
                 Debug.LogError(
-                    "[BackPack] рюкзаку не сказали, что делать по «Продолжить» — " +
-                    "открывающее окно должно позвать Prepare до OpenAsync.", this);
+                    "[BackPack] the backpack wasn't told what to do on 'Continue' — " +
+                    "the opening window must call Prepare before OpenAsync.", this);
                 return;
             }
 

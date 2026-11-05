@@ -4,19 +4,19 @@ using UnityEngine;
 namespace LongLeap.UI
 {
     /// <summary>
-    /// Строка верхней части <see cref="DailyQuestPanel"/>: подпись слева, значение
-    /// справа («TOTAL SCORE … 2,450,000»). Что в ней показывать, решает панель.
+    /// A row in the top part of <see cref="DailyQuestPanel"/>: label on the left, value
+    /// on the right ("TOTAL SCORE … 2,450,000"). The panel decides what it shows.
     /// </summary>
     public sealed class PlayerStatRowView : MonoBehaviour
     {
         [SerializeField] private TMP_Text _label;
         [SerializeField] private TMP_Text _value;
 
-        [Tooltip("Включается только в строке валюты (иконка денег и т.п.). " +
-                 "Необязателен.")]
+        [Tooltip("Enabled only in the currency row (money icon, etc.). " +
+                 "Optional.")]
         [SerializeField] private GameObject _currencyRoot;
 
-        /// <summary>Строка показывает валюту — включить <see cref="_currencyRoot"/>.</summary>
+        /// <summary>The row shows currency — enable <see cref="_currencyRoot"/>.</summary>
         public void SetCurrency(bool isCurrency)
         {
             if (_currencyRoot != null)

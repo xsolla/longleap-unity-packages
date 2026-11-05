@@ -5,8 +5,8 @@ using UnityEngine.UI;
 namespace LongLeap.UI
 {
     /// <summary>
-    /// Что показать в одной строке награды: иконка эффекта и что он даст.
-    /// Собирает окно рюкзака из каталога товаров — см. <see cref="UserBackPackWindow"/>.
+    /// What to show in a single reward row: the effect icon and what it grants.
+    /// Built by the backpack window from the product catalog — see <see cref="UserBackPackWindow"/>.
     /// </summary>
     public readonly struct BackPackRewardEntry
     {
@@ -21,17 +21,17 @@ namespace LongLeap.UI
     }
 
     /// <summary>
-    /// Одна строка награды в карточке <see cref="BackPackItemView"/>: иконка и
-    /// подпись («+$100», «+1 Shield x2»). Живёт шаблоном внутри карточки —
-    /// карточка размножает его по наградам предмета.
+    /// A single reward row in a <see cref="BackPackItemView"/> card: icon and
+    /// label ("+$100", "+1 Shield x2"). Lives as a template inside the card —
+    /// the card clones it for each of the item's rewards.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class BackPackRewardView : MonoBehaviour
     {
-        [Tooltip("Иконка эффекта. Не задана в конфиге — прячется.")]
+        [Tooltip("Effect icon. Hidden if not set in the config.")]
         [SerializeField] private Image _icon;
 
-        [Tooltip("Что даст награда: описание эффекта из конфига.")]
+        [Tooltip("What the reward grants: the effect description from the config.")]
         [SerializeField] private TMP_Text _label;
 
         public void Show(BackPackRewardEntry entry)

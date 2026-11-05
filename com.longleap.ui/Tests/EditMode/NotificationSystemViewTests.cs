@@ -130,20 +130,11 @@ namespace LongLeap.Notifications.Tests
             Assert.AreEqual(NotificationPriority.Default, _view.ReceivedData.Priority);
         }
 
-        [Test]
-        public void DurationZero_CallsOnDisplayEndSynchronously()
+        [TestCase(0)]
+        [TestCase(-1)]
+        public void DurationZeroOrNegative_CallsOnDisplayEndSynchronously(int seconds)
         {
-            var data = new NotificationData("Test", "", TimeSpan.Zero);
-
-            _view.OnShowRequest(data, () => { });
-
-            Assert.AreEqual(1, _view.OnDisplayEndCallCount);
-        }
-
-        [Test]
-        public void DurationNegative_SameAsZero()
-        {
-            var data = new NotificationData("Test", "", TimeSpan.FromSeconds(-1));
+            var data = new NotificationData("Test", "", TimeSpan.FromSeconds(seconds));
 
             _view.OnShowRequest(data, () => { });
 

@@ -5,22 +5,22 @@ using UnityEngine.UI;
 namespace LongLeap.UI
 {
     /// <summary>
-    /// Страница главного меню: настройки, ачивки, награды.
+    /// A main menu page: settings, achievements, rewards.
     ///
-    /// Общего у них ровно одно — кнопка «назад»: страница закрывает себя и просит
-    /// сервис вернуть домашнее окно (<see cref="IWindowService.SetHome{TWindow}"/>,
-    /// его задаёт игра — обычно главное меню). Всё остальное наполнение живёт
-    /// в наследниках, каждый из которых — отдельный тип, потому что тип и есть адрес
-    /// окна в <see cref="IWindowService"/>.
+    /// They have exactly one thing in common — the "back" button: the page closes itself and asks
+    /// the service to bring back the home window (<see cref="IWindowService.SetHome{TWindow}"/>,
+    /// set by the game — usually the main menu). All other content lives
+    /// in subclasses, each of which is a separate type, because the type is the window's address
+    /// in <see cref="IWindowService"/>.
     /// </summary>
     public abstract class MenuPageWindow : WindowBase
     {
-        [Tooltip("Кнопка «назад»: закрывает страницу и возвращает главное меню.")]
+        [Tooltip("'Back' button: closes the page and returns to the main menu.")]
         [SerializeField] private Button _backButton;
 
         /// <summary>
-        /// Вернуться в главное меню. Страница, у которой «назад» ведёт не в меню
-        /// (см. <see cref="UserBackPackWindow"/>), переопределяет это.
+        /// Return to the main menu. A page whose "back" doesn't lead to the menu
+        /// (see <see cref="UserBackPackWindow"/>) overrides this.
         /// </summary>
         public virtual async Task BackAsync()
         {

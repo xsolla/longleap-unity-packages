@@ -4,34 +4,34 @@ using UnityEngine.UI;
 namespace LongLeap.UI
 {
     /// <summary>
-    /// Уменьшает RectTransform целиком (uniform localScale), если он не помещается в область экрана.
-    /// Подходит для панелей с кнопками внутри VerticalLayoutGroup/ContentSizeFitter: лейаут не
-    /// трогаем, кнопки не растягиваем — просто масштабируем всю панель.
+    /// Shrinks the whole RectTransform (uniform localScale) if it doesn't fit into the screen area.
+    /// Suited for panels with buttons inside a VerticalLayoutGroup/ContentSizeFitter: the layout is
+    /// left alone, buttons are not stretched — the whole panel is simply scaled.
     ///
-    /// Сжимаем так, чтобы точка <see cref="_scaleFrom"/> осталась на месте (pivot панели при этом
-    /// может быть где угодно — позиция компенсируется). По умолчанию это верхняя середина панели:
-    /// верх не двигается, низ подтягивается вверх. Панель прижата к низу экрана — ставим (0.5, 0),
-    /// к левому краю — (0, 0.5) и т.д.: сторона, у которой якорь, сохраняет расстояние до него.
+    /// Shrinks so that the <see cref="_scaleFrom"/> point stays in place (the panel pivot itself
+    /// can be anywhere — position is compensated). By default it is the panel's top center:
+    /// the top stays put, the bottom moves up. Panel pinned to the bottom of the screen — use (0.5, 0),
+    /// to the left edge — (0, 0.5), etc.: the side with the anchor keeps its distance to it.
     ///
-    /// Масштаб абсолютный: когда панель помещается, он равен <see cref="_maxScale"/> (обычно 1).
-    /// Работает только в рантайме: в префаб-моде ничего не меняет и сцену не пачкает.
+    /// The scale is absolute: when the panel fits, it equals <see cref="_maxScale"/> (usually 1).
+    /// Works only at runtime: changes nothing in prefab mode and doesn't dirty the scene.
     /// </summary>
     [RequireComponent(typeof(RectTransform))]
     public class UiFitScale : MonoBehaviour
     {
-        [Tooltip("Область, в которую вписываем панель. Пусто = корневой Canvas (весь экран).")]
+        [Tooltip("Area the panel is fitted into. Empty = root Canvas (the whole screen).")]
         [SerializeField] private RectTransform _area;
 
-        [Header("Padding (юниты канваса)")]
-        [Tooltip("Отступ от левого и нижнего края области.")]
+        [Header("Padding (canvas units)")]
+        [Tooltip("Offset from the left and bottom edges of the area.")]
         [SerializeField] private Vector2 _paddingMin = new Vector2(0f, 20f);
-        [Tooltip("Отступ от правого и верхнего края области.")]
+        [Tooltip("Offset from the right and top edges of the area.")]
         [SerializeField] private Vector2 _paddingMax = new Vector2(0f, 0f);
-        [Tooltip("Учитывать Screen.safeArea (вырезы, скруглённые углы). Область должна быть на весь экран.")]
+        [Tooltip("Respect Screen.safeArea (notches, rounded corners). The area must cover the whole screen.")]
         [SerializeField] private bool _useSafeArea = false;
 
         [Header("Scale")]
-        [Tooltip("Точка панели (0..1), вокруг которой масштабируем. (0.5, 1) = верх по центру.")]
+        [Tooltip("Panel point (0..1) to scale around. (0.5, 1) = top center.")]
         [SerializeField] private Vector2 _scaleFrom = new Vector2(0.5f, 1f);
         [SerializeField] private float _minScale = 0.4f;
         [SerializeField] private float _maxScale = 1f;
@@ -45,8 +45,8 @@ namespace LongLeap.UI
             _rect = (RectTransform)transform;
             _areaRect = ResolveArea();
 
-            // Панель обычно включается вместе с окном, а лейаут пересчитывается только в конце кадра.
-            // Без принудительной пересборки первый кадр показал бы панель с размером до пересчёта.
+            // The panel is usually enabled together with the window, and layout is only recalculated at the end of the frame.
+            // Without a forced rebuild, the first frame would show the panel at its pre-recalculation size.
             LayoutRebuilder.ForceRebuildLayoutImmediate(_rect);
             Apply();
         }
@@ -69,7 +69,7 @@ namespace LongLeap.UI
                 if (_areaRect == null) return;
             }
 
-            // Всё считаем в локальных координатах области: так не зависим от CanvasScaler и режима канваса.
+            // Everything is computed in the area's local coordinates: this way we don't depend on CanvasScaler or canvas mode.
             _rect.GetWorldCorners(_corners);
 
             Vector2 min = new Vector2(float.MaxValue, float.MaxValue);
@@ -88,8 +88,8 @@ namespace LongLeap.UI
                 0f));
             Vector2 p = _areaRect.InverseTransformPoint(pivotWorld);
 
-            // Границы при масштабе 1: текущие уже умножены на localScale, откатываем это
-            // относительно точки сжатия — результат не зависит от того, какой масштаб стоит сейчас.
+            // Bounds at scale 1: the current ones are already multiplied by localScale, so undo that
+            // relative to the scaling point — the result doesn't depend on the scale currently set.
             float current = Mathf.Max(Mathf.Abs(_rect.localScale.x), 0.0001f);
             Vector2 lo = p + (min - p) / current;
             Vector2 hi = p + (max - p) / current;
@@ -103,10 +103,10 @@ namespace LongLeap.UI
 
             if (Mathf.Approximately(current, k)) return;
 
-            // Unity масштабирует вокруг pivot, а не вокруг _scaleFrom: без компенсации край панели
-            // уезжал бы от якоря. Точка _scaleFrom лежит на d от pivot (в локальных единицах панели),
-            // при смене масштаба с current на k она сместилась бы на d * (k - current) — возвращаем
-            // её на место сдвигом позиции. Состояния не храним, поэтому внешняя анимация позиции не мешает.
+            // Unity scales around the pivot, not around _scaleFrom: without compensation the panel edge
+            // would drift away from the anchor. The _scaleFrom point lies at d from the pivot (in panel local units);
+            // changing the scale from current to k would shift it by d * (k - current) — we move it
+            // back by offsetting the position. No state is stored, so external position animation isn't affected.
             Vector2 d = new Vector2(
                 (_scaleFrom.x - _rect.pivot.x) * r.width,
                 (_scaleFrom.y - _rect.pivot.y) * r.height);
@@ -135,8 +135,8 @@ namespace LongLeap.UI
                 yMax - _paddingMax.y);
         }
 
-        /// Максимальный масштаб по одной оси, при котором [lo..hi] (границы при масштабе 1)
-        /// остаются внутри [regionMin..regionMax], если сжимать относительно точки p.
+        /// Maximum scale along one axis at which [lo..hi] (bounds at scale 1)
+        /// stay inside [regionMin..regionMax] when shrinking relative to point p.
         private static float Limit(float regionMin, float regionMax, float p, float lo, float hi)
         {
             float k = float.MaxValue;

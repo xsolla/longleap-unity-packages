@@ -6,31 +6,31 @@ using UnityEngine;
 namespace LongLeap.UI
 {
     /// <summary>
-    /// Строка списка ачивок в <see cref="AchievementsWindow"/>: название и отметка
-    /// «выполнена / не выполнена».
+    /// A row of the achievement list in <see cref="AchievementsWindow"/>: the title and a
+    /// "completed / not completed" mark.
     ///
-    /// Названий в определениях ачивок нет — только id. Поэтому название ищется в
-    /// локализации по ключу из <see cref="_titleKeyFormat"/>, а нет такого ключа —
-    /// собирается из id: «first_ride» → «First ride» (так же его пишет уведомление
-    /// об открытой ачивке).
+    /// Achievement definitions have no titles — only ids. So the title is looked up in
+    /// localization by the key from <see cref="_titleKeyFormat"/>; if there's no such key,
+    /// it's built from the id: "first_ride" → "First ride" (the same way the
+    /// achievement-unlocked notification writes it).
     /// </summary>
     public sealed class AchievementItemView : MonoBehaviour
     {
         [Header("Title")]
         [SerializeField] private TMP_Text _titleLabel;
 
-        [Tooltip("Ключ локализации названия: {0} — id ачивки. Ключа нет в таблице — " +
-                 "название собирается из id.")]
+        [Tooltip("Localization key for the title: {0} is the achievement id. If the key isn't in the table, " +
+                 "the title is built from the id.")]
         [SerializeField] private string _titleKeyFormat = "achievement_{0}_title";
 
         [Header("Status")]
-        [Tooltip("Включён, когда ачивка выполнена (галочка, подсветка).")]
+        [Tooltip("Enabled when the achievement is completed (checkmark, highlight).")]
         [SerializeField] private GameObject _completedRoot;
 
-        [Tooltip("Включён, когда ачивка ещё не выполнена (замок, серый фон).")]
+        [Tooltip("Enabled when the achievement isn't completed yet (lock, grey background).")]
         [SerializeField] private GameObject _notCompletedRoot;
 
-        [Tooltip("Подпись статуса. Необязательна: хватает и рутов выше.")]
+        [Tooltip("Status label. Optional: the roots above are enough.")]
         [SerializeField] private TMP_Text _statusLabel;
 
         [SerializeField] private string _completedText = "COMPLETED";
@@ -83,7 +83,7 @@ namespace LongLeap.UI
             if (string.IsNullOrWhiteSpace(id))
                 return string.Empty;
 
-            // Нет перевода — Loc отдаёт сам ключ: значит, названия в таблице нет.
+            // No translation — Loc returns the key itself, meaning the title isn't in the table.
             if (!string.IsNullOrEmpty(_titleKeyFormat))
             {
                 var key = string.Format(_titleKeyFormat, id);

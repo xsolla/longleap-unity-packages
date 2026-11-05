@@ -3,11 +3,11 @@ using UnityEngine;
 
 namespace LongLeap.UI
 {
-    /// Переключение цвета текста между двумя состояниями. Методы можно вешать на события UI (Button, Toggle, EventTrigger).
+    /// Switches text color between two states. The methods can be hooked to UI events (Button, Toggle, EventTrigger).
     public class TextColorSwitcher : MonoBehaviour
     {
         [Header("Target")]
-        [SerializeField] TMP_Text target;                       // пусто = берём с этого же объекта
+        [SerializeField] TMP_Text target;                       // empty = taken from this same object
 
         [Header("Colors")]
         [SerializeField] Color normalColor = Color.white;
@@ -18,10 +18,10 @@ namespace LongLeap.UI
             if (target == null) target = GetComponent<TMP_Text>();
         }
 
-        /// Основной цвет.
+        /// Normal color.
         public void SetNormal() => Apply(normalColor);
 
-        /// Акцентный цвет.
+        /// Highlight color.
         public void SetHighlight() => Apply(highlightColor);
 
         void Apply(Color color)

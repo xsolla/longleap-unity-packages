@@ -6,117 +6,117 @@ using UnityEngine.UI;
 
 namespace LongLeap.UI
 {
-    /// <summary>Что сейчас можно сделать с предметом рюкзака — см. <see cref="BackPackItemView.SetState"/>.</summary>
+    /// <summary>What can currently be done with a backpack item — see <see cref="BackPackItemView.SetState"/>.</summary>
     public enum BackPackItemState
     {
-        /// <summary>Можно выбрать на заезд.</summary>
+        /// <summary>Can be selected for the run.</summary>
         Available,
 
-        /// <summary>Выбран: активируется в начале заезда. Нажатие снимает выбор.</summary>
+        /// <summary>Selected: activates at the start of the run. Pressing again deselects it.</summary>
         Selected,
 
         /// <summary>
-        /// Выбрать нельзя: игра не знает его награду, его товар не годится для
-        /// момента, в который открыт рюкзак, такого товара уже выбрано сколько можно
-        /// или идущий заезд его не примет (полное здоровье, щит уже стоит).
+        /// Cannot be selected: the game doesn't know its reward, its product doesn't fit
+        /// the moment the backpack was opened for, the maximum of that product is already
+        /// selected, or the ongoing run won't accept it (full health, shield already active).
         /// </summary>
         Unavailable
     }
 
     /// <summary>
-    /// Одна карточка в <see cref="UserBackPackWindow"/>: предмет из рюкзака игрока
-    /// на сервере — картинка, название, описание, награды и кнопка «активировать».
+    /// A single card in <see cref="UserBackPackWindow"/>: an item from the player's
+    /// server-side backpack — image, title, description, rewards and an "activate" button.
     ///
-    /// Награды — столбик строк (<see cref="BackPackRewardView"/>): иконка эффекта
-    /// и что он даст, например монета и «+$100». Сервер присылает только ключи
-    /// наград, а иконки и подписи знает игра (каталог товаров), поэтому строки
-    /// собирает окно и отдаёт сюда (<see cref="SetRewards"/>).
+    /// Rewards are a column of rows (<see cref="BackPackRewardView"/>): the effect icon
+    /// and what it grants, e.g. a coin and "+$100". The server sends only reward
+    /// keys, while icons and labels are known to the game (product catalog), so the
+    /// window builds the rows and passes them here (<see cref="SetRewards"/>).
     ///
-    /// Кнопка не тратит предмет сразу, а выбирает его на заезд (повторное нажатие —
-    /// снимает выбор): потратить предмет и выдать его товар окно может только
-    /// когда заезд уже начат — см. <see cref="UserBackPackWindow.ActivateSelectedAsync"/>.
-    /// Какое у карточки состояние, решает окно (<see cref="SetState"/>), карточка
-    /// только рисует его.
+    /// The button doesn't spend the item right away; it selects it for the run (pressing
+    /// again deselects it): the window can spend the item and grant its product only
+    /// once the run has started — see <see cref="UserBackPackWindow.ActivateSelectedAsync"/>.
+    /// The window decides the card's state (<see cref="SetState"/>); the card
+    /// only renders it.
     ///
-    /// Картинка приходит с сервера ссылкой и скачивается уже после показа
-    /// карточки (<see cref="SetIcon"/>) — до этого иконка спрятана, чтобы на её
-    /// месте не висел белый квадрат.
+    /// The image arrives from the server as a URL and is downloaded after the card
+    /// is shown (<see cref="SetIcon"/>) — until then the icon is hidden so that a
+    /// white square doesn't hang in its place.
     ///
-    /// Живёт в проекте ШАБЛОНОМ (обычно отдельным префабом) — окно размножает
-    /// его по содержимому рюкзака, поэтому объект держит выключенным:
-    /// включённый шаблон остался бы на экране лишней карточкой.
+    /// Lives in the project as a TEMPLATE (usually a separate prefab) — the window clones
+    /// it for the backpack contents, so keep the object disabled:
+    /// an enabled template would stay on screen as an extra card.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class BackPackItemView : MonoBehaviour
     {
-        [Tooltip("Картинка предмета.")]
+        [Tooltip("Item image.")]
         [SerializeField] private Image _icon;
 
-        [Tooltip("Название предмета.")]
+        [Tooltip("Item title.")]
         [SerializeField] private TMP_Text _title;
 
-        [Tooltip("Описание предмета.")]
+        [Tooltip("Item description.")]
         [SerializeField] private TMP_Text _description;
 
-        [Header("Награды")]
+        [Header("Rewards")]
 
-        [Tooltip("Заголовок над списком наград. Необязателен. Наград нет — прячется.")]
+        [Tooltip("Header above the reward list. Optional. Hidden when there are no rewards.")]
         [SerializeField] private TMP_Text _rewards;
 
-        [Tooltip("Текст заголовка наград.")]
+        [Tooltip("Reward header text.")]
         [SerializeField] private string _rewardsPrefix = "REWARD: ";
 
-        [Tooltip("Шаблон строки награды: иконка и подпись. Лежит внутри карточки — держи " +
-                 "выключенным: включённый останется лишней пустой строкой.")]
+        [Tooltip("Reward row template: icon and label. Lives inside the card — keep it " +
+                 "disabled: an enabled one stays as an extra empty row.")]
         [SerializeField] private BackPackRewardView _rewardTemplate;
 
-        [Tooltip("Куда класть строки наград (объект с VerticalLayoutGroup). Пусто — родитель шаблона.")]
+        [Tooltip("Where to put reward rows (object with a VerticalLayoutGroup). Empty — the template's parent.")]
         [SerializeField] private Transform _rewardsRoot;
 
-        [Header("Активация")]
+        [Header("Activation")]
 
-        [Tooltip("Кнопка «активировать»: выбирает предмет на заезд, повторное нажатие снимает выбор.")]
+        [Tooltip("'Activate' button: selects the item for the run; pressing again deselects it.")]
         [SerializeField] private Button _activateButton;
 
-        [Tooltip("Подпись кнопки. Необязательна — без неё кнопка не меняет текст.")]
+        [Tooltip("Button label. Optional — without it the button doesn't change its text.")]
         [SerializeField] private TMP_Text _activateLabel;
 
-        [Tooltip("Подпись кнопки, пока предмет не выбран.")]
+        [Tooltip("Button label while the item is not selected.")]
         [SerializeField] private string _activateText = "ACTIVATE";
 
-        [Tooltip("Подпись кнопки, когда предмет выбран на заезд.")]
+        [Tooltip("Button label when the item is selected for the run.")]
         [SerializeField] private string _selectedText = "ACTIVE";
 
-        [Tooltip("Подпись кнопки, когда выбрать предмет нельзя.")]
+        [Tooltip("Button label when the item cannot be selected.")]
         [SerializeField] private string _unavailableText = "UNAVAILABLE";
 
-        [Header("Фон")]
+        [Header("Background")]
 
-        [Tooltip("Фон карточки: его спрайт меняется, когда предмет выбран на заезд. Необязателен.")]
+        [Tooltip("Card background: its sprite changes when the item is selected for the run. Optional.")]
         [SerializeField] private Image _background;
 
-        [Tooltip("Фон, пока предмет не выбран.")]
+        [Tooltip("Background while the item is not selected.")]
         [SerializeField] private Sprite _normalFrame;
 
-        [Tooltip("Фон, когда предмет выбран на заезд.")]
+        [Tooltip("Background when the item is selected for the run.")]
         [SerializeField] private Sprite _selectedFrame;
 
-        /// <summary>Созданные строки наград — переиспользуются при каждом <see cref="SetRewards"/>.</summary>
+        /// <summary>Created reward rows — reused on every <see cref="SetRewards"/>.</summary>
         private readonly List<BackPackRewardView> _rewardViews = new List<BackPackRewardView>();
 
         private bool _warnedNoRewardTemplate;
 
-        /// <summary>Предмет, который показывает эта карточка — задаётся в <see cref="Show"/>.</summary>
+        /// <summary>The item this card shows — set in <see cref="Show"/>.</summary>
         public BackPackRewardItem Item { get; private set; }
 
-        /// <summary>Кнопка «активировать» — окно вешает на неё обработчик.</summary>
+        /// <summary>The "activate" button — the window attaches its handler to it.</summary>
         public Button ActivateButton => _activateButton;
 
         public void Show(BackPackRewardItem item)
         {
             Item = item;
 
-            // Названия у предмета может не быть — тогда хотя бы sku, иначе карточка без подписи.
+            // The item may have no name — then at least the sku, otherwise the card has no title.
             if (_title != null)
                 _title.text = string.IsNullOrEmpty(item.Name) ? item.Sku : item.Name;
 
@@ -129,9 +129,9 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Награды столбиком, по строке на каждую. Пусто — прячем и заголовок,
-        /// а не оставляем его над пустым местом. Лишние строки от прошлого
-        /// вызова гасим, а не удаляем: окно зовёт это на каждое перечитывание.
+        /// Rewards in a column, one row each. Empty — hide the header too rather
+        /// than leaving it above an empty space. Extra rows from the previous
+        /// call are disabled, not destroyed: the window calls this on every reload.
         /// </summary>
         public void SetRewards(IReadOnlyList<BackPackRewardEntry> rewards)
         {
@@ -174,7 +174,7 @@ namespace LongLeap.UI
             if (_activateButton != null)
                 _activateButton.interactable = state != BackPackItemState.Unavailable;
 
-            // Пустой спрайт не ставим: забытое в инспекторе поле не должно стирать фон.
+            // Don't assign an empty sprite: a field forgotten in the inspector must not wipe the background.
             var frame = state == BackPackItemState.Selected ? _selectedFrame : _normalFrame;
 
             if (_background != null && frame != null)
@@ -199,9 +199,9 @@ namespace LongLeap.UI
         }
 
         /// <summary>
-        /// Шаблон строки награды, погашенный: включённым он остался бы лишней
-        /// пустой строкой. Нет шаблона — жалуемся один раз и только когда есть
-        /// что показывать.
+        /// The reward row template, disabled: if enabled it would remain as an extra
+        /// empty row. No template — complain once, and only when there is
+        /// something to show.
         /// </summary>
         private BackPackRewardView ResolveRewardTemplate(bool needed)
         {
@@ -211,8 +211,8 @@ namespace LongLeap.UI
                 {
                     _warnedNoRewardTemplate = true;
                     Debug.LogError(
-                        "[BackPack] карточке не задан шаблон строки награды (Reward Template) — " +
-                        "награды не покажутся.", this);
+                        "[BackPack] the card has no reward row template (Reward Template) — " +
+                        "rewards won't be shown.", this);
                 }
 
                 return null;

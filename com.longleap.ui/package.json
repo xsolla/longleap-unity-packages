@@ -4,7 +4,14 @@
   "displayName": "LongLeap UI",
   "description": "Window system (catalog of window prefabs over Addressables, open/close/unload rules) and ready-made windows for LongLeap features: settings, achievements, daily rewards, daily quests, backpack. Includes the priority-queued notification system (always compiled). Each other feature module compiles only when its package is installed.",
   "unity": "6000.0",
-  "keywords": ["ui", "windows", "menu", "longleap"],
+  "keywords": ["ui", "windows", "menu", "notifications", "longleap"],
+  "author": {
+    "name": "LongLeap"
+  },
+  "license": "SEE LICENSE IN LICENSE.md",
+  "documentationUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.ui/README.md",
+  "changelogUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.ui/CHANGELOG.md",
+  "licensesUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.ui/LICENSE.md",
   "dependencies": {
     "com.longleap.tools": "0.1.0",
     "com.unity.ugui": "2.0.0",
