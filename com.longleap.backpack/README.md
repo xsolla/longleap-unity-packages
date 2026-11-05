@@ -6,6 +6,7 @@ Unity package for the LongLeap BackPack service. It sends player events that can
 
 - Unity 6.0 (`6000.0`) or later.
 - `com.longleap.achievements` `0.1.0`.
+- `com.longleap.buildmanager` `0.1.0` (editor only: the environment option and config warnings in the Build Manager).
 - `com.longleap.core` `0.1.0`.
 
 The dependencies are declared in this package's `package.json`. In this repository, the LongLeap packages are embedded under `Packages/` and Unity resolves them there. In another project, add this package with Unity Package Manager using **Add package from disk** and its `package.json`, or install it from your organization's package source. Make the declared LongLeap dependencies available to that project as well. `com.longleap.core` depends on `com.unity.nuget.newtonsoft-json` `3.0.2`, which Unity resolves through the package dependency graph.
@@ -13,7 +14,7 @@ The dependencies are declared in this package's `package.json`. In this reposito
 ## Install and Configure
 
 1. In Unity, choose **BackPack > Select Config Asset**. If the config does not exist yet, it offers to create it at the expected path, creating missing folders.
-2. The config must live at exactly `Assets/Resources/Backend/BackPackConfig.asset`: the runtime loads it only as `Resources/Backend/BackPackConfig`. If you create it with **Assets > Create > LongLeap Services > BackPack Config** instead, that menu puts it in the selected folder — move it to this path.
+2. The config must live at exactly `Assets/Resources/Backend/BackPackConfig.asset`, and there must be only one: the runtime loads it only as `Resources/Backend/BackPackConfig`. If you create it with **Assets > Create > LongLeap Services > BackPack Config** instead, that menu puts it in the selected folder — move it to this path. The editor searches the whole project for BackPack configs and reports a misplaced config or extra copies (see [Config Checks](#config-checks)).
 3. In the asset Inspector, set the game ID and endpoint values for each environment. The game ID must be registered with the BackPack service. Empty paths fall back to the defaults (`/events`, `/rewards`, `/backpack/items`).
 4. Select the environment using **BackPack > Required > Environment > Local**, **Development**, or **Production** (also available in the Build Manager). Local defaults to `http://127.0.0.1:5066`; Development and Production use the configured HTTPS service endpoints. Local is only reachable from the developer's machine.
 
@@ -149,7 +150,16 @@ EditMode tests live in `Tests/EditMode` (`LongLeap.Backpack.Tests`) and run with
 
 ## Editor Menu
 
-- **BackPack > Select Config Asset** selects the expected config asset in the Project window, or offers to create it there if it is missing. The Build Manager warns about a missing config with a **Create Config Asset** fix.
+- **BackPack > Select Config Asset** selects the expected config asset in the Project window. If it is missing, it offers to move a misplaced config there or, when there is none, to create one. If there are several configs, it selects all of them. The Build Manager warns about a missing config with a **Create Config Asset** fix.
 - **BackPack > Required > Environment > ...** changes the active environment stored in that asset. The same option is shown in the Build Manager, with warnings for an environment that has a base URL but no game ID, and for Local combined with a GamePix build.
+
+### Config Checks
+
+The editor searches the whole project for `BackPackConfigSO` assets and reports any of these as an error:
+
+- **Misplaced** — the only config is not at `Assets/Resources/Backend/BackPackConfig.asset`, so the game does not load it and BackPack is off. **Select Config Asset** offers to move it there, keeping its values.
+- **Duplicates** — more than one config exists. The game uses only the one at the expected path; the others look configured in the inspector but are ignored. **Select Config Asset** selects all of them so the extras can be deleted.
+
+Both are reported in the Console when a config asset is imported, created, moved, or copied, and once per editor session. The Build Manager shows them as errors that block the build. Deleting or moving away the config at the expected path logs a warning that BackPack is off.
 
 These editor commands configure the host project; they do not register event names or provision a BackPack server/game ID.

@@ -95,6 +95,27 @@ namespace LongLeap.Backpack.Editor
                     fix: SelectConfigAsset);
             }
 
+            var scan = BackPackConfigScan.Run();
+
+            // A config in the wrong place or a second copy is always a mistake:
+            // whoever filled it in expects BackPack to work, and the build would
+            // silently go out with another config or none.
+            if (scan.Problem == BackPackConfigProblem.Duplicates ||
+                scan.Problem == BackPackConfigProblem.Misplaced)
+            {
+                bool duplicates = scan.Problem == BackPackConfigProblem.Duplicates;
+
+                yield return new ProjectWarning(
+                    ProjectWarningSeverity.Error,
+                    scan.Message,
+                    blocksBuild: true,
+                    fixLabel: duplicates ? "Select Configs" : "Move Config Asset",
+                    fix: SelectConfigAsset);
+
+                if (!scan.HasExpected)
+                    yield break;
+            }
+
             var config = LoadConfig();
 
             // Without the asset BackPackTask registers NullBackPackService: the game
@@ -104,8 +125,7 @@ namespace LongLeap.Backpack.Editor
             {
                 yield return new ProjectWarning(
                     ProjectWarningSeverity.Warning,
-                    $"BackPack config not found at {ConfigAssetPath}, so BackPack is off in this " +
-                    "build: no events are sent and the backpack window shows an error.",
+                    scan.Message ?? $"BackPack config not found at {ConfigAssetPath}.",
                     fixLabel: "Create Config Asset",
                     fix: SelectConfigAsset);
                 yield break;
@@ -194,11 +214,31 @@ namespace LongLeap.Backpack.Editor
         // asset into the selected folder, while the runtime looks for it only at
         // Resources/Backend/BackPackConfig. A config created "elsewhere" would
         // simply go unseen by the game — silently.
+        //
+        // Configs found elsewhere are handled first: a second copy is selected
+        // together with the right one so the extras can be deleted, and a single
+        // misplaced one is offered to be moved rather than shadowed by a new one.
         public static void SelectConfigAsset()
         {
+            var scan = BackPackConfigScan.Run();
+
+            if (scan.Problem == BackPackConfigProblem.Duplicates)
+            {
+                UnityEngine.Debug.LogError(scan.Message);
+                Selection.objects = scan.LoadAll();
+                return;
+            }
+
             var config = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(ConfigAssetPath);
 
-            if (config == null)
+            if (scan.Problem == BackPackConfigProblem.Misplaced)
+            {
+                config = OfferMove(scan.Paths[0]);
+
+                if (config == null)
+                    return;
+            }
+            else if (config == null)
             {
                 if (!EditorUtility.DisplayDialog(
                         "BackPack config not found",
@@ -222,6 +262,40 @@ namespace LongLeap.Backpack.Editor
 
             Selection.activeObject = config;
             EditorGUIUtility.PingObject(config);
+        }
+
+        // Move rather than recreate: the misplaced asset already holds the values
+        // someone filled in, and keeps its GUID.
+        private static UnityEngine.Object OfferMove(string path)
+        {
+            var misplaced = AssetDatabase.LoadMainAssetAtPath(path);
+
+            if (!EditorUtility.DisplayDialog(
+                    "BackPack config in the wrong place",
+                    $"The BackPack config is at\n{path}\n\nbut the game loads it only from\n" +
+                    $"{ConfigAssetPath}\n\nMove it there?",
+                    "Move",
+                    "Cancel"))
+            {
+                UnityEngine.Debug.LogError(
+                    $"BackPack: config is at {path}, but the game loads it only from {ConfigAssetPath} — " +
+                    "BackPack stays off until it is moved there.", misplaced);
+                Selection.activeObject = misplaced;
+                EditorGUIUtility.PingObject(misplaced);
+                return null;
+            }
+
+            EnsureFolder(System.IO.Path.GetDirectoryName(ConfigAssetPath)?.Replace('\\', '/'));
+            string error = AssetDatabase.MoveAsset(path, ConfigAssetPath);
+
+            if (!string.IsNullOrEmpty(error))
+            {
+                UnityEngine.Debug.LogError($"BackPack: could not move {path} to {ConfigAssetPath}: {error}", misplaced);
+                return null;
+            }
+
+            UnityEngine.Debug.Log($"BackPack: moved the config from {path} to {ConfigAssetPath}.", misplaced);
+            return AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(ConfigAssetPath);
         }
 
         // The type is looked up by name rather than through a LongLeap.Backpack
