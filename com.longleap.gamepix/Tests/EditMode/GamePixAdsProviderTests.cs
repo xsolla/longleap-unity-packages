@@ -4,14 +4,14 @@ using LongLeap.Core.Ads;
 using LongLeap.GamePix;
 using NUnit.Framework;
 
-// Проверяем ровно то, что вендорский плагин сам не гарантирует: одиночность
-// запроса, таймаут и невозможность выдать награду дважды.
+// Tests exactly what the vendor plugin does not guarantee itself: a single
+// request at a time, the timeout, and that a reward cannot be granted twice.
 //
-// Через настоящий Gpx это не проверить: в редакторе он подставляет UnityAds,
-// который всегда немедленно отвечает успехом.
+// This cannot be tested through the real Gpx: in the Editor it substitutes
+// UnityAds, which always answers with success immediately.
 public sealed class GamePixAdsProviderTests
 {
-    // Заглушка вендорского IAds: колбэки не зовёт сама, их дёргает тест.
+    // Fake vendor IAds: never calls the callbacks itself, the test triggers them.
     private sealed class FakeAds : global::GamePix.Ads.IAds
     {
         public int RewardCalls;
@@ -86,8 +86,8 @@ public sealed class GamePixAdsProviderTests
         Assert.AreEqual(new[] { AdResult.Failed }, results);
     }
 
-    // Плагин молча игнорирует второй вызов — провайдер обязан ответить сам,
-    // иначе вызывающий код будет ждать колбэка, которого не будет.
+    // The plugin silently ignores a second call — the provider must answer
+    // itself, otherwise the caller waits for a callback that never comes.
     [Test]
     public void Rewarded_SecondRequestWhileInFlight_FailsImmediatelyAndDoesNotReachPlugin()
     {
@@ -97,7 +97,7 @@ public sealed class GamePixAdsProviderTests
         _provider.ShowRewarded(second.Add);
 
         Assert.AreEqual(new[] { AdResult.Failed }, second);
-        Assert.AreEqual(1, _ads.RewardCalls, "второй запрос не должен уходить в плагин");
+        Assert.AreEqual(1, _ads.RewardCalls, "the second request must not reach the plugin");
     }
 
     [Test]
@@ -106,7 +106,7 @@ public sealed class GamePixAdsProviderTests
         Assert.IsTrue(_provider.IsRewardedReady);
 
         _provider.ShowRewarded(_ => { });
-        Assert.IsFalse(_provider.IsRewardedReady, "кнопку надо гасить, пока идёт запрос");
+        Assert.IsFalse(_provider.IsRewardedReady, "the button must be disabled while a request is in flight");
 
         _ads.CompleteReward();
         Assert.IsTrue(_provider.IsRewardedReady);
@@ -126,8 +126,8 @@ public sealed class GamePixAdsProviderTests
         Assert.AreEqual(new[] { AdResult.Failed }, results);
     }
 
-    // Самое важное: опоздавший ответ плагина после таймаута не должен выдать
-    // награду второй раз — иначе одно воскрешение превращается в два.
+    // The most important one: a late plugin answer after the timeout must not
+    // grant the reward a second time — otherwise one revive turns into two.
     [Test]
     public void Rewarded_LateAnswerAfterTimeout_DoesNotGrantTwice()
     {
@@ -143,11 +143,11 @@ public sealed class GamePixAdsProviderTests
         Assert.AreEqual(new[] { AdResult.Failed }, results);
     }
 
-    // Регрессия по опубликованной сборке: игрок честно смотрел ролик, а награду
-    // не получил. Пока ролик на экране, игровой цикл продолжает крутиться
-    // (timeScale=0 не останавливает rAF, а срок мы считаем по реальному
-    // времени), поэтому 30 секунд истекали посреди показа: запрос закрывался
-    // как Failed, и настоящий колбэк успеха уже некому было отдать.
+    // Regression from a published build: the player honestly watched the ad but
+    // got no reward. While the ad is on screen the game loop keeps running
+    // (timeScale = 0 does not stop rAF, and the deadline is measured in real
+    // time), so 30 seconds ran out mid-show: the request was closed as Failed,
+    // and the real success callback had no one to go to.
     [Test]
     public void Rewarded_AdOnScreenLongerThanTimeout_StillGrantsReward()
     {
@@ -155,24 +155,24 @@ public sealed class GamePixAdsProviderTests
 
         _provider.ShowRewarded(results.Add);
 
-        // Площадка поставила игру на паузу — значит ролик реально идёт.
+        // The portal paused the game — so the ad really is playing.
         _showing = true;
 
         for (_now = 1f; _now <= 120f; _now += 1f)
             _provider.Tick();
 
-        Assert.IsEmpty(results, "пока ролик на экране, запрос закрывать нельзя");
+        Assert.IsEmpty(results, "the request must not be closed while the ad is on screen");
 
-        // Ролик кончился: площадка сняла паузу и ответила успехом.
+        // The ad ended: the portal unpaused the game and answered with success.
         _showing = false;
         _ads.CompleteReward();
 
         Assert.AreEqual(new[] { AdResult.Completed }, results);
     }
 
-    // Обратная сторона: если пауза от площадки не снялась (свернули вкладку
-    // посреди ролика), запрос всё равно обязан закрыться — иначе IsRewardedReady
-    // останется false и кнопка будет недоступна до конца забега.
+    // The flip side: if the portal's pause never lifts (the tab was minimised
+    // mid-ad), the request must still close — otherwise IsRewardedReady stays
+    // false and the button is unavailable for the rest of the run.
     [Test]
     public void Rewarded_AdShowingForever_GivesUpAtLifetimeCap()
     {
@@ -185,7 +185,7 @@ public sealed class GamePixAdsProviderTests
             _provider.Tick();
 
         Assert.AreEqual(new[] { AdResult.Failed }, results);
-        Assert.IsTrue(_provider.IsRewardedReady, "запрос должен быть закрыт");
+        Assert.IsTrue(_provider.IsRewardedReady, "the request must be closed");
     }
 
     [Test]

@@ -1,14 +1,17 @@
+// XsollaIdAuthJS exists only with GAMEPIX_JS, and so do its tests.
+#if GAMEPIX_JS
 using System;
 using System.Text;
 using LongLeap.GamePix;
 using LongLeap.XsollaId;
 using NUnit.Framework;
 
-// Разбор ответа GamePix.user.* в сессию и итог входа. Сам SDK в редакторе
-// недоступен, поэтому проверяем чистую часть — ToResult и ReadSubject.
+// Mapping of a GamePix.user.* answer to a session and a sign-in result. The SDK
+// itself is not available in the Editor, so the pure part is tested —
+// ToResult and ReadSubject.
 public sealed class XsollaIdAuthJSTests
 {
-    // Неподписанный JWT: подпись клиент не проверяет, важен только payload.
+    // Unsigned JWT: the client does not check the signature, only the payload matters.
     private static string Jwt(string payloadJson)
     {
         static string B64Url(string s) => Convert.ToBase64String(Encoding.UTF8.GetBytes(s))
@@ -112,3 +115,4 @@ public sealed class XsollaIdAuthJSTests
         Assert.That(SignedIn(token: "secret.token.value").ToString(), Does.Not.Contain("secret"));
     }
 }
+#endif

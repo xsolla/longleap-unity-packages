@@ -9,29 +9,28 @@ using UnityEngine;
 
 namespace LongLeap.GamePix.Editor
 {
-    // Портальная сборка: её делает вендорный билдер плагина, а не
-    // BuildPipeline. Он сам подменяет путь вывода (html5) и сам ставит
-    // Compression Format = Disabled — .gpx сжимает себя сам.
+    // The portal build target: the build is made by the vendor plugin's
+    // builder, not by BuildPipeline. It picks its own output path (html5) and
+    // forces Compression Format = Disabled — the .gpx compresses itself.
     //
-    // Точку входа ИЩЕМ, а не угадываем. Причина простая: папки
-    // Assets/Plugins/GamePix в репозитории сейчас нет вовсе, так что имя типа
-    // вендорного билдера неизвестно, а угаданное имя сломалось бы молча.
-    // Ищем в таком порядке:
+    // The entry point is SEARCHED for, not hard-coded: the package references
+    // neither the plugin's editor assembly (it is constrained by GAMEPIX) nor
+    // a particular plugin version, and a hard-coded type name would break
+    // silently on a plugin update. Search order:
     //
-    //   1. пункт меню со словом Build, объявленный сборкой, исходники которой
-    //      лежат под Assets/Plugins/GamePix. Самый надёжный способ: пункт меню
-    //      у вендора обязан быть для людей, и путь меню меняется гораздо реже
-    //      внутренних имён типов. Предпочитаем safe-сборку "No override
-    //      textures\sounds", иначе — самый короткий путь;
-    //   2. публичный статический метод без аргументов с именем Build/BuildGame/
-    //      BuildHtml5/BuildAll на типе, в имени которого есть Builder или
-    //      UnityConfigurator — именно эти имена названы в комментариях
-    //      GamePixPluginMenu и GamePixIndexPostprocessor;
-    //   3. не нашли — способ сборки недоступен, и в окне написано, что именно
-    //      искали.
+    //   1. a menu item containing "Build", declared by an assembly whose
+    //      sources live under Assets/Plugins/GamePix. The most reliable way:
+    //      the vendor must keep a menu item for people, and menu paths change
+    //      far less often than internal type names. The safe build "No override
+    //      textures\sounds" is preferred, otherwise the shortest path;
+    //   2. a public static parameterless Build/BuildGame/BuildHtml5/BuildAll on
+    //      a type whose name contains Builder or UnityConfigurator (the vendor
+    //      type names);
+    //   3. nothing found — the target is unavailable, and the window says
+    //      exactly what was searched for.
     //
-    // Способ поиска сборок плагина по исходникам взят у
-    // XsollaIdCallbackPagePostprocessor: в проекте это уже проверенный приём.
+    // Finding plugin assemblies by their source files is the same technique
+    // XsollaIdCallbackPagePostprocessor uses.
     internal sealed class GamePixBuildTarget : IProjectBuildTargetProvider
     {
         private static readonly string[] EntryMethodNames =
@@ -44,10 +43,10 @@ namespace LongLeap.GamePix.Editor
             "Builder", "UnityConfigurator",
         };
 
-        // Вендорный пункт "GamePix/Safe builds/Build and Run (No override
-        // textures\sounds)". Обычный "Build and Run" переписывает импорт
-        // текстур, атласов и звуков в несжатые (AssetsCompression.Uncompressed),
-        // поэтому по умолчанию берём safe-вариант.
+        // The vendor item "GamePix/Safe builds/Build and Run (No override
+        // textures\sounds)". The plain "Build and Run" rewrites the import
+        // settings of textures, atlases and sounds to uncompressed
+        // (AssetsCompression.Uncompressed), so the safe variant is the default.
         private const string SafeBuildMenuHint = "No override";
 
         public IEnumerable<ProjectBuildTarget> GetBuildTargets()
@@ -136,7 +135,7 @@ namespace LongLeap.GamePix.Editor
             }
         }
 
-        // Имена сборок, чьи исходники лежат под папкой плагина.
+        // Names of the assemblies whose sources live under the plugin folder.
         private static HashSet<string> PluginAssemblyNames()
         {
             var names = new HashSet<string>(StringComparer.Ordinal);
@@ -182,13 +181,13 @@ namespace LongLeap.GamePix.Editor
                         || attribute.menuItem.IndexOf("build", StringComparison.OrdinalIgnoreCase) < 0)
                         continue;
 
-                    // Safe-сборка без переопределения текстур и звуков:
-                    // оставляет импорт-настройки ассетов как есть.
+                    // The safe build without texture/sound overrides: leaves
+                    // the assets' import settings as they are.
                     if (attribute.menuItem.IndexOf(SafeBuildMenuHint, StringComparison.OrdinalIgnoreCase) >= 0)
                         safe = attribute.menuItem;
 
-                    // Самый короткий путь — почти наверняка основной пункт
-                    // сборки, а не его вариация.
+                    // The shortest path is almost certainly the main build
+                    // item rather than a variation of it.
                     if (best == null || attribute.menuItem.Length < best.Length)
                         best = attribute.menuItem;
                 }

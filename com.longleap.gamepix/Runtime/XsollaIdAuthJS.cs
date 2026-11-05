@@ -1,3 +1,15 @@
+// Compiled only with GAMEPIX_JS: the sign-in path for projects whose GamePix
+// plugin has no user API (no Assets/Plugins/GamePix/User, no Gpx.User). It
+// talks to window.GamePix.user through GamePixXsollaId.jslib instead. Projects
+// whose plugin has Gpx.User use XsollaIdAuthGamePix (compiled without
+// GAMEPIX_JS) — exactly one of the two exists in a build.
+//
+// Known limitation: waits use Task.WhenAny + Task.Delay. Task.Delay relies on a
+// timer that does not tick in single-threaded WebGL, so in a WebGL player a
+// call can stay pending ("Signing in" forever) even after the SDK answered.
+// XsollaIdAuthGamePix drives its waits from the player loop and does not have
+// this problem.
+#if GAMEPIX_JS
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -11,32 +23,33 @@ using UnityEngine;
 
 namespace LongLeap.GamePix
 {
-    // Вход через Xsolla ID силами GamePix SDK v3 (GamePix.user.*).
+    // Xsolla ID sign-in through GamePix SDK v3 (GamePix.user.*), via a jslib.
     //
-    // На площадке входом занимается сама площадка: у неё своё окно, свой
-    // refresh и свой кэш токена. Нам остаётся спросить готовый ответ — поэтому
-    // здесь нет ни PKCE, ни redirect_uri, ни страницы обратного вызова, ни
-    // сохранённой сессии. Токен НЕ пишем никуда (требование SDK): при каждом
-    // запуске сессию заново отдаёт getUser().
+    // On the portal, GamePix handles sign-in itself: its own login window, its
+    // own refresh, its own token cache. We only ask for the ready answer, so
+    // there is no PKCE, no redirect_uri, no callback page and no stored
+    // session. The token is NEVER persisted (SDK requirement): every launch
+    // gets the session again from getUser().
     //
-    // Реализует тот же IXsollaIdAuth, что и собственный вход, поэтому BackPack,
-    // переключатель сейвов и виджет аккаунта работают без изменений.
+    // Implements the same IXsollaIdAuth as the standalone sign-in, so BackPack,
+    // the save switch and the account widget work unchanged.
     //
-    // Наружу не бросает ничего: любой сбой — XsollaIdResult.Failure.
+    // Never throws: any failure becomes XsollaIdResult.Failure.
     public sealed class XsollaIdAuthJS : IXsollaIdAuth
     {
-        // getUser отвечает гостю «в течение нескольких секунд». Держим меньше
-        // readyTimeoutSeconds виджета (12 с), чтобы ответ «нет» успел раньше,
-        // чем виджет сдастся сам.
+        // getUser answers a guest "within a few seconds". Kept below the
+        // widget's readyTimeoutSeconds (12 s) so our "no" arrives before the
+        // widget gives up on its own.
         private static readonly TimeSpan GetUserTimeout = TimeSpan.FromSeconds(10);
 
-        // Окно входа: игрок может проходить MFA — столько же ждёт XsollaIdAuth.
+        // Login window: the player may be going through MFA — same as XsollaIdAuth.
         private static readonly TimeSpan LoginTimeout = TimeSpan.FromMinutes(5);
 
-        // Окно входа, пока SDK не ответил ни разу. Так бывает вне плеера
-        // GamePix (localhost, прямая ссылка): SDK молчит на всё, и ждать пять
-        // минут значило бы держать кнопку в «Signing in» без надежды. На
-        // площадке getUser отвечает на старте, так что туда это не попадает.
+        // Login window while the SDK has not answered anything yet. Happens
+        // outside the GamePix Player (localhost, direct link): the SDK stays
+        // silent, and waiting five minutes would hold the button in
+        // "Signing in" for nothing. Inside the Player getUser answers at
+        // startup, so this does not apply there.
         private static readonly TimeSpan UnconfirmedLoginTimeout = TimeSpan.FromSeconds(20);
 
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -44,7 +57,7 @@ namespace LongLeap.GamePix
         [DllImport("__Internal")] private static extern void GpxXsollaIdCall(int requestId, int login);
         [DllImport("__Internal")] private static extern int GpxXsollaIdSubscribe();
 #else
-        // В редакторе SDK нет: IsAvailable вернёт false, и до вызовов дело не дойдёт.
+        // No SDK in the Editor: IsAvailable returns false, so these are never called.
         private static int GpxXsollaIdIsSupported() => 0;
         private static void GpxXsollaIdCall(int requestId, int login) =>
             throw new NotSupportedException("XsollaIdAuthJS: GamePix SDK exists only in a WebGL build.");
@@ -53,9 +66,9 @@ namespace LongLeap.GamePix
 
         private readonly bool _sdkHasUserApi;
 
-        // SDK есть, но игра открыта не внутри плеера GamePix (localhost,
-        // прямая ссылка) — он честно отвечает 404. Входа тогда нет, и кнопку
-        // надо спрятать, а не показывать неработающую.
+        // The SDK is there, but the game is not running inside the GamePix
+        // Player (localhost, direct link) — it answers 404. There is no sign-in
+        // then, and the button must be hidden rather than shown broken.
         private bool _notInPlayer;
 
         private Task<XsollaIdResult> _signInInFlight;
@@ -71,9 +84,9 @@ namespace LongLeap.GamePix
                 return;
             }
 
-            // Приёмник переживает перезагрузку сцены, а этот объект — нет:
-            // обработчик ПОДМЕНЯЕМ, а не добавляем, чтобы старый экземпляр не
-            // продолжал получать события.
+            // The receiver survives a scene reload, this object does not: the
+            // handler is REPLACED, not added, so the previous instance stops
+            // receiving events.
             GamePixXsollaIdCallbacks callbacks = GamePixXsollaIdCallbacks.Instance;
             callbacks.AuthChangedHandler = OnAuthChanged;
 
@@ -94,8 +107,8 @@ namespace LongLeap.GamePix
 
         public XsollaIdSession Current { get; private set; }
 
-        // У SDK нет выхода: следующий же getUser() или authChanged вернул бы
-        // игрока обратно. Виджет по этому признаку прячет кнопку выхода.
+        // The SDK has no sign-out: the very next getUser() or authChanged would
+        // bring the player back. The widget hides the sign-out button on this.
         public bool CanSignOut => false;
 
         public event Action<XsollaIdSession> SignedIn;
@@ -123,8 +136,8 @@ namespace LongLeap.GamePix
             }
         }
 
-        // SDK кэширует токен и сам обновляет его за минуту до истечения, так что
-        // «обновить» — это просто спросить заново.
+        // The SDK caches the token and renews it a minute before expiry, so
+        // "refresh" just means asking again.
         public Task<XsollaIdResult> RefreshAsync()
         {
             if (!IsAvailable)
@@ -146,7 +159,7 @@ namespace LongLeap.GamePix
                 return Task.FromResult(XsollaIdResult.Unavailable());
             }
 
-            // Повторный клик не должен открывать второе окно.
+            // A second click must not open a second window.
             if (_signInInFlight != null && !_signInInFlight.IsCompleted)
             {
                 Log("sign-in already in progress — reusing the open GamePix login window.");
@@ -160,8 +173,8 @@ namespace LongLeap.GamePix
             return _signInInFlight;
         }
 
-        // Выхода у площадки нет — забываем локально. CanSignOut == false, так
-        // что из UI сюда не попасть; метод есть ради контракта.
+        // The portal has no sign-out — forget locally. CanSignOut == false, so
+        // the UI never gets here; the method exists for the contract.
         public Task SignOutAsync()
         {
             Log("sign-out requested — forgetting the session locally (GamePix has no sign-out).");
@@ -209,7 +222,7 @@ namespace LongLeap.GamePix
                         }
                         else if (failure.Code == XsollaIdErrorCode.SessionExpired)
                         {
-                            // Гость — штатный исход getUser(), а не сбой.
+                            // A guest is a normal getUser() outcome, not an error.
                             Log("the player is a guest on GamePix (code 401).");
                             Forget();
                         }
@@ -255,7 +268,7 @@ namespace LongLeap.GamePix
 
             if (!(result is XsollaIdResult.Success success))
             {
-                // Сессия кончилась или игрок вышел на сайте GamePix.
+                // The session ended or the player signed out on the GamePix site.
                 Forget();
                 return;
             }
@@ -264,15 +277,17 @@ namespace LongLeap.GamePix
 
             if (Current != null && Current.Subject != session.Subject)
             {
-                // На сайте вошли под другим аккаунтом: для подписчиков это
-                // выход прежнего игрока и вход нового, а не обновление токена.
+                // A different account signed in on the site: for subscribers this
+                // is the previous player signing out and a new one signing in,
+                // not a token update.
                 Log("authChanged brought a different account — signing the previous one out first.");
                 Forget();
             }
 
-            // Вход «из ниоткуда» после старта — это игрок сам вошёл на сайте
-            // площадки, то есть его жест: сейвы вправе спросить, какой оставить.
-            // Для уже вошедшего это просто обновление токена.
+            // A sign-in "out of nowhere" after startup means the player signed in
+            // on the portal site — their own gesture, so the save switch may ask
+            // which save to keep. For an already signed-in player it is just a
+            // token update.
             XsollaIdSignInOrigin origin = Current == null && IsReady
                 ? XsollaIdSignInOrigin.Interactive
                 : XsollaIdSignInOrigin.Refreshed;
@@ -314,14 +329,14 @@ namespace LongLeap.GamePix
         private static string Describe(XsollaIdResult result) =>
             result is XsollaIdResult.Failure failure ? $"failure {failure.Code}" : "success";
 
-        // Все строки журнала с одним префиксом: в консоли браузера их ищут
-        // фильтром по имени класса. Токены сюда не попадают никогда.
+        // Every log line carries the same prefix: filter the browser console by
+        // the class name. Tokens never get here.
         internal static void Log(string message) => Debug.Log($"{nameof(XsollaIdAuthJS)}: {message}");
 
-        // ---- разбор ответа; публичные ради EditMode-тестов ----
+        // ---- answer mapping; public for the EditMode tests ----
 
-        // login различает смысл 401: у getUser это гость, у requestLogin —
-        // игрок закрыл окно.
+        // login tells the two meanings of 401 apart: for getUser it is a guest,
+        // for requestLogin the player closed the window.
         public static XsollaIdResult ToResult(GamePixAuthPayload payload, bool login)
         {
             if (payload == null)
@@ -371,11 +386,11 @@ namespace LongLeap.GamePix
             }
         }
 
-        // Ключ игрока — sub из JWT, тот же, что отдаёт собственный вход
-        // Xsolla ID: под ним лежат облачные сейвы и события BackPack. Подпись
-        // не проверяем — токен пришёл от SDK площадки, а проверку делает
-        // сервер, которому его предъявляют. Если разобрать не вышло, берём
-        // user.id: площадка обещает, что он уникален и не меняется.
+        // The player key is the JWT sub — the same one the standalone Xsolla ID
+        // sign-in yields: cloud saves and BackPack events live under it. The
+        // signature is not checked: the token came from the portal SDK, and the
+        // server it is presented to verifies it. If it cannot be read, fall
+        // back to user.id: the portal promises it is unique and stable.
         public static XsollaUserId ReadSubject(string token, string fallbackId)
         {
             string sub = TryReadJwtSubject(token);
@@ -430,8 +445,8 @@ namespace LongLeap.GamePix
         private static string NullIfEmpty(string value) => string.IsNullOrEmpty(value) ? null : value;
     }
 
-    // Плоский ответ GamePix.user.* в том виде, как его собирает
-    // GamePixXsollaId.jslib ($GpxXsollaIdPack).
+    // The flat GamePix.user.* answer as built by GamePixXsollaId.jslib
+    // ($GpxXsollaIdPack).
     public sealed class GamePixAuthPayload
     {
         [JsonProperty("requestId")] public int RequestId { get; set; }
@@ -450,19 +465,19 @@ namespace LongLeap.GamePix
         public static GamePixAuthPayload Parse(string json) =>
             string.IsNullOrEmpty(json) ? null : JsonConvert.DeserializeObject<GamePixAuthPayload>(json);
 
-        // Токен не печатаем: его прячет и AccessToken, но payload — сырая строка.
+        // Never prints the token: AccessToken hides it too, but the payload is a raw string.
         public override string ToString() =>
             $"GamePixAuthPayload(requestId={RequestId}, success={Success}, code={Code}, guest={Guest}, " +
             $"id={(string.IsNullOrEmpty(Id) ? "none" : "set")}, token={(string.IsNullOrEmpty(Token) ? "none" : "set")}, " +
             $"expiresAt={ExpiresAt}, message=\"{Message}\")";
     }
 
-    // Приёмник SendMessage из GamePixXsollaId.jslib. Живёт в DontDestroyOnLoad:
-    // окно входа площадки переживает перезагрузку сцены, и ответ должен дойти.
+    // SendMessage receiver for GamePixXsollaId.jslib. Lives in DontDestroyOnLoad:
+    // the portal login window survives a scene reload, and the answer must arrive.
     internal sealed class GamePixXsollaIdCallbacks : MonoBehaviour
     {
-        // Имя объекта, по которому его находит SendMessage. Менять только
-        // вместе с GamePixXsollaId.jslib.
+        // The object name SendMessage finds it by. Change only together with
+        // GamePixXsollaId.jslib.
         internal const string ReceiverName = "GamePixXsollaIdCallbacks";
 
         private static GamePixXsollaIdCallbacks _instance;
@@ -472,11 +487,12 @@ namespace LongLeap.GamePix
 
         private int _nextId = 1;
 
-        // Один на всю игру: его ставит последний созданный XsollaIdAuthJS.
+        // One per game: set by the most recently created XsollaIdAuthJS.
         internal Action<string> AuthChangedHandler { get; set; }
 
-        // Ответил ли SDK хоть раз за жизнь страницы. Свой таймаут (408 из
-        // CallAsync) ответом не считается — это как раз молчание.
+        // Whether the SDK has answered anything at all on this page. Our own
+        // timeout (the 408 from CallAsync) does not count — that is exactly
+        // the silence.
         internal bool HasAnswered { get; private set; }
 
         internal static GamePixXsollaIdCallbacks Instance
@@ -492,14 +508,14 @@ namespace LongLeap.GamePix
 
         private void Awake() => DontDestroyOnLoad(gameObject);
 
-        // send вызывается синхронно, до первого await: для requestLogin это
-        // условие, иначе браузер заблокирует окно входа.
+        // send is called synchronously, before the first await: requestLogin
+        // requires it, otherwise the browser blocks the login window.
         internal async Task<string> CallAsync(bool login, TimeSpan timeout, Action<int, bool> send)
         {
             int id = _nextId++;
 
-            // RunContinuationsAsynchronously: продолжение не должно выполняться
-            // внутри кадра SendMessage.
+            // RunContinuationsAsynchronously: the continuation must not run
+            // inside the SendMessage frame.
             var completion = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             _pending[id] = completion;
@@ -539,7 +555,7 @@ namespace LongLeap.GamePix
             }
         }
 
-        // --- вызывается из GamePixXsollaId.jslib, имена не менять ---
+        // --- called from GamePixXsollaId.jslib, do not rename ---
 
         public void OnAuthResult(string json)
         {
@@ -557,7 +573,7 @@ namespace LongLeap.GamePix
 
             HasAnswered = true;
 
-            // Опоздавший ответ (после таймаута) выдавать уже некому.
+            // A late answer (after the timeout) has no one to go to.
             if (_pending.TryGetValue(id, out TaskCompletionSource<string> completion))
                 completion.TrySetResult(json);
             else
@@ -574,3 +590,4 @@ namespace LongLeap.GamePix
         }
     }
 }
+#endif

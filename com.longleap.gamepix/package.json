@@ -2,7 +2,7 @@
   "name": "com.longleap.gamepix",
   "version": "0.1.0",
   "displayName": "LongLeap GamePix Backend",
-  "description": "GamePix portal backend implementations: ads (interstitial, rewarded) and portal host info. Requires the GamePix Unity plugin at Assets/Plugins/GamePix and the GAMEPIX scripting define.",
+  "description": "GamePix portal backend: ads (interstitial, rewarded, score), portal language, Xsolla ID sign-in through the portal SDK, and editor tooling (GamePix menu, Build Manager options and build target, index.html postprocess, HTML5 zip packager). Requires the GamePix Unity plugin at Assets/Plugins/GamePix and the GAMEPIX scripting define.",
   "unity": "6000.0",
   "keywords": ["gamepix", "ads", "portal", "webgl", "backend", "longleap"],
   "dependencies": {

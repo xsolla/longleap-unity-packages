@@ -8,26 +8,26 @@ using UnityEngine;
 
 namespace LongLeap.GamePix.Editor
 {
-    // Собирает zip для загрузки игры на площадку как HTML5 (не .gpx).
+    // Builds the zip for uploading the game to the portal as HTML5 (not .gpx).
     //
-    // Зачем отдельная кнопка, а не «сжать папку проводником»: у архива есть
-    // несколько неочевидных требований, на каждом из которых мы уже спотыкались.
+    // Why a dedicated button instead of "compress the folder in Explorer": the
+    // archive has several non-obvious requirements, and each one has bitten us.
     //
-    //   1. Разделитель путей в zip — прямой слэш. Проводник Windows и
-    //      Compress-Archive пишут обратный, и по спецификации это невалидно:
-    //      распаковщик на Linux (а именно он стоит на приёмке) считает
-    //      "Build\html5.wasm" ОДНИМ именем файла, папки Build не появляется, и
-    //      игра не грузится. Поэтому имена записей формируем сами.
-    //   2. index.html должен лежать в корне архива, а не внутри вложенной папки.
-    //   3. Артефакты конвейера .gpx в HTML5-загрузке лишние: MethodMap.tsv на
-    //      21 МБ, appinfo.json, libunity-gpx.a и сам .gpx.
-    //   4. Тег GamePix SDK v3 первым скриптом в <head> обязателен по
-    //      официальному гайду — его ставит GamePixIndexPostprocessor, и здесь он
-    //      остаётся. Снимаем только старый dev-SDK (gpxlib): у него нет методов
-    //      рекламы, а window.GamePix он займёт.
+    //   1. The path separator in a zip is a forward slash. Windows Explorer and
+    //      Compress-Archive write backslashes, which is invalid per the spec: a
+    //      Linux unpacker (which is what the portal's intake runs) treats
+    //      "Build\html5.wasm" as ONE file name, no Build folder appears, and
+    //      the game does not load. So the entry names are built here.
+    //   2. index.html must be at the archive root, not inside a nested folder.
+    //   3. .gpx pipeline artifacts do not belong in an HTML5 upload:
+    //      MethodMap.tsv (21 MB), appinfo.json, libunity-gpx.a and the .gpx itself.
+    //   4. The GamePix SDK v3 tag as the first script in <head> is mandatory per
+    //      the official guide — GamePixIndexPostprocessor adds it, and it stays.
+    //      Only the old dev SDK (gpxlib) is removed: it has no ad methods but
+    //      would claim window.GamePix.
     //
-    // Ассеты не пережимает и ничего не пересобирает: только упаковывает то, что
-    // уже собрано, и честно рассказывает, что получилось.
+    // It does not recompress assets or rebuild anything: it only packs what is
+    // already built and reports exactly what came out.
     public static class GamePixHtml5Packager
     {
         private const string MenuPath = "GamePix/Package HTML5 Zip...";
@@ -41,7 +41,7 @@ namespace LongLeap.GamePix.Editor
                 "MethodMap.tsv", "appinfo.json", "libunity-gpx.a", ".DS_Store", "Thumbs.db"
             };
 
-        // Старый dev-SDK, который раньше вставлял GamePixIndexPostprocessor.
+        // The old dev SDK that GamePixIndexPostprocessor used to insert.
         private static readonly Regex LegacySdkTag = new Regex(
             "[ \\t]*<script src=\"https?://[^\"]*gpxlib[^\"]*\"></script>\\r?\\n?",
             RegexOptions.IgnoreCase);
@@ -55,7 +55,7 @@ namespace LongLeap.GamePix.Editor
                 : projectRoot;
 
             string source = EditorUtility.OpenFolderPanel(
-                "Папка собранной WebGL-игры (в ней лежит index.html)", startDir, string.Empty);
+                "WebGL build folder (contains index.html)", startDir, string.Empty);
 
             if (string.IsNullOrEmpty(source))
                 return;
@@ -65,12 +65,12 @@ namespace LongLeap.GamePix.Editor
             if (!File.Exists(indexPath))
             {
                 EditorUtility.DisplayDialog("GamePix",
-                    "В выбранной папке нет index.html — это не папка сборки WebGL.\n\n" + source, "OK");
+                    "The selected folder has no index.html — it is not a WebGL build folder.\n\n" + source, "OK");
                 return;
             }
 
             string html = File.ReadAllText(indexPath);
-            // Спрашивать нечего: старый SDK не нужен ни площадке, ни тест-тулкиту.
+            // Nothing to ask: neither the portal nor the test toolkit needs the old SDK.
             bool stripSdk = LegacySdkTag.IsMatch(html);
 
             if (stripSdk)
@@ -78,13 +78,13 @@ namespace LongLeap.GamePix.Editor
 
             if (!html.Contains("integration.gamepix.com/sdk/"))
             {
-                Debug.LogWarning("GamePixHtml5Packager: в index.html нет тега GamePix SDK v3 — " +
-                                 "по гайду он обязателен. Пересоберите игру с включённым GAMEPIX.");
+                Debug.LogWarning("GamePixHtml5Packager: index.html has no GamePix SDK v3 tag — " +
+                                 "the guide makes it mandatory. Rebuild the game with GAMEPIX on.");
             }
 
             string defaultName = SanitizeFileName(Application.productName) + "-html5.zip";
             string target = EditorUtility.SaveFilePanel(
-                "Куда сохранить архив", projectRoot, defaultName, "zip");
+                "Save the archive as", projectRoot, defaultName, "zip");
 
             if (string.IsNullOrEmpty(target))
                 return;
@@ -95,16 +95,16 @@ namespace LongLeap.GamePix.Editor
             }
             catch (OperationCanceledException)
             {
-                // Недописанный архив не оставляем: он выглядит как готовый.
+                // Do not leave a half-written archive: it looks like a finished one.
                 DeleteQuietly(target);
-                Debug.Log("GamePixHtml5Packager: упаковка отменена, архив удалён.");
+                Debug.Log("GamePixHtml5Packager: packaging cancelled, the archive was deleted.");
                 return;
             }
             catch (Exception e)
             {
                 DeleteQuietly(target);
-                Debug.LogError("GamePixHtml5Packager: упаковка не удалась — " + e.Message);
-                EditorUtility.DisplayDialog("GamePix", "Упаковка не удалась:\n\n" + e.Message, "OK");
+                Debug.LogError("GamePixHtml5Packager: packaging failed — " + e.Message);
+                EditorUtility.DisplayDialog("GamePix", "Packaging failed:\n\n" + e.Message, "OK");
                 return;
             }
             finally
@@ -119,8 +119,8 @@ namespace LongLeap.GamePix.Editor
         {
             List<string> files = Collect(source, target);
 
-            // Пишем через ZipArchive.CreateEntry, а не ZipFile.CreateFromDirectory:
-            // последний на Windows подставляет в имена обратный слэш (см. заголовок).
+            // Written with ZipArchive.CreateEntry, not ZipFile.CreateFromDirectory:
+            // the latter puts backslashes into names on Windows (see the header).
             using (FileStream stream = new FileStream(target, FileMode.Create, FileAccess.Write))
             using (ZipArchive zip = new ZipArchive(stream, ZipArchiveMode.Create))
             {
@@ -135,8 +135,8 @@ namespace LongLeap.GamePix.Editor
                     string entryName = ToEntryName(source, full);
 
                     if (EditorUtility.DisplayCancelableProgressBar(
-                            "Упаковка HTML5", entryName, (float)i / files.Count))
-                        throw new OperationCanceledException("отменено пользователем");
+                            "Packaging HTML5", entryName, (float)i / files.Count))
+                        throw new OperationCanceledException("cancelled by the user");
 
                     ZipArchiveEntry entry = zip.CreateEntry(entryName, System.IO.Compression.CompressionLevel.Optimal);
 
@@ -156,7 +156,7 @@ namespace LongLeap.GamePix.Editor
             {
                 string name = Path.GetFileName(full);
 
-                // index.html кладём отдельно: он мог поменяться в памяти.
+                // index.html is written separately: it may have changed in memory.
                 if (name.Equals("index.html", StringComparison.OrdinalIgnoreCase))
                     continue;
 
@@ -166,7 +166,7 @@ namespace LongLeap.GamePix.Editor
                 if (Path.GetExtension(full).Equals(".gpx", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                // Архив может сохраняться внутрь той же папки — сам себя не пакуем.
+                // The archive may be saved into the same folder — never pack itself.
                 if (Path.GetFullPath(full).Equals(targetFull, StringComparison.OrdinalIgnoreCase))
                     continue;
 
@@ -184,7 +184,7 @@ namespace LongLeap.GamePix.Editor
             string relative = ToEntryName(source, full);
             string[] parts = relative.Split('/');
 
-            // Последний элемент — имя файла, каталоги проверяем до него.
+            // The last part is the file name; check only the folders before it.
             for (int i = 0; i < parts.Length - 1; i++)
                 if (SkipDirs.Contains(parts[i]))
                     return true;
@@ -199,9 +199,10 @@ namespace LongLeap.GamePix.Editor
             return relative.Replace('\\', '/');
         }
 
-        // Пересчитываем готовый архив, а не то, что собирались положить: смотрим
-        // ровно на результат, включая размер после распаковки — именно его будет
-        // качать игрок, и именно он вырастает вчетверо, если сборка без сжатия.
+        // Re-reads the finished archive rather than trusting what was meant to
+        // go in: it looks at the actual result, including the unpacked size —
+        // that is what the player downloads, and it grows fourfold if the build
+        // is uncompressed.
         private static void Report(string source, string target, bool strippedSdk)
         {
             long packed = new FileInfo(target).Length;
@@ -211,8 +212,8 @@ namespace LongLeap.GamePix.Editor
             bool hasBackslash = false;
             bool assetsCompressed = false;
 
-            // Открываем через ZipArchive, а не ZipFile.OpenRead: класс ZipFile
-            // живёт в отдельной сборке, которую Unity подключает не всегда.
+            // Opened through ZipArchive, not ZipFile.OpenRead: ZipFile lives in
+            // a separate assembly that Unity does not always reference.
             using (FileStream stream = File.OpenRead(target))
             using (ZipArchive zip = new ZipArchive(stream, ZipArchiveMode.Read))
             {
@@ -235,28 +236,28 @@ namespace LongLeap.GamePix.Editor
             }
 
             Debug.Log(string.Format(
-                "GamePixHtml5Packager: собран {0}\n" +
-                "  источник: {1}\n" +
-                "  записей: {2}, архив: {3:F1} МБ, после распаковки: {4:F1} МБ\n" +
-                "  index.html в корне: {5}, обратных слэшей в путях: {6}\n" +
-                "  тег внешнего SDK: {7}",
+                "GamePixHtml5Packager: created {0}\n" +
+                "  source: {1}\n" +
+                "  entries: {2}, archive: {3:F1} MB, unpacked: {4:F1} MB\n" +
+                "  index.html at root: {5}, backslashes in paths: {6}\n" +
+                "  legacy SDK tag: {7}",
                 target, source, entries, Mb(packed), Mb(unpacked),
-                hasIndexAtRoot ? "да" : "НЕТ",
-                hasBackslash ? "ЕСТЬ" : "нет",
-                strippedSdk ? "убран" : "оставлен как был"));
+                hasIndexAtRoot ? "yes" : "NO",
+                hasBackslash ? "YES" : "no",
+                strippedSdk ? "removed" : "left as is"));
 
             if (!hasIndexAtRoot)
-                Debug.LogError("GamePixHtml5Packager: в корне архива нет index.html — площадка такую сборку не запустит.");
+                Debug.LogError("GamePixHtml5Packager: no index.html at the archive root — the portal will not start this build.");
 
             if (hasBackslash)
-                Debug.LogError("GamePixHtml5Packager: в путях архива обратные слэши — на приёмке папки развалятся в плоские имена.");
+                Debug.LogError("GamePixHtml5Packager: backslashes in archive paths — the portal's intake will flatten the folders into plain names.");
 
             if (!assetsCompressed)
                 Debug.LogWarning(string.Format(
-                    "GamePixHtml5Packager: сборка без сжатия — игрок скачает {0:F0} МБ.\n" +
-                    "Сборка из меню GamePix всегда ставит WebGL Compression Format = Disabled " +
-                    "(это нужно .gpx, он сжимает сам). Для HTML5-загрузки включите Brotli и " +
-                    "Decompression Fallback в Player Settings и соберите через LongLeap / Build Manager.",
+                    "GamePixHtml5Packager: the build is uncompressed — the player downloads {0:F0} MB.\n" +
+                    "A build from the GamePix menu always sets WebGL Compression Format = Disabled " +
+                    "(the .gpx needs it, it compresses itself). For an HTML5 upload enable Brotli and " +
+                    "Decompression Fallback in Player Settings and build via LongLeap / Build Manager.",
                     Mb(unpacked)));
 
             EditorUtility.RevealInFinder(target);
@@ -271,7 +272,7 @@ namespace LongLeap.GamePix.Editor
             }
             catch (IOException)
             {
-                // Файл занят — не беда, следующая упаковка его перезапишет.
+                // The file is locked — fine, the next packaging run overwrites it.
             }
         }
 

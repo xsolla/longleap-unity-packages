@@ -1,12 +1,12 @@
-using System;
 using GamePix;
 using LongLeap.Core.Ads;
 using UnityEngine;
 
 namespace LongLeap.GamePix
 {
-    // Язык, который портал передал при запуске. Плагин разбирает его из аргументов
-    // командной строки ещё до загрузки сцены, так что значение готово к бутстрапу.
+    // The language the portal passed at launch. The plugin parses it from the
+    // command-line arguments before the first scene loads, so the value is
+    // ready by bootstrap time.
     public sealed class GamePixPortalLocale : IPortalLocale
     {
         public bool TryGetLocale(out string twoLetterCode)
@@ -16,8 +16,9 @@ namespace LongLeap.GamePix
             return twoLetterCode != null;
         }
 
-        // Плагин отдаёт SystemLanguage. Переводим в ISO-639-1, игра дальше сама
-        // решает, поддерживает ли такой язык (иначе по правилам портала — английский).
+        // The plugin reports a SystemLanguage. Convert it to ISO 639-1; the game
+        // decides whether it supports that language (portal rules say: fall
+        // back to English otherwise).
         private static string ToTwoLetterCode(SystemLanguage language)
         {
             switch (language)

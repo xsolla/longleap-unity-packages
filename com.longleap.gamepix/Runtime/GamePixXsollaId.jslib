@@ -1,13 +1,18 @@
 var GamePixXsollaIdLib = {
-    // Мост к GamePix.user из SDK v3: площадка сама входит через Xsolla ID и
-    // отдаёт игре готовый токен. Здесь только вызов SDK и пересылка ответа в
-    // C# через SendMessage — вся логика в XsollaIdAuthJS.cs.
+    // Bridge to GamePix.user from SDK v3, used by XsollaIdAuthJS (GAMEPIX_JS):
+    // the portal signs in through Xsolla ID itself and hands the game a ready
+    // token. This file only calls the SDK and forwards the answer to C# via
+    // SendMessage — all logic lives in XsollaIdAuthJS.cs.
     //
-    // Ответ уходит строкой JSON: SendMessage умеет только строки. Токен в нём —
-    // учётные данные игрока, поэтому ни одного console.log с ответом.
+    // Without GAMEPIX_JS nothing in C# imports these functions, and Emscripten
+    // links only referenced library functions, so the file adds nothing to the
+    // build.
+    //
+    // The answer is sent as a JSON string: SendMessage only carries strings.
+    // The token in it is the player's credential, so never console.log it.
 
-    // Сводит ответ SDK к плоскому объекту с полями, которые всегда есть:
-    // C# не должен гадать, пришёл ли null, undefined или не пришло ничего.
+    // Flattens the SDK answer into an object whose fields are always present:
+    // C# should not have to guess whether it got null, undefined or nothing.
     $GpxXsollaIdPack: function (requestId, auth) {
         auth = auth || {};
         var user = auth.user || {};
@@ -28,19 +33,20 @@ var GamePixXsollaIdLib = {
         });
     },
 
-    // 1, если SDK загружен и в нём есть пользовательский API. У старых сборок
-    // SDK его нет — тогда вход прячется.
+    // 1 if the SDK is loaded and has the user API. Older SDK builds lack it —
+    // then sign-in is hidden.
     GpxXsollaIdIsSupported: function () {
         var gpx = window.GamePix;
 
         return gpx && gpx.user && typeof gpx.user.getUser === 'function' ? 1 : 0;
     },
 
-    // login == 0 — GamePix.user.getUser(): окна не показывает никогда, гость
-    // получает 401.
-    // login == 1 — GamePix.user.requestLogin(): окно входа площадки. Зовётся
-    // ТОЛЬКО из обработчика нажатия: окно открывается синхронно внутри вызова,
-    // пока жест игрока ещё жив, поэтому до вызова здесь нет ни одного await.
+    // login == 0 — GamePix.user.getUser(): never shows a window; a guest gets
+    // 401.
+    // login == 1 — GamePix.user.requestLogin(): the portal login window. Call
+    // it ONLY from a click handler: the window opens synchronously inside the
+    // call while the player's gesture is still alive, so there is no await
+    // before the call here.
     GpxXsollaIdCall__deps: ['$GpxXsollaIdPack'],
     GpxXsollaIdCall: function (requestId, login) {
         function reply(auth) {
@@ -71,12 +77,13 @@ var GamePixXsollaIdLib = {
         Promise.resolve(promise).then(reply, fail);
     },
 
-    // authChanged: SDK сам обновляет токен, а игрок может войти или выйти на
-    // сайте GamePix, пока игра открыта. Подписываемся один раз на страницу —
-    // перезагрузка сцены после смерти не должна плодить обработчики.
+    // authChanged: the SDK renews the token itself, and the player may sign in
+    // or out on the GamePix site while the game is open. Subscribe once per
+    // page — reloading the scene after death must not pile up handlers.
     GpxXsollaIdSubscribe__deps: ['$GpxXsollaIdPack'],
-    // Возвращает 1 — подписка есть (новая или с прошлой сцены), 0 — у SDK нет
-    // GamePix.events.on, и об authChanged игра не узнает. C# это логирует.
+    // Returns 1 — subscribed (now or by a previous scene), 0 — the SDK has no
+    // GamePix.events.on and the game will never hear about authChanged. C#
+    // logs this.
     GpxXsollaIdSubscribe: function () {
         if (window.__gpxXsollaIdSubscribed) return 1;
 

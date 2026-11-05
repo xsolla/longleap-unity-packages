@@ -8,54 +8,57 @@ using UnityEngine;
 
 namespace LongLeap.GamePix.Editor
 {
-    // Правит index.html портальной сборки сразу после билда.
+    // Patches the portal build's index.html right after the build.
     //
-    // Почему постпроцесс, а не свой WebGL-шаблон: плагин принудительно ставит
-    // APPLICATION:Minimal (UnityConfigurator.SetPlayerSettings) на каждый билд,
-    // так что любой свой шаблон будет затёрт. А этот хук — наш код в пакете: его
-    // не сносит обновление плагина, и отрабатывает он ДО того, как Builder
-    // упакует папку html5 в .gpx.
+    // Why a postprocess and not a custom WebGL template: the plugin forces
+    // APPLICATION:Minimal (UnityConfigurator.SetPlayerSettings) on every build,
+    // so any custom template gets overwritten. This hook is our code in the
+    // package: a plugin update does not remove it, and it runs BEFORE the
+    // Builder packs the html5 folder into the .gpx.
     //
-    // Живёт в пакете, а не в Assets: обе правки не знают ничего про конкретную
-    // игру — это чистая починка вендорного пайплайна, нужная любому проекту
-    // LongLeap, который едет на GamePix.
+    // Lives in the package, not in Assets: none of the fixes knows anything
+    // about a particular game — they repair the vendor pipeline for any
+    // LongLeap project that ships on GamePix.
     //
-    // Делает две вещи:
+    // Does three things:
     //
-    // 1. Резиновый канвас — всегда. Шаблон Minimal прибивает канвасу жёсткие
-    //    "width: 960px; height: 600px" и не умеет подстраиваться под контейнер.
-    //    В портале игра живёт в чужом iframe (в тест-тулките 800x450), и всё,
-    //    что не влезло, обрезается — вместе с кнопками у правого и нижнего краёв.
-    //    Правила площадки требуют обратного: вписываться вплоть до 640x480.
+    // 1. Fluid canvas — always. The Minimal template pins the canvas to a fixed
+    //    "width: 960px; height: 600px" and cannot adapt to its container. On
+    //    the portal the game lives in a foreign iframe (800x450 in the test
+    //    toolkit), and whatever does not fit is cropped — buttons at the right
+    //    and bottom edges included. Portal rules require the opposite: fit
+    //    down to 640x480.
     //
-    // 2. Тег SDK — всегда, первым скриптом в <head>. Это обязательный пункт
-    //    официального гайда GamePix ("Import the SDK inside your index.html
-    //    MANDATORY ... as first script in the <head> section"). Без объекта
-    //    window.GamePix плагин молча не стартует (в его glue стоит
-    //    `typeof GamePix === "undefined"` → return), и игра показывает пустой
-    //    канвас.
+    // 2. Title — "Unity Web Player | <Name>" becomes "<Name>" (see FixTitle).
+    //
+    // 3. SDK tag — always, as the first script in <head>. A mandatory item of
+    //    the official GamePix guide ("Import the SDK inside your index.html
+    //    MANDATORY ... as first script in the <head> section"). Without the
+    //    window.GamePix object the plugin silently does not start (its glue has
+    //    `typeof GamePix === "undefined"` → return), and the game shows an
+    //    empty canvas.
     public sealed class GamePixIndexPostprocessor : IPostprocessBuildWithReport
     {
         public int callbackOrder => 0;
 
-        // URL из официального гайда GamePix.
+        // URL from the official GamePix guide.
         private const string SdkUrl = "https://integration.gamepix.com/sdk/v3/gamepix.sdk.js";
 
         private const string SdkTag = "<script src=\"" + SdkUrl + "\"></script>";
 
-        // Старый dev-SDK, который раньше вставлял этот постпроцесс по дефайну
-        // GAMEPIX_INJECT_SDK. У него вложенный API без методов рекламы, так что
-        // рядом с настоящим SDK он только мешает — вычищаем, если попался.
+        // The old dev SDK this postprocess used to insert under the
+        // GAMEPIX_INJECT_SDK define. Its nested API has no ad methods, so next
+        // to the real SDK it only gets in the way — removed if found.
         private static readonly Regex LegacySdkTag = new Regex(
             @"[ \t]*<script src=""https?://gamepix\.blob\.core\.windows\.net/gpxlib/[^""]*""></script>\r?\n?",
             RegexOptions.IgnoreCase);
 
         private static readonly Regex HeadOpen = new Regex(@"<head(\s[^>]*)?>", RegexOptions.IgnoreCase);
 
-        // Ищем канвас по элементу, а НЕ по строке с конкретными пикселями.
-        // Раньше здесь стоял литерал "width: 960px; height: 600px", и когда
-        // разрешение в Player Settings поменяли на 1920x1080, правка молча
-        // перестала применяться: канвас уехал в сборку жёстко прибитым.
+        // The canvas is found by its element, NOT by a string with specific
+        // pixels. A literal "width: 960px; height: 600px" used to be here, and
+        // when the Player Settings resolution changed to 1920x1080 the fix
+        // silently stopped applying: the canvas shipped pinned.
         private static readonly Regex CanvasStyle = new Regex(
             "(<canvas[^>]*?id=\"unity-canvas\"[^>]*?style=\")([^\"]*)(\")",
             RegexOptions.IgnoreCase);
@@ -65,10 +68,10 @@ namespace LongLeap.GamePix.Editor
 
         private const string HeadClose = "</head>";
 
-        // Без высоты у html/body проценты канваса не от чего считать.
-        // Кладём в <head>, а не перед <body>: браузеры терпят стиль между
-        // </head> и <body>, но валидной разметкой это не является, а собранную
-        // страницу смотрит ревью площадки.
+        // Without a height on html/body the canvas percentages have nothing to
+        // resolve against. Put into <head>, not before <body>: browsers tolerate
+        // a style between </head> and <body>, but it is not valid markup, and
+        // the portal's review looks at the built page.
         private const string FluidStyle =
             "    <style>html,body{width:100%;height:100%;margin:0;padding:0;border:0;" +
             "overflow:hidden;background:#231F20}</style>\n  ";
@@ -102,10 +105,10 @@ namespace LongLeap.GamePix.Editor
 
             if (!canvas.Success)
             {
-                // Молчать нельзя: именно так предыдущая версия и подвела —
-                // не нашла свою строку и не сказала об этом.
-                Debug.LogWarning("GamePixIndexPostprocessor: канвас #unity-canvas в index.html " +
-                                 "не найден — страница осталась как есть. Поменялся шаблон WebGL?");
+                // Must not stay silent: that is exactly how the previous version
+                // failed — it did not find its string and did not say so.
+                Debug.LogWarning("GamePixIndexPostprocessor: canvas #unity-canvas not found in index.html — " +
+                                 "the page was left as is. Did the WebGL template change?");
                 return html;
             }
 
@@ -122,21 +125,21 @@ namespace LongLeap.GamePix.Editor
                 if (html.Contains(HeadClose))
                     html = html.Replace(HeadClose, FluidStyle + HeadClose);
                 else
-                    Debug.LogWarning("GamePixIndexPostprocessor: в index.html нет </head> — " +
-                                     "стиль резинового html/body не вставлен, канвас может " +
-                                     "остаться нулевой высоты.");
+                    Debug.LogWarning("GamePixIndexPostprocessor: index.html has no </head> — " +
+                                     "the fluid html/body style was not inserted, the canvas may " +
+                                     "end up with zero height.");
             }
 
-            Debug.Log("GamePixIndexPostprocessor: канвас сделан резиновым (было \"" + before +
-                      "\") — игра впишется в кадр площадки вместо обрезки по краям.");
+            Debug.Log("GamePixIndexPostprocessor: the canvas was made fluid (was \"" + before +
+                      "\") — the game fits the portal frame instead of being cropped at the edges.");
 
             return html;
         }
 
-        // Шаблон печатает "Unity Web Player | <Имя>". В HTML5-загрузке площадка
-        // отдаёт нашу же страницу, так что этот заголовок видит и игрок, и ревью,
-        // а правила требуют убрать штатную обвязку Unity и держать имя игры
-        // одинаковым везде.
+        // The template prints "Unity Web Player | <Name>". In an HTML5 upload the
+        // portal serves our own page, so both the player and the review see
+        // this title, and the rules require removing Unity's stock chrome and
+        // keeping the game name the same everywhere.
         private static string FixTitle(string html)
         {
             var title = new Regex("<title>\\s*Unity Web Player\\s*\\|\\s*(.*?)</title>",
@@ -158,22 +161,22 @@ namespace LongLeap.GamePix.Editor
 
             if (!head.Success)
             {
-                Debug.LogError("GamePixIndexPostprocessor: в index.html нет <head> — " +
-                               "обязательный тег GamePix SDK не вставлен.");
+                Debug.LogError("GamePixIndexPostprocessor: index.html has no <head> — " +
+                               "the mandatory GamePix SDK tag was not inserted.");
                 return html;
             }
 
-            // Тег уже стоит первым элементом <head> — повторный постпроцесс
-            // той же папки ничего не меняет.
+            // The tag is already the first element of <head> — postprocessing
+            // the same folder again changes nothing.
             int afterHead = head.Index + head.Length;
             if (html.Substring(afterHead).TrimStart().StartsWith(SdkTag))
                 return html;
 
-            // Стоит, но не первым — переносим наверх: гайд требует первый скрипт.
+            // Present but not first — move it up: the guide requires the first script.
             html = html.Replace(SdkTag, string.Empty);
             html = html.Insert(afterHead, "\n    " + SdkTag);
 
-            Debug.Log("GamePixIndexPostprocessor: тег GamePix SDK вставлен первым скриптом в <head>.");
+            Debug.Log("GamePixIndexPostprocessor: the GamePix SDK tag was inserted as the first script in <head>.");
             return html;
         }
     }

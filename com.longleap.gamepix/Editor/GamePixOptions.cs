@@ -3,14 +3,18 @@ using LongLeap.Core.Editor;
 
 namespace LongLeap.GamePix.Editor
 {
+    // The GamePix project options, shown both in the GamePix menu
+    // (GamePixPluginMenu) and in the Build Manager window.
     internal sealed class GamePixOptions : IProjectOptionSectionProvider
     {
         public const string EnabledId = "gamepix.enabled";
         public const string ConstraintsId = "gamepix.constraints";
         public const string AnalyticsId = "gamepix.allow_analytics";
+        public const string JsBridgeId = "gamepix.js_bridge";
         public const string AdDebugId = "gamepix.ad_debug";
 
-        public const string DefineSymbol = "GAMEPIX";
+        public const string DefineSymbol = GamePixAsmdefConstraints.DefineSymbol;
+        public const string JsBridgeDefineSymbol = "GAMEPIX_JS";
 
         private const string AnalyticsDefineSymbol = "GAMEPIX_ALLOW_ANALYTICS";
         private const string AdDebugDefineSymbol = "GAMEPIX_AD_DEBUG";
@@ -34,30 +38,30 @@ namespace LongLeap.GamePix.Editor
                         EnabledId,
                         DefineSymbol,
                         "Plugin Enabled (GAMEPIX)",
-                        "Дефайн, включающий сборки вендорного плагина площадки. Без папки " +
-                        "Assets/Plugins/GamePix включать нельзя: код под #if GAMEPIX будет " +
-                        "собираться против отсутствующего Gpx и всё встанет с ошибкой.",
+                        "The define that turns on the vendor portal plugin's assemblies. Do not " +
+                        "turn it on without the Assets/Plugins/GamePix folder: code under " +
+                        "#if GAMEPIX would compile against an absent Gpx and everything fails.",
                         required: true,
                         order: 200,
                         availability: PluginPresent,
                         enabledNote:
-                        "GamePixPluginMenu: GAMEPIX включён — сборки плагина появятся после перекомпиляции. "
-                        + "Не забудьте выключить его перед обычным WebGL-билдом.",
+                        "GamePixOptions: GAMEPIX is on — the plugin assemblies appear after recompilation. "
+                        + "Remember to turn it off before a regular WebGL build.",
                         disabledNote:
-                        "GamePixPluginMenu: GAMEPIX выключен — сборки плагина исчезнут после перекомпиляции."),
+                        "GamePixOptions: GAMEPIX is off — the plugin assemblies disappear after recompilation."),
 
-                    // Не дефайн: односторонний ремонт двух файлов на диске.
-                    // Галочка снята — обновление плагина стёрло ограничения,
-                    // применение вернёт их обратно; когда всё на месте, делать
-                    // нечего и строка гаснет.
+                    // Not a define: a one-way repair of two files on disk.
+                    // Unticked — a plugin update wiped the constraints, applying
+                    // puts them back; when everything is in place there is
+                    // nothing to do and the row is disabled.
                     new CustomOption(
                         ConstraintsId,
                         "Plugin Has defineConstraints",
-                        "Стоят ли в asmdef-ах плагина ограничения по GAMEPIX. Обе сборки " +
-                        "плагина обязаны быть ограничены: рантайм — чтобы не тянуть externs и " +
-                        "авто-бутстрап в обычный WebGL-билд, редакторная — потому что " +
-                        "Builder.cs использует ICSharpCode из рантайм-сборки. Обновление " +
-                        "плагина эти ограничения стирает.",
+                        "Whether the plugin's asmdefs are constrained by GAMEPIX. Both plugin " +
+                        "assemblies must be constrained: the runtime one so a regular WebGL build " +
+                        "does not pull in its externs and auto-bootstrap, the editor one because " +
+                        "Builder.cs uses ICSharpCode from the runtime assembly. A plugin update " +
+                        "wipes these constraints.",
                         required: true,
                         order: 202,
                         read: _ => GamePixAsmdefConstraints.AreInPlace()
@@ -71,11 +75,15 @@ namespace LongLeap.GamePix.Editor
                         availability: PluginPresent,
                         oneWay: true),
 
+                    // The package only provides the switch; the game reads the
+                    // define and decides whether to start its analytics.
                     new DefineOption(
                         AnalyticsId,
                         AnalyticsDefineSymbol,
                         "Allow External Analytics (GA4)",
-                        "Внешняя аналитика (GA4) в портальной сборке. По умолчанию выключено.",
+                        "External analytics (GA4) in the portal build. Off by default. The package " +
+                        "only provides the define — game code must check GAMEPIX_ALLOW_ANALYTICS " +
+                        "before starting its analytics.",
                         required: true,
                         order: 203,
                         availability: state =>
@@ -87,24 +95,49 @@ namespace LongLeap.GamePix.Editor
                             "Enable",
                             "Cancel"),
                         enabledNote:
-                        "GamePixPluginMenu: внешняя аналитика включена — GA4 поднимется и в портальной сборке.",
+                        "GamePixOptions: external analytics allowed — GA4 starts in the portal build too.",
                         disabledNote:
-                        "GamePixPluginMenu: внешняя аналитика выключена — в портальной сборке GA4 не поднимается."),
+                        "GamePixOptions: external analytics disallowed — GA4 does not start in the portal build."),
 
+                    // Selects the Xsolla ID sign-in path: on — XsollaIdAuthJS
+                    // (own jslib bridge), off — XsollaIdAuthGamePix (Gpx.User).
+                    new DefineOption(
+                        JsBridgeId,
+                        JsBridgeDefineSymbol,
+                        "Xsolla ID via JS Bridge (GAMEPIX_JS)",
+                        "Compiles XsollaIdAuthJS, which reaches window.GamePix.user through the " +
+                        "package's own jslib, instead of XsollaIdAuthGamePix, which needs the " +
+                        "plugin's user API (Assets/Plugins/GamePix/User, Gpx.User). Turn it on " +
+                        "only for a plugin without that API. Note: XsollaIdAuthJS waits with " +
+                        "Task.Delay, which can hang in a WebGL player.",
+                        required: false,
+                        order: 205,
+                        availability: state =>
+                            ProjectOptionAvailability.RequireDefine(state, DefineSymbol, NeedsGamePix),
+                        enabledNote:
+                        "GamePixOptions: GAMEPIX_JS is on — Xsolla ID sign-in goes through XsollaIdAuthJS " +
+                        "(jslib); XsollaIdAuthGamePix is not compiled.",
+                        disabledNote:
+                        "GamePixOptions: GAMEPIX_JS is off — Xsolla ID sign-in goes through XsollaIdAuthGamePix " +
+                        "(Gpx.User); XsollaIdAuthJS is not compiled."),
+
+                    // The package only provides the switch; the overlay itself
+                    // lives in the game and reads AdsDebug.Lines (LongLeap.Core.Ads).
                     new DefineOption(
                         AdDebugId,
                         AdDebugDefineSymbol,
                         "Show Ad Debug Overlay",
-                        "Экранный журнал рекламы: в портальной сборке консоль браузера из " +
-                        "чужого iframe не достать, а результат показа видеть надо. Оверлей " +
-                        "появляется в игре сам, префаб не нужен. Полезен в любой сборке — " +
-                        "вне портала он показывает Unavailable, и это тоже ответ.",
+                        "On-screen ad log: in the portal build the browser console of a foreign " +
+                        "iframe is out of reach, but the outcome of an ad request must be visible. " +
+                        "The package only provides the define — the game's overlay compiles under " +
+                        "GAMEPIX_AD_DEBUG and shows AdsDebug.Lines. Useful in any build: outside " +
+                        "the portal it shows Unavailable, which is an answer too.",
                         required: false,
                         order: 204,
                         enabledNote:
-                        "GamePixPluginMenu: экранный журнал рекламы включён — оверлей появится в игре сам, префаб не нужен. "
-                        + "Перед отправкой на ревью выключите.",
-                        disabledNote: "GamePixPluginMenu: экранный журнал рекламы выключен."),
+                        "GamePixOptions: on-screen ad log is on. "
+                        + "Turn it off before submitting for review.",
+                        disabledNote: "GamePixOptions: on-screen ad log is off."),
                 });
         }
 

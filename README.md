@@ -112,7 +112,7 @@ Consequences worth knowing before you add anything:
 |---|---|---|---|
 | `com.longleap.firebase` | Production: anonymous auth, cloud saves, leaderboards, remote config. REST only, no Firebase SDK. | core, remoteconfig | — |
 | `com.longleap.nullproviders` | Null-object backends for the core seams: auth, cloud saves, leaderboards, leagues, ads. Guest play, offline builds, builds without ads, tests. Feature seams keep their null backend in their own package. | core | — |
-| `com.longleap.gamepix` | GamePix portal: interstitial + rewarded ads, portal host info, HTML5 packaging. | core | `GAMEPIX` + the GamePix plugin at `Assets/Plugins/GamePix` |
+| `com.longleap.gamepix` | GamePix portal: interstitial + rewarded ads, portal language, Xsolla ID sign-in through the portal SDK, GamePix build tooling and HTML5 packaging. | core, xsollaid | `GAMEPIX` + the GamePix plugin at `Assets/Plugins/GamePix` |
 
 **Platform**
 
@@ -147,6 +147,9 @@ built by the game; these only carry the plumbing and the screens.
 | Define | Effect | Menu |
 |---|---|---|
 | `GAMEPIX` | Builds `LongLeap.GamePix`. Without it the assembly does not exist. | `GamePix / Required / Plugin Enabled (GAMEPIX)` |
+| `GAMEPIX_JS` | GamePix Xsolla ID sign-in through `XsollaIdAuthJS` (own jslib) instead of `XsollaIdAuthGamePix` (plugin `Gpx.User`). For plugins without the user API. | `GamePix / Optional / Xsolla ID via JS Bridge (GAMEPIX_JS)` |
+| `GAMEPIX_ALLOW_ANALYTICS` | Switch for game code: allow GA4 in the portal build. Off by default. | `GamePix / Required / Allow External Analytics (GA4)` |
+| `GAMEPIX_AD_DEBUG` | Switch for game code: compile its on-screen ad log (`AdsDebug.Lines`). **Must not ship to the portal.** | `GamePix / Optional / Show Ad Debug Overlay` |
 | `XSOLLA_ID` | Builds `LongLeap.XsollaId.Web` and installs the WebGL callback page. Without it not a single request reaches `id.xsolla.com`. | `Xsolla ID / Required / Sign-in Enabled (XSOLLA_ID)` |
 | `XSOLLA_ID_DEBUG` | On-screen debug sign-in: F9 in, F10 out, F11 state. WebGL only. Cascades off with `XSOLLA_ID`. **Must not ship to the portal.** | `Xsolla ID / Optional / Debug Panel (on-screen)` |
 | `LONGLEAP_DEBUG` | Builds `LongLeap.DevTools`. | `LongLeap / Cloud Save Panel (LONGLEAP_DEBUG)` |

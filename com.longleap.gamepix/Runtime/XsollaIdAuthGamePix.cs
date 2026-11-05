@@ -1,3 +1,8 @@
+// Compiled without GAMEPIX_JS: requires a GamePix plugin that has the user API
+// (Assets/Plugins/GamePix/User, Gpx.User). Projects whose plugin lacks it turn
+// GAMEPIX_JS on and use XsollaIdAuthJS instead — exactly one of the two exists
+// in a build.
+#if !GAMEPIX_JS
 using System;
 using System.Text;
 using System.Threading.Tasks;
@@ -20,12 +25,12 @@ namespace LongLeap.GamePix
     // Implements the same IXsollaIdAuth as the standalone sign-in, so BackPack,
     // the save switch and the account widget work unchanged.
     //
-    // Replaces XsollaIdAuthJS. That class waited with Task.WhenAny + Task.Delay,
-    // and both go through the .NET thread pool, which never runs in
-    // single-threaded WebGL: the SDK answered, but the game stayed in
-    // "Signing in" forever. Here every wait is driven by Unity's player loop
-    // (Awaitable.NextFrameAsync + realtime clock) — no TaskCompletionSource
-    // continuations, no Task.WhenAny, no Task.Delay.
+    // The preferred path over XsollaIdAuthJS (GAMEPIX_JS). That class waits
+    // with Task.WhenAny + Task.Delay, and both go through the .NET thread pool,
+    // which never runs in single-threaded WebGL: the SDK answered, but the game
+    // stayed in "Signing in" forever. Here every wait is driven by Unity's
+    // player loop (Awaitable.NextFrameAsync + realtime clock) — no
+    // TaskCompletionSource continuations, no Task.WhenAny, no Task.Delay.
     //
     // Never throws: any failure becomes XsollaIdResult.Failure.
     public sealed class XsollaIdAuthGamePix : IXsollaIdAuth
@@ -610,3 +615,4 @@ namespace LongLeap.GamePix
         private static string NullIfEmpty(string value) => string.IsNullOrEmpty(value) ? null : value;
     }
 }
+#endif

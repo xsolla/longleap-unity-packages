@@ -3,50 +3,48 @@ using UnityEditor;
 
 namespace LongLeap.GamePix.Editor
 {
-    // Галочки меню GamePix. В подменю Required — то, без чего портальная
-    // сборка не соберётся или не пройдёт ревью; в Optional — только отладочное.
+    // The GamePix menu toggles. The Required submenu holds what a portal build
+    // cannot be built or pass review without; Optional holds the rest.
     //
-    //   Required/Plugin Enabled (GAMEPIX)       — дефайн, включающий сборки плагина;
-    //   Required/Plugin Has defineConstraints   — стоят ли в asmdef'ах плагина
-    //     ограничения по GAMEPIX. Галочка снята — обновление плагина их стёрло,
-    //     нажатие вернёт обратно; когда всё на месте, пункт заблокирован;
-    //   Required/Allow External Analytics (GA4) — дефайн GAMEPIX_ALLOW_ANALYTICS;
-    //   Optional/Show Ad Debug Overlay          — дефайн GAMEPIX_AD_DEBUG.
+    //   Required/Plugin Enabled (GAMEPIX)            — the define that turns on the plugin assemblies;
+    //   Required/Plugin Has defineConstraints        — whether the plugin's asmdefs carry the GAMEPIX
+    //     constraint. Unticked — a plugin update wiped it, clicking restores it; when everything is
+    //     in place the item is disabled;
+    //   Required/Allow External Analytics (GA4)      — the GAMEPIX_ALLOW_ANALYTICS define;
+    //   Optional/Show Ad Debug Overlay               — the GAMEPIX_AD_DEBUG define;
+    //   Optional/Xsolla ID via JS Bridge (GAMEPIX_JS) — the GAMEPIX_JS define.
     //
-    // Сами настройки описаны в GamePixOptions, а работа с файлами asmdef — в
-    // GamePixAsmdefConstraints. Здесь остались только пункты меню, и остаться
-    // они обязаны: путь у MenuItem — константа времени компиляции, и метод
-    // нужен на каждый пункт, поэтому генерировать пункты из таблицы нельзя.
-    // Зато из той же таблицы рисуется окно Build Manager, и разойтись с меню
-    // оно не может.
+    // The options themselves are described in GamePixOptions and the asmdef
+    // file work lives in GamePixAsmdefConstraints. Only the menu items remain
+    // here, and they have to: a MenuItem path is a compile-time constant and
+    // each item needs its own method, so items cannot be generated from the
+    // table. The Build Manager window is drawn from the same table, so it can
+    // never disagree with the menu.
     //
-    // Подсказок к пунктам меню нет и быть не может: у атрибута MenuItem только
-    // menuItem/priority/secondaryPriority/validate/editorModes, тултипы Unity
-    // для меню не поддерживает. Раньше подробности уезжали в Debug.Log и
-    // читались уже после переключения — теперь они лежат в Tooltip рядом с
-    // настройкой, и окно показывает их до нажатия. В журнал они по-прежнему
-    // попадают тоже.
+    // Menu items cannot have tooltips (MenuItem only has menuItem / priority /
+    // secondaryPriority / validate / editorModes), so the details live in the
+    // option's tooltip, which the Build Manager window shows before a click.
+    // They are also written to the log on toggle.
     //
-    // Почему сборка НЕ ограничена defineConstraints и не ссылается на
-    // LongLeap.GamePix: скрипт, который включает GAMEPIX, не может сам требовать
-    // GAMEPIX — иначе он исчезнет ровно тогда, когда нужен. По той же причине он
-    // живёт в пакете, а не в Assets/Plugins/GamePix: обновление плагина требует
-    // удалить папку целиком, и меню удалилось бы вместе с ней. Ссылка на
-    // LongLeap.Core.Editor правило не нарушает: ссылка — не ограничение, и сама
-    // LongLeap.Core.Editor тоже ничем не ограничена.
+    // Why this assembly is NOT constrained by defineConstraints and does not
+    // reference LongLeap.GamePix: the script that turns GAMEPIX on cannot itself
+    // require GAMEPIX, or it would vanish exactly when it is needed. For the
+    // same reason it lives in the package rather than in Assets/Plugins/GamePix:
+    // updating the plugin means deleting that folder entirely, and the menu
+    // would go with it. Referencing LongLeap.Core.Editor does not break the
+    // rule: a reference is not a constraint, and LongLeap.Core.Editor is not
+    // constrained either.
     public static class GamePixPluginMenu
     {
-        // Меню разбито на два подменю: в Required лежит то, без чего
-        // портальная сборка либо не соберётся, либо не пройдёт ревью;
-        // в Optional — то, что нужно только на время отладки и в готовую
-        // сборку попадать не должно. Package HTML5 Zip остаётся в корне:
-        // это действие, а не переключатель состояния проекта.
+        // Package HTML5 Zip stays at the root: it is an action, not a project
+        // state toggle.
         private const string EnabledMenuPath = "GamePix/Required/Plugin Enabled (GAMEPIX)";
         private const string ConstraintsMenuPath = "GamePix/Required/Plugin Has defineConstraints";
         private const string AnalyticsMenuPath = "GamePix/Required/Allow External Analytics (GA4)";
         private const string AdDebugMenuPath = "GamePix/Optional/Show Ad Debug Overlay";
+        private const string JsBridgeMenuPath = "GamePix/Optional/Xsolla ID via JS Bridge (GAMEPIX_JS)";
 
-        // ---------- Галочка 1: дефайн ----------
+        // ---------- Toggle 1: the define ----------
 
         [MenuItem(EnabledMenuPath, false, 200)]
         private static void TogglePluginEnabled() => ProjectOptionMenu.Toggle(GamePixOptions.EnabledId);
@@ -55,7 +53,7 @@ namespace LongLeap.GamePix.Editor
         private static bool ValidateTogglePluginEnabled() =>
             ProjectOptionMenu.Validate(EnabledMenuPath, GamePixOptions.EnabledId);
 
-        // ---------- Галочка 2: ограничения в asmdef'ах плагина ----------
+        // ---------- Toggle 2: constraints in the plugin's asmdefs ----------
 
         [MenuItem(ConstraintsMenuPath, false, 202)]
         private static void RestoreConstraints() =>
@@ -65,7 +63,7 @@ namespace LongLeap.GamePix.Editor
         private static bool ValidateRestoreConstraints() =>
             ProjectOptionMenu.Validate(ConstraintsMenuPath, GamePixOptions.ConstraintsId);
 
-        // ---------- Галочка 3: внешняя аналитика ----------
+        // ---------- Toggle 3: external analytics ----------
 
         [MenuItem(AnalyticsMenuPath, false, 203)]
         private static void ToggleAllowAnalytics() =>
@@ -75,7 +73,7 @@ namespace LongLeap.GamePix.Editor
         private static bool ValidateToggleAllowAnalytics() =>
             ProjectOptionMenu.Validate(AnalyticsMenuPath, GamePixOptions.AnalyticsId);
 
-        // ---------- Галочка 4: экранный журнал рекламы ----------
+        // ---------- Toggle 4: on-screen ad log ----------
 
         [MenuItem(AdDebugMenuPath, false, 204)]
         private static void ToggleAdDebug() => ProjectOptionMenu.Toggle(GamePixOptions.AdDebugId);
@@ -83,5 +81,14 @@ namespace LongLeap.GamePix.Editor
         [MenuItem(AdDebugMenuPath, true)]
         private static bool ValidateToggleAdDebug() =>
             ProjectOptionMenu.Validate(AdDebugMenuPath, GamePixOptions.AdDebugId);
+
+        // ---------- Toggle 5: Xsolla ID through the jslib bridge ----------
+
+        [MenuItem(JsBridgeMenuPath, false, 205)]
+        private static void ToggleJsBridge() => ProjectOptionMenu.Toggle(GamePixOptions.JsBridgeId);
+
+        [MenuItem(JsBridgeMenuPath, true)]
+        private static bool ValidateToggleJsBridge() =>
+            ProjectOptionMenu.Validate(JsBridgeMenuPath, GamePixOptions.JsBridgeId);
     }
 }

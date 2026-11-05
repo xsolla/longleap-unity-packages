@@ -10,8 +10,8 @@ namespace LongLeap.GamePix.Editor
             if (pendingState == null || !pendingState.IsDefineOn(GamePixOptions.DefineSymbol))
                 yield break;
 
-            // Дефайн включён, а плагина нет: собирать бессмысленно, код под
-            // #if GAMEPIX не соберётся вовсе.
+            // The define is on but the plugin is missing: building is pointless,
+            // code under #if GAMEPIX will not compile at all.
             if (!GamePixAsmdefConstraints.IsPluginVisible())
             {
                 yield return new ProjectWarning(
@@ -23,8 +23,8 @@ namespace LongLeap.GamePix.Editor
                 yield break;
             }
 
-            // Половинчатые ограничения ломают компиляцию: Builder.cs берёт
-            // ICSharpCode из рантайм-сборки плагина.
+            // Half-applied constraints break compilation: Builder.cs takes
+            // ICSharpCode from the plugin's runtime assembly.
             if (!GamePixAsmdefConstraints.AreInPlace())
             {
                 yield return new ProjectWarning(
@@ -32,6 +32,28 @@ namespace LongLeap.GamePix.Editor
                     "The GamePix plugin asmdefs have lost their GAMEPIX defineConstraints — a " +
                     "plugin update wipes them. A plain WebGL build would drag the plugin in. " +
                     "Tick \"Plugin Has defineConstraints\" and Apply.");
+            }
+
+            bool jsBridge = pendingState.IsDefineOn(GamePixOptions.JsBridgeDefineSymbol);
+            bool userApi = GamePixAsmdefConstraints.HasUserApi();
+
+            // Without GAMEPIX_JS the package compiles XsollaIdAuthGamePix, which
+            // needs GamePix.User from the plugin.
+            if (!jsBridge && !userApi)
+            {
+                yield return new ProjectWarning(
+                    ProjectWarningSeverity.Error,
+                    $"The GamePix plugin has no user API ({GamePixAsmdefConstraints.UserApiPath} is " +
+                    "missing), so XsollaIdAuthGamePix cannot compile. Turn on " +
+                    "\"Xsolla ID via JS Bridge (GAMEPIX_JS)\" or update the plugin.",
+                    blocksBuild: true);
+            }
+            else if (jsBridge && userApi)
+            {
+                yield return new ProjectWarning(
+                    ProjectWarningSeverity.Info,
+                    "GAMEPIX_JS is on although the plugin has Gpx.User. XsollaIdAuthGamePix " +
+                    "(GAMEPIX_JS off) is the more reliable sign-in path in WebGL.");
             }
         }
     }
