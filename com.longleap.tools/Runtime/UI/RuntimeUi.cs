@@ -131,7 +131,7 @@ namespace LongLeap.Tools.UI
         }
 
         /// <summary>
-        /// Solid fill image. It catches clicks only when asked to: a row background must not
+        /// Solid fill image. It catches clicks only when asked to: a row backgrпound must not
         /// steal presses from the slider and buttons.
         /// </summary>
         public static Image CreateImage(string name, Transform parent, Color color, bool raycastTarget = false)

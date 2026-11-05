@@ -369,23 +369,70 @@ public class StatsSystemTests
         Assert.AreEqual(5, fresh.Get("level"));
     }
 
+    /// <summary>Writes successfully until <see cref="FailAfter"/> writes, then throws.</summary>
+    private sealed class FailingPersistence : IStatPersistence
+    {
+        public readonly Dictionary<string, long> Saved = new();
+        public int FailAfter = int.MaxValue;
+
+        public Task SaveAsync(StatPath path, long value)
+        {
+            if (Saved.Count >= FailAfter)
+                throw new InvalidOperationException("storage unavailable");
+            Saved[path.Value] = value;
+            return Task.CompletedTask;
+        }
+
+        public Task<StatValue> LoadAsync(StatPath path) => Task.FromResult(StatValue.None);
+    }
+
     [Test]
-    public async Task FlushAsync_AutosaveStillWorksAfterFlush()
+    public void SaveAsync_Failure_Rethrows()
     {
         DefineTree();
-        var mock = new MockPersistence();
-        _stats.StartAutoSave(mock, TimeSpan.FromMilliseconds(20));
-
         _stats.Set("kill:monk:grunt", 1);
-        await _stats.FlushAsync();
 
-        Assert.AreEqual(1, mock.Saved["kill:monk:grunt"], "Flush should save immediately");
+        var failing = new FailingPersistence { FailAfter = 0 };
 
-        await Task.Delay(100);
+        Assert.ThrowsAsync<InvalidOperationException>(() => _stats.SaveAsync(failing));
+    }
 
-        _stats.Set("kill:monk:brute", 5);
-        await Task.Delay(200);
+    [Test]
+    public async Task SaveAsync_Failure_KeepsUnsavedLeavesDirty()
+    {
+        DefineTree();
+        _stats.Set("kill:monk:grunt", 3);
+        _stats.Set("kill:monk:brute", 7);
+        _stats.Set("level:monk", 5);
 
-        Assert.AreEqual(5, mock.Saved["kill:monk:brute"], "Autosave should still fire after FlushAsync");
+        var failing = new FailingPersistence { FailAfter = 1 };
+        try { await _stats.SaveAsync(failing); }
+        catch (InvalidOperationException) { }
+
+        Assert.AreEqual(1, failing.Saved.Count, "One leaf written before the failure");
+
+        var retry = new MockPersistence();
+        await _stats.SaveAsync(retry);
+
+        Assert.AreEqual(2, retry.Saved.Count, "Only the leaves that were not written are retried");
+        foreach (var key in retry.Saved.Keys)
+            Assert.IsFalse(failing.Saved.ContainsKey(key), $"'{key}' was already saved and must not be retried");
+    }
+
+    [Test]
+    public async Task SaveAsync_Failure_RetryWritesLatestValue()
+    {
+        DefineTree();
+        _stats.Set("kill:monk:grunt", 3);
+
+        try { await _stats.SaveAsync(new FailingPersistence { FailAfter = 0 }); }
+        catch (InvalidOperationException) { }
+
+        _stats.Set("kill:monk:grunt", 4);
+
+        var retry = new MockPersistence();
+        await _stats.SaveAsync(retry);
+
+        Assert.AreEqual(4, retry.Saved["kill:monk:grunt"]);
     }
 }

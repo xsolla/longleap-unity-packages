@@ -7,9 +7,9 @@ namespace LongLeap.Stats
         void Define(StatPath path, StatType type);
 
         /// <summary>
-        /// Объявлен ли путь. Нужен вызывающему, который строит путь из данных
-        /// (id прокачки, тип моба): Set/Add по необъявленному пути бросают
-        /// исключение, а Get вернёт 0 и от «объявлен, но пуст» не отличит.
+        /// Whether the path is defined. For callers that build the path from data
+        /// (upgrade id, mob type): Set/Add on an undefined path throw, and Get
+        /// returns 0, which can't be told apart from "defined but empty".
         /// </summary>
         bool IsDefined(StatPath path);
 

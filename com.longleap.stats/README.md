@@ -21,7 +21,7 @@ Cloud save JSON under key `"stats_data"`. Only `Value` and `MaxValue` leaves are
 | `StatType` | Enum | `Value`, `MaxValue` (leaves), `Accumulate`, `Max` (branches) |
 | `StatPath` | Readonly struct `: IEquatable<StatPath>` | Colon-delimited hierarchical key. Validation, `Parent`, `Append`, `Matches` with `*` wildcard. Implicit from `string` |
 | `IStatSystem` | Interface | `Subscribe(StatPath, Action<StatPath, long>)`, `Unsubscribe`, `UnsubscribeAll`, `GetAggregate(StatPath)` -> long |
-| `StatsSystem` | Sealed class `: IStatSystem` | Full implementation. Thread-safe. `Define`, `Set`, `Add`, `Get`, `SaveAsync`, `LoadAsync`, `StartAutoSave`, `StopAutoSave`, `FlushAsync` |
+| `StatsSystem` | Sealed class `: IStatSystem` | Full implementation. Thread-safe. `Define`, `Set`, `Add`, `Get`, `SaveAsync`, `LoadAsync` |
 
 ## Initialization
 
@@ -36,9 +36,6 @@ stats.Define("bighit", StatType.Max);
 stats.Define("bighit:monk", StatType.MaxValue);
 
 await stats.LoadAsync(cloudSave);  // restores saved values
-
-// Optional auto-save
-stats.StartAutoSave(cloudSave, TimeSpan.FromSeconds(5));
 ```
 
 ## Usage
@@ -71,12 +68,14 @@ long allKills = stats.GetAggregate("kill");             // pre-computed branch v
 ### Persistence
 
 ```csharp
-await stats.SaveAsync(cloudSave);
+await stats.SaveAsync(cloudSave);  // writes leaves changed since the last successful save
 await stats.LoadAsync(cloudSave);
-stats.StartAutoSave(cloudSave, TimeSpan.FromSeconds(5));
-stats.StopAutoSave();
-await stats.FlushAsync();  // force-save before quit
 ```
+
+There is no built-in auto-save: `Task.Delay` does not work on WebGL, so the game calls
+`SaveAsync` itself (per-frame timer, pause, quit — see `StatsAutoSaver` in Climber).
+If a write fails, `SaveAsync` rethrows and the unwritten leaves stay dirty, so the next
+call retries them.
 
 ## Internals
 

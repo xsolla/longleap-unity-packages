@@ -9,7 +9,7 @@ Typed newtype for hierarchical stat paths (e.g. `"kill:monk:grunt"`). Supports w
 Enum: `Value` (settable), `MaxValue` (auto-tracks maximum), `Accumulate` (auto-sums children on write), `Max` (auto-tracks maximum of children).
 
 **StatsSystem**:
-Implements `IStatSystem`. Defines stat paths with types, auto-cascades writes from leaf to ancestors. Subscriptions with wildcard pattern matching. Cloud-persisted with debounced auto-save.
+Implements `IStatSystem`. Defines stat paths with types, auto-cascades writes from leaf to ancestors. Subscriptions with wildcard pattern matching. Persisted via `IStatPersistence`: `SaveAsync` writes dirty leaves; saving schedule is up to the caller (no built-in auto-save).
 
 **IStatSystem**:
 Interface: `Define(path, type)`, `Set(path, value)`, `Get(path)`, `Subscribe(pattern, callback)`.
@@ -17,4 +17,4 @@ Interface: `Define(path, type)`, `Set(path, value)`, `Get(path)`, `Subscribe(pat
 ## Relationships
 
 - **Stats → Achievements**: Achievement system subscribes to stat changes via `IStatSystem.Subscribe()` to derive objective progress.
-- **Stats → Cloud Saves**: `StatsSystem` persists stats via `ICloudSaveService`.
+- **Stats → Cloud Saves**: `StatsSystem` persists stats via `IStatPersistence` (in Climber: `CloudSaveStatPersistence` over `ICloudSaveService`, saved by `StatsAutoSaver`).

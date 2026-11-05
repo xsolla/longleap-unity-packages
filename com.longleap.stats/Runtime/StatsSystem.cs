@@ -1,23 +1,22 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 
 namespace LongLeap.Stats
 {
+    /// <summary>
+    /// Saving is driven by the caller: <see cref="SaveAsync"/> writes only the leaves changed
+    /// since the last successful save. There is no built-in timer — Task.Delay does not work on
+    /// WebGL, so the game decides when to save (per-frame timer, pause, quit).
+    /// </summary>
     public sealed class StatsSystem : IStatSystem
     {
         private readonly Dictionary<string, StatNode> _nodes = new();
         private readonly Dictionary<string, List<Action<StatPath, long>>> _subscriptions = new();
         private readonly HashSet<string> _dirtyLeaves = new();
         private readonly object _lock = new();
-
-        private CancellationTokenSource _autoSaveCts;
-        private IStatPersistence _persistence;
-        private TimeSpan _autoSaveDebounce;
-        private bool _autoSavePending;
 
         public void Define(StatPath path, StatType type)
         {
@@ -90,7 +89,6 @@ namespace LongLeap.Stats
                 _dirtyLeaves.Add(path.Value);
                 FireChanged(path, newValue);
                 CascadeUp(path.Parent);
-                ScheduleAutoSave();
             }
         }
 
@@ -110,7 +108,6 @@ namespace LongLeap.Stats
                 _dirtyLeaves.Add(path.Value);
                 FireChanged(path, node.Value);
                 CascadeUp(path.Parent);
-                ScheduleAutoSave();
             }
         }
 
@@ -281,8 +278,24 @@ namespace LongLeap.Stats
                 _dirtyLeaves.Clear();
             }
 
-            foreach (var entry in dirty)
-                await persistence.SaveAsync(entry.path, entry.value);
+            for (int i = 0; i < dirty.Count; i++)
+            {
+                try
+                {
+                    await persistence.SaveAsync(dirty[i].path, dirty[i].value);
+                }
+                catch
+                {
+                    // The failed leaf and the ones after it were never written:
+                    // mark them dirty again so the next save retries them.
+                    lock (_lock)
+                    {
+                        for (int j = i; j < dirty.Count; j++)
+                            _dirtyLeaves.Add(dirty[j].path.Value);
+                    }
+                    throw;
+                }
+            }
         }
 
         public async Task LoadAsync(IStatPersistence persistence)
@@ -330,58 +343,6 @@ namespace LongLeap.Stats
                         ? SumDirectChildren(path) : MaxDirectChildren(path);
                 }
             }
-        }
-
-        public void StartAutoSave(IStatPersistence persistence, TimeSpan debounce)
-        {
-            _persistence = persistence;
-            _autoSaveDebounce = debounce;
-            _autoSaveCts?.Cancel();
-            _autoSaveCts?.Dispose();
-            _autoSaveCts = new CancellationTokenSource();
-        }
-
-        private void ScheduleAutoSave()
-        {
-            if (_persistence == null || _autoSavePending) return;
-            _autoSavePending = true;
-            var _ = AutoSaveAsync();
-        }
-
-        private async Task AutoSaveAsync()
-        {
-            try
-            {
-                await Task.Delay(_autoSaveDebounce, _autoSaveCts?.Token ?? default);
-                _autoSavePending = false;
-                await SaveAsync(_persistence);
-            }
-            catch (OperationCanceledException)
-            {
-                _autoSavePending = false;
-            }
-            catch (Exception e)
-            {
-                _autoSavePending = false;
-                Debug.LogError($"StatsSystem: ошибка автосохранения: {e.Message}");
-            }
-        }
-
-        public void StopAutoSave()
-        {
-            _autoSaveCts?.Cancel();
-            _autoSaveCts?.Dispose();
-            _autoSaveCts = null;
-        }
-
-        public async Task FlushAsync()
-        {
-            _autoSaveCts?.Cancel();
-            _autoSaveCts?.Dispose();
-            _autoSaveCts = _persistence != null ? new CancellationTokenSource() : null;
-            _autoSavePending = false;
-            if (_persistence != null)
-                await SaveAsync(_persistence);
         }
 
         private sealed class StatNode
