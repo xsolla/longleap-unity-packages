@@ -1,14 +1,14 @@
 # LongLeap Daily Quests
 
-Ежедневные квесты по образцу `com.longleap.achievements`: квесты описаны в JSON, прогресс выводится из `IStatSystem`, состояние хранится через `IDailyQuestStateStore`. Отличия от ачивок:
+Daily quests modelled on `com.longleap.achievements`: quests are defined in JSON, progress is derived from `IStatSystem`, state is kept through `IDailyQuestStateStore`. Differences from achievements:
 
-- квесты **выдаются набором на период** (от сброса до сброса по UTC) из пула, а не висят все сразу;
-- прогресс по умолчанию считается **от момента выдачи** (`Delta`), а не за всю жизнь;
-- награду **забирает игрок** (`ClaimAsync`) — сама она не начисляется.
+- quests are **issued as a set per period** (from one UTC reset to the next) out of a pool, not all available at once;
+- progress is counted **from the moment the quest is issued** by default (`Delta`), not over the player's lifetime;
+- the **player claims** the reward (`ClaimAsync`) — it is never granted on its own.
 
-## Добавить квест
+## Adding a quest
 
-Дописать объект в JSON — и всё. Код трогать не нужно.
+Add an object to the JSON — that's it. No code changes needed.
 
 ```json
 {
@@ -24,80 +24,82 @@
 }
 ```
 
-| Поле | Обязательное | Что значит |
+| Field | Required | Meaning |
 |---|---|---|
-| `settings.dailyCount` | нет (3) | Сколько квестов в наборе |
-| `settings.resetHourUtc` | нет (0) | Час по UTC, когда набор меняется |
-| `settings.uniqueCategories` | нет (false) | У квестов набора нет общих категорий |
-| `settings.hardestLast` | нет (false) | Набор идёт от лёгкого к трудному; без `slotDifficulties` — ровно один квест самой высокой сложности |
-| `settings.slotDifficulties` | нет ([]) | Сложность каждого места в наборе, например `[1, 2, 3]` |
-| `quests[].id` | да | Уникальный id; по нему же ключ локализации в игре |
-| `quests[].weight` | нет (1) | Вес при выборе. 0 — квест выключен |
-| `quests[].categories` | нет ([]) | Категории для `uniqueCategories`. Квест без категорий ни с кем не конфликтует |
-| `quests[].difficulty` | нет (0) | Сложность для `slotDifficulties` и `hardestLast` |
-| `objectives[].statPath` | да | Путь стата, как в ачивках (`grind`, `kill:*:grunt`) |
-| `objectives[].statTarget` | да | Сколько набрать, > 0 |
-| `objectives[].mode` | нет (`delta`) | `delta` — прирост с момента выдачи; `absolute` — значение стата как есть |
-| `objectives[].id` | нет (`o0`, `o1`…) | Нужен, только если целей несколько и хочется стабильных id |
-| `rewards[].key` / `amount` | да / > 0 | Что дать. Ключ толкует игра (в Climber — id валюты) |
+| `settings.dailyCount` | no (3) | How many quests are in a set |
+| `settings.resetHourUtc` | no (0) | UTC hour at which the set is replaced |
+| `settings.uniqueCategories` | no (false) | Quests in a set share no category |
+| `settings.hardestLast` | no (false) | The set goes from easy to hard; without `slotDifficulties` — exactly one quest of the highest difficulty |
+| `settings.slotDifficulties` | no ([]) | Difficulty of each place in the set, e.g. `[1, 2, 3]` |
+| `quests[].id` | yes | Unique id; the game also uses it as the localization key |
+| `quests[].weight` | no (1) | Selection weight. 0 — quest is disabled |
+| `quests[].categories` | no ([]) | Categories for `uniqueCategories`. A quest without categories never conflicts |
+| `quests[].difficulty` | no (0) | Difficulty for `slotDifficulties` and `hardestLast` |
+| `objectives[].statPath` | yes | Stat path, same as in achievements (`grind`, `kill:*:grunt`) |
+| `objectives[].statTarget` | yes | Amount to reach, > 0 |
+| `objectives[].mode` | no (`delta`) | `delta` — growth since the quest was issued; `absolute` — the stat value as is |
+| `objectives[].id` | no (`o0`, `o1`…) | Only needed for multiple objectives when you want stable ids |
+| `rewards[].key` / `amount` | yes / > 0 | What to grant. The game interprets the key (in Climber — a currency id) |
 
-`delta` рассчитан на накопительные статы (счётчики). Для Max-статов (`score_best`) он означает «побей свой рекорд на N», что обычно не то, что нужно, — для «набери 10k за заезд» заведите стат, который игра обнуляет в начале заезда, и используйте `absolute`.
+`delta` is meant for cumulative stats (counters). For Max stats (`score_best`) it means "beat your record by N", which is usually not what you want. For "score 10k in one run", add a stat the game resets at the start of each run and use `absolute`.
 
-Конфиг проверяется `DailyQuestValidator` при старте: ошибки и предупреждения уходят в лог, а квест с ошибкой просто не попадает в пул. Опечатка в `statPath` (стат не объявлен) — предупреждение: такой квест никогда не выполнится.
+`DailyQuestValidator` checks the config at startup: errors and warnings go to the log, and a quest with an error simply stays out of the pool. A typo in `statPath` (stat not declared) is a warning: such a quest can never be completed.
 
-## Правила набора
+## Selection rules
 
-Без `uniqueCategories`, `hardestLast` и `slotDifficulties` набор — просто взвешенная выборка из пула. С любым из них — выборка по правилам, и набор упорядочен по сложности, от лёгкого к трудному.
+Without `uniqueCategories`, `hardestLast` and `slotDifficulties` a set is a plain weighted pick from the pool. With any of them, the pick follows the rules and the set is ordered by difficulty, easy to hard.
 
-- **`slotDifficulties`** задаёт сложность каждого места. Мест меньше, чем `dailyCount`, — остальные любой сложности (при `hardestLast` — легче самого трудного квеста пула). Мест больше — берутся самые сложные. Работает и без двух других флагов.
-- **`hardestLast`** без слотов: в наборе ровно один квест самой высокой сложности пула, остальные легче.
-- **`uniqueCategories`**: никакие два квеста набора не делят категорию.
+- **`slotDifficulties`** sets the difficulty of each place. Fewer slots than `dailyCount` — the remaining places take any difficulty (with `hardestLast` — easier than the hardest quest in the pool). More slots — the hardest ones are used. Works without the other two flags too.
+- **`hardestLast`** without slots: the set has exactly one quest of the pool's highest difficulty, the rest are easier.
+- **`uniqueCategories`**: no two quests in the set share a category.
 
-Если полный набор по всем правилам не собрать (не хватает квестов нужной сложности или категорий), правила ослабляются по очереди:
+If a full set cannot satisfy every rule (not enough quests of the needed difficulty or categories), the rules are relaxed one at a time:
 
-1. без `uniqueCategories` — от сложности зависят награды, она важнее разнообразия;
-2. без сложности (`slotDifficulties` и `hardestLast`), но с `uniqueCategories`;
-3. без правил вообще.
+1. without `uniqueCategories` — rewards depend on difficulty, so it matters more than variety;
+2. without difficulty (`slotDifficulties` and `hardestLast`), but with `uniqueCategories`;
+3. without any rules.
 
-Игрок всегда получает столько квестов, сколько позволяет пул, — пустого или урезанного набора из-за правил не бывает. Перебор вариантов ограничен (`DailyQuestSelector.SearchBudget`), так что большой пул с невыполнимыми правилами не подвесит игру.
+The player always gets as many quests as the pool allows — rules never leave a set empty or short. The search is bounded (`DailyQuestSelector.SearchBudget`), so a large pool with impossible rules will not hang the game.
 
-Валидатор предупреждает, если правила не выполнить на этом пуле: слот хочет сложность, которой нет ни у одного квеста; слотов больше, чем `dailyCount`; полный набор по всем правилам не собрать.
+The validator warns when the rules cannot be met on the current pool: a slot asks for a difficulty no quest has; there are more slots than `dailyCount`; a full set cannot satisfy every rule.
 
 ## Public API
 
-| Тип | Что это |
+| Type | What it is |
 |---|---|
-| `IDailyQuestService` / `DailyQuestService` | Сервис. `GetActive()`, `GetStatus(id)`, `ClaimAsync(id)`, `Tick()`, `ClaimableCount`, `TimeUntilReset`, событие `Changed` |
-| `IDailyQuestDebug` | Отладка: `ForceComplete`, `SkipToNextPeriod`, `ResetState`. Тот же `DailyQuestService`, но отдельный интерфейс — игровой UI его не видит |
-| `IDailyQuestProvider` | Откуда конфиг. Готовые: `ResourcesDailyQuestProvider`, `JsonDailyQuestProvider` |
-| `IDailyQuestStateStore` | Где состояние. `LoadAsync` возвращает `DailyQuestStateLoadResult`. Готовый: `JsonDailyQuestStateStore(IPersistentStorage)` |
-| `DailyQuestStateLoadResult` | Результат загрузки: `Loaded` (+ `State`), `Empty`, `Unreadable`, `Unavailable` |
-| `IDailyQuestGameBridge` | `OnQuestsRotated`, `OnQuestCompleted`, `ApplyRewards` — игра начисляет награду здесь. Обязателен |
-| `QuestStatus` | Снимок квеста для UI: `Definition`, `State` (`InProgress`/`Completed`/`Claimed`), `ObjectiveProgresses`, `TotalProgress`, `CanClaim` |
-| `QuestId`, `QuestObjectiveId` | Newtype-ы с `None`. Ключ награды — общий `LongLeap.Core.RewardKey` |
-| `DailyQuestJson` | Разбор JSON → `DailyQuestConfig` |
-| `DailyQuestValidator` | Проверка конфига |
-| `DailyQuestSelector` | Взвешенный детерминированный выбор набора по правилам |
+| `IDailyQuestService` / `DailyQuestService` | The service. `GetActive()`, `GetStatus(id)`, `ClaimAsync(id)`, `Tick()`, `ClaimableCount`, `TimeUntilReset`, `Changed` event |
+| `IDailyQuestDebug` | Debugging: `ForceComplete`, `SkipToNextPeriod`, `ResetState`. Same `DailyQuestService`, but a separate interface — game UI does not see it |
+| `IDailyQuestProvider` | Where the config comes from. Built-in: `ResourcesDailyQuestProvider`, `JsonDailyQuestProvider` |
+| `IDailyQuestStateStore` | Where state is kept. `LoadAsync` returns `DailyQuestStateLoadResult`. Built-in: `JsonDailyQuestStateStore(IPersistentStorage)` |
+| `DailyQuestStateLoadResult` | Load outcome: `Loaded` (+ `State`), `Empty`, `Unreadable`, `Unavailable` |
+| `IDailyQuestGameBridge` | `OnQuestsRotated`, `OnQuestCompleted`, `ApplyRewards` — the game grants the reward here. Required |
+| `QuestStatus` | Quest snapshot for UI: `Definition`, `State` (`InProgress`/`Completed`/`Claimed`), `ObjectiveProgresses`, `TotalProgress`, `CanClaim` |
+| `QuestId`, `QuestObjectiveId` | Newtypes with `None`. The reward key is the shared `LongLeap.Core.RewardKey` |
+| `DailyQuestJson` | Parses JSON → `DailyQuestConfig` |
+| `DailyQuestValidator` | Config validation |
+| `DailyQuestSelector` | Weighted deterministic set selection following the rules |
 
-## Инициализация
+## Setup
+
+Dependencies: `com.longleap.core` 0.2.0, `com.longleap.stats` 0.1.0, `com.unity.nuget.newtonsoft-json` 3.0.2.
 
 ```csharp
 var service = new DailyQuestService(
     provider: new ResourcesDailyQuestProvider(),             // Resources/DailyQuests/daily_quests.json
     store:    new JsonDailyQuestStateStore(persistentStorage),
-    bridge:   myBridge,                                       // обязателен: сюда приходит ApplyRewards
-    stats:    statSystem);                                    // optional, без него прогресса нет
+    bridge:   myBridge,                                       // required: ApplyRewards arrives here
+    stats:    statSystem);                                    // optional; without it there is no progress
 await service.InitializeAsync();
 
 services.Register<IDailyQuestService>(service);
-services.Register<IDailyQuestDebug>(service);                 // для dev-tools
+services.Register<IDailyQuestDebug>(service);                 // for dev tools
 ```
 
-`ResourcesDailyQuestProvider` читает `TextAsset` через `Resources.Load` — JSON внутри билда, без HTTP, поэтому работает и на порталах, которые перепаковывают билд (GamePix). Читает один раз и кеширует задачу: его можно создать и вызвать `LoadAsync()` в начале загрузки (на главном потоке), а сервису отдать позже — он получит готовый результат. Нет файла или битый JSON — пустой пул и ошибка в лог.
+`ResourcesDailyQuestProvider` reads a `TextAsset` via `Resources.Load` — the JSON is inside the build, no HTTP, so it also works on portals that repackage the build (GamePix). It reads once and caches the task: you can create it and call `LoadAsync()` early in loading (on the main thread), then hand it to the service later — the service gets the ready result. Missing file or broken JSON — empty pool and an error in the log.
 
-Своё хранилище возвращает `DailyQuestStateLoadResult`: сохранения нет — `Empty()`, не читается — `Unreadable()`, хранилище не ответило — `Unavailable()`. Разбор строки готов: `JsonDailyQuestStateStore.Parse(json)`.
+A custom store returns `DailyQuestStateLoadResult`: no save yet — `Empty()`, cannot be read — `Unreadable()`, storage did not respond — `Unavailable()`. String parsing is ready-made: `JsonDailyQuestStateStore.Parse(json)`.
 
-## Использование в UI
+## Using it in UI
 
 ```csharp
 service.Changed += Redraw;
@@ -112,25 +114,25 @@ void Redraw()
     timerLabel.text = service.TimeUntilReset.ToString(@"hh\:mm");
 }
 
-void Update() => service.Tick();   // наступил сброс — придёт новый набор и Changed
+void Update() => service.Tick();   // on reset, a new set arrives along with Changed
 
-async void OnClaimClicked(QuestId id) => await service.ClaimAsync(id);   // награда придёт в bridge.ApplyRewards
+async void OnClaimClicked(QuestId id) => await service.ClaimAsync(id);   // the reward arrives in bridge.ApplyRewards
 ```
 
-`GetActive()` возвращает тот же массив и те же `QuestStatus`, пока ничего не поменялось, — их не нужно копировать, но и менять нельзя. Сравнение по ссылке (`ReferenceEquals(old, status)`) — дешёвый способ понять, что строку перерисовывать не надо.
+`GetActive()` returns the same array and the same `QuestStatus` objects until something changes — no need to copy them, but do not modify them. A reference comparison (`ReferenceEquals(old, status)`) is a cheap way to tell that a row does not need redrawing.
 
-## Как это устроено
+## How it works
 
-- **Смена периода ленивая.** Таймера нет: каждый `GetActive`/`ClaimAsync`/`Tick`/изменение стата проверяет, не наступил ли новый период. Открытый UI квестов зовёт `Tick()` из `Update`, чтобы набор сменился у игрока на глазах. Перевод часов назад набор не меняет.
-- **Сохраняется не прогресс, а точка отсчёта.** При выдаче квеста запоминается текущее значение стата (`baseline`), прогресс = стат − baseline. Поэтому прогресс переживает перезапуск и ничего не пишется на каждый гринд — запись идёт только при выдаче, выполнении и заборе.
-- **Стат откатился — точка отсчёта опускается.** Если `delta`-стат стал меньше baseline (сейв статов старше сейва квестов, статы сбросили), baseline становится текущим значением и сохраняется. Иначе прогресс стоял бы на нуле, пока стат не догонит старую отметку. Набранное до отката не возвращается.
-- **Выполнение защёлкивается — каждая цель отдельно.** Набранная цель остаётся набранной, даже если стат потом уменьшился; квест становится `Completed`, когда набраны все. Поэтому «10k за заезд + 30 грайндов» засчитается, даже если грайнды добраны в другом заезде.
-- **Забор безопасен к падению.** Сначала квест помечается забранным, `ClaimAsync` дожидается записи и только потом зовёт `ApplyRewards`: в худшем случае игрок теряет одну награду, но не получает её дважды. Запись не удалась — награды нет, `false`, можно нажать ещё раз. Мост обязателен — без него награду было бы некуда начислить.
-- **Записи идут по очереди.** Следующее сохранение ждёт предыдущее, так что старое состояние не ляжет поверх нового.
-- **Набор детерминирован.** Сид — начало периода; квесты прошлого набора берутся только если без них набор не собрать.
-- **Конфиг поменялся посреди периода.** Убранные квесты выбывают из набора, новые цели считаются с момента загрузки, а если `dailyCount` вырос — набор добирается по тем же правилам: оставшиеся квесты держат свои слоты и категории.
-- **Хранилище не ответило** (`Unavailable`) — сервис выключен до перезапуска, чтобы не выдать забранное ещё раз.
-- **Сохранение не читается** (`Unreadable`: битое или от более новой версии) — до ближайшего сброса квестов нет: что сегодня уже забрано, неизвестно, а заново выданный набор совпал бы со старым.
-- **Изменение стата дешёвое.** Сверяются только квесты, которые ждут этот стат; без изменений ничего не выделяется. `Changed` приходит, только если сдвинулся видимый прогресс или состояние; `QuestStatus` пересобирается лениво — при чтении. `GetActive()` заодно сверяет прогресс со статами, так что и стат, изменённый без события, виден сразу.
+- **Period change is lazy.** There is no timer: every `GetActive`/`ClaimAsync`/`Tick`/stat change checks whether a new period has started. An open quest UI calls `Tick()` from `Update` so the set changes in front of the player. Moving the clock back does not change the set.
+- **The baseline is saved, not the progress.** When a quest is issued, the current stat value is stored (`baseline`); progress = stat − baseline. So progress survives a restart and nothing is written on every grind — writes happen only on issue, completion and claim.
+- **A stat rolled back — the baseline goes down.** If a `delta` stat drops below the baseline (stats save older than the quests save, stats were reset), the baseline becomes the current value and is saved. Otherwise progress would sit at zero until the stat caught up with the old mark. Progress made before the rollback is not restored.
+- **Completion latches — per objective.** A met objective stays met even if the stat later drops; the quest becomes `Completed` once all are met. So "10k in one run + 30 grinds" counts even if the grinds were finished in another run.
+- **Claiming is crash-safe.** The quest is marked claimed first, `ClaimAsync` waits for the write and only then calls `ApplyRewards`: at worst the player loses one reward, but never gets it twice. Write failed — no reward, `false`, the player can press again. The bridge is required — without it there would be nowhere to grant the reward.
+- **Writes are queued.** Each save waits for the previous one, so an older state never overwrites a newer one.
+- **The set is deterministic.** The seed is the period start; quests from the previous set are picked only when the set cannot be filled without them.
+- **Config changed mid-period.** Removed quests drop out of the set, new objectives count from the moment of loading, and if `dailyCount` grew the set is topped up by the same rules: remaining quests keep their slots and categories.
+- **Storage did not respond** (`Unavailable`) — the service is off until restart, so an already claimed reward is not issued again.
+- **Save cannot be read** (`Unreadable`: corrupted or from a newer version) — no quests until the next reset: it is unknown what was already claimed today, and a freshly issued set would match the old one.
+- **Stat changes are cheap.** Only quests waiting on that stat are checked; nothing is allocated when nothing changed. `Changed` fires only when visible progress or state moved; `QuestStatus` is rebuilt lazily, on read. `GetActive()` also reconciles progress with stats, so a stat changed without an event is visible right away.
 
-Внутри: `ResetSchedule` (когда начинается период), `ProgressEvaluator` (baseline, прогресс, защёлки, откат) и `DailyQuestSelector` (выбор набора) — без состояния сервиса, каждый тестируется отдельно; `DailyQuestService` их связывает.
+Internals: `LongLeap.Core.ResetSchedule` (when a period starts), `ProgressEvaluator` (baseline, progress, latches, rollback) and `DailyQuestSelector` (set selection) — free of service state, each tested separately; `DailyQuestService` ties them together.
