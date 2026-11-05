@@ -40,66 +40,50 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreSame(first, second);
         }
 
+        // What a failed first attempt can look like.
+        private static readonly object[] FailedFirstReplies =
+        {
+            new object[] { "transport", HttpReply.Transport("GET " + DiscoveryUrl + " — Unknown Error") },
+            new object[] { "5xx", HttpReply.Status(503) },
+            new object[] { "unusable document", HttpReply.Ok(@"{""issuer"": ""https://id-staging.xsolla.com""}") }
+        };
+
         // Regression: a failed startup warm-up (CORS, a network blip) used to be
         // cached, and every later sign-in failed with NotConfigured without
-        // touching the network.
-        [Test]
-        public async Task GetAsync_RetriesAfterTransportFailure()
+        // touching the network. A malformed document must not stick either: the
+        // endpoints are being moved server-side, and the next reply may be fine.
+        [TestCaseSource(nameof(FailedFirstReplies))]
+        public async Task GetAsync_RetriesAfterFailedAttempt(string what, HttpReply firstReply)
         {
-            var transport = new FakeTransport(
-                HttpReply.Transport("GET " + DiscoveryUrl + " — Unknown Error"),
-                HttpReply.Ok(ValidDocument));
+            var transport = new FakeTransport(firstReply, HttpReply.Ok(ValidDocument));
             OidcDiscovery discovery = Create(transport);
 
             OidcConfiguration failed = await discovery.GetAsync();
             OidcConfiguration retried = await discovery.GetAsync();
 
-            Assert.IsNull(failed, "the first attempt must fail");
-            Assert.AreEqual(2, transport.Calls.Count, "a failure must not be cached — it must hit the network again");
-            Assert.IsNotNull(retried, "the second attempt must return a working document");
-            Assert.IsTrue(retried.IsUsable);
+            Assert.IsNull(failed, what + ": the first attempt must fail");
+            Assert.AreEqual(2, transport.Calls.Count, what + ": a failure must not be cached");
+            Assert.IsNotNull(retried, what + ": the second attempt must return a working document");
             Assert.AreEqual("https://id-staging.xsolla.com/api/oauth2/token", retried.TokenEndpoint);
-        }
-
-        [Test]
-        public async Task GetAsync_RetriesAfterServerError()
-        {
-            var transport = new FakeTransport(
-                HttpReply.Status(503), HttpReply.Ok(ValidDocument));
-            OidcDiscovery discovery = Create(transport);
-
-            Assert.IsNull(await discovery.GetAsync());
-            Assert.IsNotNull(await discovery.GetAsync());
-            Assert.AreEqual(2, transport.Calls.Count, "5xx is a failure too, not a usable answer");
-        }
-
-        // A malformed document must not get stuck in the cache either: the
-        // endpoints are being moved server-side, and the next reply may be fine.
-        [Test]
-        public async Task GetAsync_RetriesAfterUnusableDocument()
-        {
-            var transport = new FakeTransport(
-                HttpReply.Ok(@"{""issuer"": ""https://id-staging.xsolla.com""}"),
-                HttpReply.Ok(ValidDocument));
-            OidcDiscovery discovery = Create(transport);
-
-            Assert.IsNull(await discovery.GetAsync(), "without token_endpoint the document is unusable");
-            Assert.IsNotNull(await discovery.GetAsync());
-            Assert.AreEqual(2, transport.Calls.Count, "an unusable document must not be cached");
         }
 
         [Test]
         public async Task GetAsync_SharesOneLoadBetweenParallelCallers()
         {
-            var transport = new FakeTransport(HttpReply.Ok(ValidDocument));
+            var transport = new FakeTransport { Gate = new TaskCompletionSource<HttpReply>() };
             OidcDiscovery discovery = Create(transport);
 
+            // Both calls start while the first load is still in flight.
             Task<OidcConfiguration> a = discovery.GetAsync();
             Task<OidcConfiguration> b = discovery.GetAsync();
 
-            await Task.WhenAll(a, b);
-
+            Assert.AreSame(a, b, "a second caller must get the in-flight task");
             Assert.AreEqual(1, transport.Calls.Count, "parallel callers share one load");
+
+            transport.Gate.SetResult(HttpReply.Ok(ValidDocument));
+
+            Assert.IsNotNull(await a);
+            Assert.AreSame(await a, await b);
         }
 
         // ---- parsing ----

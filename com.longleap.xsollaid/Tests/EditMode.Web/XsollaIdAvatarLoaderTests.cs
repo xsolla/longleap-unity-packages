@@ -117,40 +117,18 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.AreEqual(XsollaIdErrorCode.Network, failure.Code);
         }
 
+        // The server answered, but there is no picture: a refusal (403/404/500),
+        // a format the decoder rejects (webp, reported by the transport as 415 —
+        // "retry" would not help, so not Network), or 200 with nothing to decode
+        // (e.g. an HTML error page).
         [TestCase(403)]
         [TestCase(404)]
         [TestCase(500)]
-        public async Task Load_ServerRefusal_IsPictureUnavailable(int code)
+        [TestCase(415)]
+        [TestCase(200)]
+        public async Task Load_Refusal_IsPictureUnavailable(int code)
         {
             _downloads.Enqueue(TextureReply.Status(code));
-
-            var failure = await Create().LoadAsync(AvatarUrl.TryParse(Url)) as AvatarResult.Failure;
-
-            Assert.IsNotNull(failure);
-            Assert.AreEqual(XsollaIdErrorCode.PictureUnavailable, failure.Code);
-        }
-
-        // Regression: avatars may come as a format the decoder rejects (webp). The
-        // bytes arrived, so this is not a network problem and "retry" would not
-        // help. The transport reports such cases as 415.
-        [Test]
-        public async Task Load_UndecodableBody_IsPictureUnavailableNotNetwork()
-        {
-            _downloads.Enqueue(TextureReply.Status(415));
-
-            var failure = await Create().LoadAsync(AvatarUrl.TryParse(Url)) as AvatarResult.Failure;
-
-            Assert.IsNotNull(failure);
-            Assert.AreEqual(
-                XsollaIdErrorCode.PictureUnavailable, failure.Code,
-                "a format the decoder cannot read is not a network problem");
-        }
-
-        // 200, but nothing to decode, e.g. an HTML error page came back.
-        [Test]
-        public async Task Load_SuccessWithoutATexture_IsPictureUnavailable()
-        {
-            _downloads.Enqueue(TextureReply.Status(200));
 
             var failure = await Create().LoadAsync(AvatarUrl.TryParse(Url)) as AvatarResult.Failure;
 
@@ -196,10 +174,19 @@ namespace LongLeap.XsollaId.Web.Tests
 
         // ---- TryGetCached: the scene reload path ----
 
-        [Test]
-        public void TryGetCached_BeforeAnyLoad_IsFalse()
+        [TestCase(false, TestName = "TryGetCached_BeforeAnyLoad_IsFalse")]
+        [TestCase(true, TestName = "TryGetCached_AfterFailure_IsFalse")]
+        public async Task TryGetCached_WithoutASuccessfulLoad_IsFalse(bool failFirst)
         {
-            Assert.IsFalse(Create().TryGetCached(AvatarUrl.TryParse(Url), out Sprite sprite));
+            XsollaIdAvatarLoader loader = Create();
+
+            if (failFirst)
+            {
+                _downloads.Enqueue(TextureReply.Status(404));
+                await loader.LoadAsync(AvatarUrl.TryParse(Url));
+            }
+
+            Assert.IsFalse(loader.TryGetCached(AvatarUrl.TryParse(Url), out Sprite sprite));
             Assert.IsNull(sprite);
         }
 
@@ -231,18 +218,6 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.IsNull(sprite);
 
             _downloads.Gate.SetResult(TextureReply.Status(404));
-        }
-
-        [Test]
-        public async Task TryGetCached_AfterFailure_IsFalse()
-        {
-            _downloads.Enqueue(TextureReply.Status(404));
-
-            XsollaIdAvatarLoader loader = Create();
-
-            await loader.LoadAsync(AvatarUrl.TryParse(Url));
-
-            Assert.IsFalse(loader.TryGetCached(AvatarUrl.TryParse(Url), out Sprite _));
         }
 
         [Test]

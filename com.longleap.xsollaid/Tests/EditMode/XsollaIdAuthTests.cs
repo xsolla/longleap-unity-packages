@@ -6,6 +6,8 @@ namespace LongLeap.XsollaId.Tests
     [TestFixture]
     public class XsollaIdAuthTests
     {
+        private const string PictureUrl = "https://cdn.xsolla.com/a.png";
+
         private FakePlayerPrefs _prefs;
         private FakeDiscovery _discovery;
         private FakeBrowser _browser;
@@ -29,28 +31,38 @@ namespace LongLeap.XsollaId.Tests
         // Empty pageUrl, as in the editor: it passes the origin check, so the
         // tests do not depend on where the game is "opened". That behavior is
         // covered separately by OriginGuardTests.
-        private XsollaIdAuth Create(XsollaIdConfig config = null, string pageUrl = "") => new XsollaIdAuth(
-            config ?? TestConfig.Valid(), _discovery, _browser, _tokens, _store, () => _now, () => pageUrl);
+        private XsollaIdAuth Create(
+            XsollaIdConfig config = null, string pageUrl = "", IXsollaIdSessionStore store = null) =>
+            new XsollaIdAuth(
+                config ?? TestConfig.Valid(), _discovery, _browser, _tokens, store ?? _store,
+                () => _now, () => pageUrl);
 
         // profileFetched defaults to true: the stored session has "already fetched
         // the profile", and all restore tests are written for that case. Migration
         // tests pass false explicitly.
         private void StoreSession(
-            long expiresAtUnixMs, bool withRefresh = true, bool profileFetched = true,
-            string picture = null, bool withAccess = true) => _store.Save(
+            long expiresAtUnixMs, bool profileFetched = true, bool withAccess = true) => _store.Save(
             new XsollaIdSession(
                 new XsollaUserId("sub-stored"), "Stored Name",
                 withAccess ? new AccessToken("access-stored") : AccessToken.None,
-                withRefresh ? new RefreshToken("refresh-stored") : RefreshToken.None,
+                new RefreshToken("refresh-stored"),
                 expiresAtUnixMs,
-                AvatarUrl.TryParse(picture),
+                AvatarUrl.None,
                 profileFetched));
+
+        private void UserInfoWithProfile(bool withPicture) => _tokens.UserInfoResult = UserInfoResponse.Ok(
+            new XsollaUserId("sub-1"), "Player One",
+            withPicture ? AvatarUrl.TryParse(PictureUrl) : AvatarUrl.None,
+            userName: "id12345678", fullName: "Editor User");
 
         // ---- sign-in ----
 
-        [Test]
-        public async Task SignIn_Success_SetsSessionSavesAndRaisesEventOnce()
+        [TestCase(true)]
+        [TestCase(false)]
+        public async Task SignIn_Success(bool withPicture)
         {
+            UserInfoWithProfile(withPicture);
+
             XsollaIdAuth auth = Create();
             int signedIn = 0;
             auth.SignedIn += _ => signedIn++;
@@ -62,21 +74,33 @@ namespace LongLeap.XsollaId.Tests
             Assert.AreEqual("sub-1", auth.Current.Subject.Value);
             Assert.AreEqual("Player One", auth.Current.DisplayName);
             Assert.AreEqual(1, signedIn);
-            Assert.IsNotNull(_store.Load(), "the session must be saved");
+
+            // Fetched, with or without a picture: no reason to ask again.
+            Assert.IsTrue(auth.Current.ProfileFetched);
+            Assert.AreEqual(withPicture, auth.Current.Picture.IsValid);
+
+            XsollaIdSession saved = _store.Load();
+
+            Assert.IsNotNull(saved, "the session must be saved");
+            Assert.AreEqual(auth.Current.Picture, saved.Picture);
         }
 
         [Test]
-        public async Task SignIn_SendsPkceVerifierAndS256Challenge()
+        public async Task SignIn_AuthorizeUrl_HasPkceScopesAndClient()
         {
-            XsollaIdAuth auth = Create();
+            await Create().SignInAsync();
 
-            await auth.SignInAsync();
+            string url = _browser.LastUrl;
 
             Assert.IsNotEmpty(_tokens.LastVerifier, "the verifier must be sent with the code exchange");
-            StringAssert.Contains("code_challenge_method=S256", _browser.LastUrl);
-            StringAssert.Contains(
-                "code_challenge=" + Pkce.CreateChallengeS256(_tokens.LastVerifier), _browser.LastUrl);
-            StringAssert.Contains("response_type=code", _browser.LastUrl);
+            StringAssert.Contains("response_type=code", url);
+            StringAssert.Contains("code_challenge_method=S256", url);
+            StringAssert.Contains("code_challenge=" + Pkce.CreateChallengeS256(_tokens.LastVerifier), url);
+            StringAssert.Contains("client_id=client-stage", url);
+
+            // offline, not offline_access: see XsollaIdConfig.DefaultScopes.
+            StringAssert.Contains("offline", url);
+            StringAssert.DoesNotContain("offline_access", url);
         }
 
         [Test]
@@ -108,6 +132,31 @@ namespace LongLeap.XsollaId.Tests
         }
 
         [Test]
+        public async Task SignIn_EmptyCode_FailsWithoutExchange()
+        {
+            _browser.Code = "";
+
+            var failure = await Create().SignInAsync() as XsollaIdResult.Failure;
+
+            Assert.AreEqual(XsollaIdErrorCode.TokenExchangeFailed, failure.Code);
+            Assert.AreEqual(0, _tokens.ExchangeCalls);
+        }
+
+        [Test]
+        public async Task SignIn_DiscoveryReturnsNull_IsNotConfigured()
+        {
+            _discovery.Configuration = null;
+
+            XsollaIdAuth auth = Create();
+
+            var failure = await auth.SignInAsync() as XsollaIdResult.Failure;
+
+            Assert.AreEqual(XsollaIdErrorCode.NotConfigured, failure.Code);
+            Assert.AreEqual(0, _browser.Calls, "there is no authorize endpoint to open");
+            Assert.IsFalse(auth.IsSignedIn);
+        }
+
+        [Test]
         public async Task SignIn_ConcurrentCalls_OpenOnlyOneWindow()
         {
             _browser.Gate = new TaskCompletionSource<BrowserAuthResult>();
@@ -125,6 +174,24 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsInstanceOf<XsollaIdResult.Success>(await first);
         }
 
+        // Single-flight must not latch: once the first sign-in is over, a new
+        // click opens a new window.
+        [Test]
+        public async Task SignIn_AfterThePreviousCompleted_StartsANewOne()
+        {
+            XsollaIdAuth auth = Create();
+
+            Task<XsollaIdResult> first = auth.SignInAsync();
+            await first;
+            await auth.SignOutAsync();
+
+            Task<XsollaIdResult> second = auth.SignInAsync();
+
+            Assert.AreNotSame(first, second);
+            Assert.IsInstanceOf<XsollaIdResult.Success>(await second);
+            Assert.AreEqual(2, _browser.Calls);
+        }
+
         [Test]
         public async Task SignIn_ExchangeFailure_IsReportedAndNothingSaved()
         {
@@ -138,6 +205,35 @@ namespace LongLeap.XsollaId.Tests
             Assert.AreEqual(XsollaIdErrorCode.TokenExchangeFailed, failure.Code);
             Assert.IsFalse(auth.IsSignedIn);
             Assert.IsNull(_store.Load());
+        }
+
+        // XsollaIdAuth throws nothing outward, even if a seam breaks its contract.
+        [Test]
+        public async Task SignIn_TokenClientThrows_ReturnsNetworkFailure()
+        {
+            _tokens.ExchangeThrows = true;
+
+            XsollaIdAuth auth = Create();
+
+            var failure = await auth.SignInAsync() as XsollaIdResult.Failure;
+
+            Assert.IsNotNull(failure, "the exception must become a Failure, not escape");
+            Assert.AreEqual(XsollaIdErrorCode.Network, failure.Code);
+            Assert.IsFalse(auth.IsSignedIn);
+        }
+
+        // Userinfo is only for display: its failure must not cost the sign-in.
+        [Test]
+        public async Task SignIn_UserInfoFailure_StillSignsInWithoutProfile()
+        {
+            _tokens.UserInfoResult = UserInfoResponse.Failed(XsollaIdErrorCode.Network, "offline");
+
+            XsollaIdAuth auth = Create();
+
+            Assert.IsInstanceOf<XsollaIdResult.Success>(await auth.SignInAsync());
+            Assert.IsTrue(auth.IsSignedIn);
+            Assert.AreEqual("access-1", auth.Current.Access.Value);
+            Assert.IsFalse(auth.Current.ProfileFetched, "a failed userinfo must be retried, not remembered");
         }
 
         // ---- restore ----
@@ -156,22 +252,30 @@ namespace LongLeap.XsollaId.Tests
             Assert.AreEqual(0, _browser.Calls, "restore must not open a window");
         }
 
+        // Discovery is still warmed up (see RestoreAsync), but no token or
+        // userinfo request is made, and it is a sign-in, not an update.
         [Test]
-        public async Task Restore_ValidSession_SignsInWithoutAnyNetworkCall()
+        public async Task Restore_ValidSession_SignsInWithoutTokenCalls()
         {
             StoreSession(_now + 3_600_000);
 
             XsollaIdAuth auth = Create();
 
+            int signedIn = 0;
+            int sessionUpdated = 0;
+            auth.SignedIn += _ => signedIn++;
+            auth.SessionUpdated += _ => sessionUpdated++;
+
             Assert.IsInstanceOf<XsollaIdResult.Success>(await auth.RestoreAsync());
             Assert.IsTrue(auth.IsSignedIn);
             Assert.AreEqual("sub-stored", auth.Current.Subject.Value);
+            Assert.AreEqual(1, signedIn);
+            Assert.AreEqual(0, sessionUpdated);
+
             Assert.AreEqual(0, _tokens.RefreshCalls);
             Assert.AreEqual(0, _tokens.ExchangeCalls);
-
-            // The test name means exactly what it says: the profile was already
-            // fetched, so there must be no top-up userinfo call.
-            Assert.AreEqual(0, _tokens.UserInfoCalls);
+            Assert.AreEqual(0, _tokens.UserInfoCalls, "the profile was already fetched");
+            Assert.AreEqual(1, _discovery.Calls, "discovery is warmed for a later sign-in click");
         }
 
         [Test]
@@ -205,80 +309,30 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsNull(_store.Load(), "there is no point keeping a dead refresh token");
         }
 
+        // The PlayerPrefs store already drops such a blob, so an in-memory store
+        // is used to reach XsollaIdAuth's own !CanRefresh branch.
         [Test]
         public async Task Restore_ExpiredWithoutRefreshToken_ClearsStore()
         {
-            StoreSession(_now - 1, withRefresh: false);
+            var store = new FakeSessionStore
+            {
+                Session = new XsollaIdSession(
+                    new XsollaUserId("sub-stored"), "Stored Name",
+                    new AccessToken("access-stored"), RefreshToken.None, _now - 1)
+            };
 
-            // Without a refresh token the stored session is not loaded at all:
-            // the store returns null and clears the key.
-            XsollaIdAuth auth = Create();
+            XsollaIdAuth auth = Create(store: store);
 
             var failure = await auth.RestoreAsync() as XsollaIdResult.Failure;
 
             Assert.AreEqual(XsollaIdErrorCode.SessionExpired, failure.Code);
-            Assert.AreEqual(0, _tokens.RefreshCalls);
+            Assert.AreEqual(1, store.ClearCalls);
+            Assert.IsNull(store.Session);
+            Assert.AreEqual(0, _tokens.RefreshCalls, "there is nothing to refresh with");
+            Assert.IsFalse(auth.IsSignedIn);
         }
 
-        // ---- profile picture and top-up request ----
-
-        [Test]
-        public async Task SignIn_CarriesThePictureIntoTheSession()
-        {
-            _tokens.UserInfoResult = UserInfoResponse.Ok(
-                new XsollaUserId("sub-1"), "Player One", AvatarUrl.TryParse("https://cdn.xsolla.com/a.png"));
-
-            XsollaIdAuth auth = Create();
-
-            Assert.IsInstanceOf<XsollaIdResult.Success>(await auth.SignInAsync());
-            Assert.AreEqual("https://cdn.xsolla.com/a.png", auth.Current.Picture.Value);
-            Assert.IsTrue(auth.Current.ProfileFetched);
-            Assert.AreEqual("https://cdn.xsolla.com/a.png", _store.Load().Picture.Value);
-        }
-
-        [Test]
-        public async Task SignIn_WithoutPicture_StillSucceeds()
-        {
-            XsollaIdAuth auth = Create();
-
-            Assert.IsInstanceOf<XsollaIdResult.Success>(await auth.SignInAsync());
-            Assert.IsFalse(auth.Current.Picture.IsValid);
-
-            // Fetched and got nothing: no reason to ask again.
-            Assert.IsTrue(auth.Current.ProfileFetched);
-        }
-
-        // Guards the condition in BuildSessionAsync: if "no picture" triggered the
-        // request, a player without a picture claim would hit userinfo on every
-        // token refresh, forever.
-        [Test]
-        public async Task Refresh_DoesNotAskUserInfoAgain_EvenWithoutAPicture()
-        {
-            XsollaIdAuth auth = Create();
-            await auth.SignInAsync();
-
-            Assert.AreEqual(1, _tokens.UserInfoCalls);
-            Assert.IsFalse(auth.Current.Picture.IsValid, "this test is only meaningful without a picture");
-
-            await auth.RefreshAsync();
-
-            Assert.AreEqual(1, _tokens.UserInfoCalls, "the profile was already fetched — asking again is a bug");
-        }
-
-        [Test]
-        public async Task Refresh_CarriesThePictureForward()
-        {
-            _tokens.UserInfoResult = UserInfoResponse.Ok(
-                new XsollaUserId("sub-1"), "Player One", AvatarUrl.TryParse("https://cdn.xsolla.com/a.png"));
-
-            XsollaIdAuth auth = Create();
-            await auth.SignInAsync();
-            await auth.RefreshAsync();
-
-            Assert.AreEqual("https://cdn.xsolla.com/a.png", auth.Current.Picture.Value);
-            Assert.AreEqual("access-2", auth.Current.Access.Value, "the token really did roll over");
-            Assert.AreEqual(1, _tokens.UserInfoCalls);
-        }
+        // ---- profile top-up ----
 
         // Migration: the blob was written by a version without pictures, so it has
         // no flag, while the token is still valid; the next refresh (where userinfo
@@ -288,19 +342,19 @@ namespace LongLeap.XsollaId.Tests
         {
             StoreSession(_now + 3_600_000, profileFetched: false);
             _tokens.UserInfoResult = UserInfoResponse.Ok(
-                new XsollaUserId("sub-stored"), "Fresh Name", AvatarUrl.TryParse("https://cdn.xsolla.com/a.png"));
+                new XsollaUserId("sub-stored"), "Fresh Name", AvatarUrl.TryParse(PictureUrl));
 
             XsollaIdAuth auth = Create();
 
             Assert.IsInstanceOf<XsollaIdResult.Success>(await auth.RestoreAsync());
             Assert.AreEqual(1, _tokens.UserInfoCalls);
-            Assert.AreEqual("https://cdn.xsolla.com/a.png", auth.Current.Picture.Value);
+            Assert.AreEqual(PictureUrl, auth.Current.Picture.Value);
             Assert.AreEqual(0, _tokens.RefreshCalls, "the token was still valid — no need to refresh it");
 
             XsollaIdSession saved = _store.Load();
 
             Assert.IsTrue(saved.ProfileFetched, "the blob must be rewritten so the top-up happens only once");
-            Assert.AreEqual("https://cdn.xsolla.com/a.png", saved.Picture.Value);
+            Assert.AreEqual(PictureUrl, saved.Picture.Value);
         }
 
         [Test]
@@ -329,7 +383,7 @@ namespace LongLeap.XsollaId.Tests
         {
             StoreSession(_now + 3_600_000, profileFetched: false, withAccess: false);
             _tokens.UserInfoResult = UserInfoResponse.Ok(
-                new XsollaUserId("sub-stored"), "Fresh Name", AvatarUrl.TryParse("https://cdn.xsolla.com/a.png"));
+                new XsollaUserId("sub-stored"), "Fresh Name", AvatarUrl.TryParse(PictureUrl));
 
             XsollaIdAuth auth = Create();
 
@@ -340,10 +394,88 @@ namespace LongLeap.XsollaId.Tests
             // Exactly one request: the refresh and the profile top-up must not add
             // up to two.
             Assert.AreEqual(1, _tokens.UserInfoCalls);
-            Assert.AreEqual("https://cdn.xsolla.com/a.png", auth.Current.Picture.Value);
+            Assert.AreEqual(PictureUrl, auth.Current.Picture.Value);
         }
 
-        // ---- SessionUpdated ----
+        // ---- refresh ----
+
+        // Guards the condition in BuildSessionAsync: if "no picture" triggered the
+        // request, a player without a picture claim would hit userinfo on every
+        // token refresh, forever. Name, picture and both raw claims carry over.
+        [TestCase(true)]
+        [TestCase(false)]
+        public async Task Refresh_KeepsProfileWithoutUserInfo(bool withPicture)
+        {
+            UserInfoWithProfile(withPicture);
+
+            XsollaIdAuth auth = Create();
+            await auth.SignInAsync();
+            XsollaIdSession before = auth.Current;
+
+            Assert.IsInstanceOf<XsollaIdResult.Success>(await auth.RefreshAsync());
+
+            Assert.AreEqual("access-2", auth.Current.Access.Value, "the token really did roll over");
+            Assert.AreEqual(1, _tokens.UserInfoCalls, "the profile was already fetched — asking again is a bug");
+            Assert.AreEqual(before.Picture, auth.Current.Picture);
+            Assert.AreEqual(withPicture, auth.Current.Picture.IsValid);
+            Assert.AreEqual("Player One", auth.Current.DisplayName);
+            Assert.AreEqual("id12345678", auth.Current.UserName);
+            Assert.AreEqual("Editor User", auth.Current.FullName);
+            Assert.IsTrue(auth.Current.ProfileFetched);
+        }
+
+        // The server may not rotate the refresh token; the old one stays usable.
+        [Test]
+        public async Task Refresh_WithoutNewRefreshToken_KeepsThePreviousOne()
+        {
+            _tokens.RefreshResult = TokenResponse.Ok(new AccessToken("access-2"), RefreshToken.None, 0);
+
+            XsollaIdAuth auth = Create();
+            await auth.SignInAsync();
+
+            Assert.IsInstanceOf<XsollaIdResult.Success>(await auth.RefreshAsync());
+            Assert.AreEqual("access-2", auth.Current.Access.Value);
+            Assert.AreEqual("refresh-1", auth.Current.Refresh.Value);
+            Assert.AreEqual("refresh-1", _store.Load().Refresh.Value);
+        }
+
+        // A network blip is not a sign-out: the refresh token may still be good.
+        [Test]
+        public async Task Refresh_NetworkFailure_KeepsSessionAndStore()
+        {
+            XsollaIdAuth auth = Create();
+            await auth.SignInAsync();
+            XsollaIdSession before = auth.Current;
+
+            int signedOut = 0;
+            auth.SignedOut += () => signedOut++;
+            _tokens.RefreshResult = TokenResponse.Failed(XsollaIdErrorCode.Network, "offline");
+
+            var failure = await auth.RefreshAsync() as XsollaIdResult.Failure;
+
+            Assert.AreEqual(XsollaIdErrorCode.Network, failure.Code);
+            Assert.AreSame(before, auth.Current);
+            Assert.AreEqual("refresh-1", _store.Load().Refresh.Value);
+            Assert.AreEqual(0, signedOut);
+        }
+
+        [Test]
+        public async Task Refresh_SessionExpired_SignsOutAndClearsStore()
+        {
+            XsollaIdAuth auth = Create();
+            await auth.SignInAsync();
+
+            int signedOut = 0;
+            auth.SignedOut += () => signedOut++;
+            _tokens.RefreshResult = TokenResponse.Failed(XsollaIdErrorCode.SessionExpired, "invalid_grant");
+
+            var failure = await auth.RefreshAsync() as XsollaIdResult.Failure;
+
+            Assert.AreEqual(XsollaIdErrorCode.SessionExpired, failure.Code);
+            Assert.IsFalse(auth.IsSignedIn);
+            Assert.IsNull(_store.Load());
+            Assert.AreEqual(1, signedOut);
+        }
 
         [Test]
         public async Task Refresh_RaisesSessionUpdatedAndNotSignedIn()
@@ -366,22 +498,26 @@ namespace LongLeap.XsollaId.Tests
             Assert.AreEqual(1, sessionUpdated);
         }
 
-        [Test]
-        public async Task Restore_OfAValidSession_RaisesSignedInNotSessionUpdated()
-        {
-            StoreSession(_now + 3_600_000);
+        // ---- LastSignInOrigin ----
 
+        // One instance walks through all three origins, so a stale value from the
+        // previous step would be caught (Restored is also the initial value).
+        [Test]
+        public async Task LastSignInOrigin_FollowsWhereTheSessionCameFrom()
+        {
             XsollaIdAuth auth = Create();
 
-            int signedIn = 0;
-            int sessionUpdated = 0;
-            auth.SignedIn += _ => signedIn++;
-            auth.SessionUpdated += _ => sessionUpdated++;
+            await auth.SignInAsync();
+            Assert.AreEqual(XsollaIdSignInOrigin.Interactive, auth.LastSignInOrigin);
 
-            await auth.RestoreAsync();
+            await auth.RefreshAsync();
+            Assert.AreEqual(XsollaIdSignInOrigin.Refreshed, auth.LastSignInOrigin);
 
-            Assert.AreEqual(1, signedIn);
-            Assert.AreEqual(0, sessionUpdated);
+            await auth.SignInAsync();
+            Assert.AreEqual(XsollaIdSignInOrigin.Interactive, auth.LastSignInOrigin);
+
+            Assert.IsInstanceOf<XsollaIdResult.Success>(await auth.RestoreAsync());
+            Assert.AreEqual(XsollaIdSignInOrigin.Restored, auth.LastSignInOrigin);
         }
 
         // ---- sign-out ----
@@ -402,6 +538,20 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsNull(_store.Load());
             Assert.AreEqual(1, signedOut);
             Assert.AreEqual(1, _tokens.RevokeCalls);
+        }
+
+        [Test]
+        public async Task SignOut_WhenNotSignedIn_RaisesNothing()
+        {
+            XsollaIdAuth auth = Create();
+
+            int signedOut = 0;
+            auth.SignedOut += () => signedOut++;
+
+            await auth.SignOutAsync();
+
+            Assert.AreEqual(0, signedOut, "SignedOut means a transition, and there was none");
+            Assert.AreEqual(0, _tokens.RevokeCalls);
         }
 
         [Test]
@@ -450,35 +600,23 @@ namespace LongLeap.XsollaId.Tests
             Assert.IsTrue(auth.IsReady, "unavailable is a final answer too");
         }
 
-        [Test]
-        public async Task SignIn_DisallowedOrigin_FailsBeforeOpeningWindow()
+        // Only 127.0.0.1 is allowed: localhost must fail before any window or
+        // discovery request, since the server would refuse anyway.
+        [TestCase("http://localhost:8081/index.html", false)]
+        [TestCase("http://127.0.0.1:8081/index.html", true)]
+        public async Task SignIn_Origin(string pageUrl, bool proceeds)
         {
-            // The game is opened on localhost, but only 127.0.0.1 is allowed.
-            XsollaIdAuth auth = Create(pageUrl: "http://localhost:8081/index.html");
+            XsollaIdResult result = await Create(pageUrl: pageUrl).SignInAsync();
 
-            var failure = await auth.SignInAsync() as XsollaIdResult.Failure;
+            if (proceeds)
+            {
+                Assert.IsInstanceOf<XsollaIdResult.Success>(result);
+                return;
+            }
 
-            Assert.AreEqual(XsollaIdErrorCode.NotConfigured, failure.Code);
-            Assert.AreEqual(0, _browser.Calls, "no point opening the window — the server would refuse anyway");
+            Assert.AreEqual(XsollaIdErrorCode.NotConfigured, ((XsollaIdResult.Failure)result).Code);
+            Assert.AreEqual(0, _browser.Calls);
             Assert.AreEqual(0, _discovery.Calls);
-        }
-
-        [Test]
-        public async Task SignIn_AllowedOrigin_ProceedsNormally()
-        {
-            XsollaIdAuth auth = Create(pageUrl: "http://127.0.0.1:8081/index.html");
-
-            Assert.IsInstanceOf<XsollaIdResult.Success>(await auth.SignInAsync());
-        }
-
-        [Test]
-        public async Task SignIn_AuthorizeUrlCarriesConfiguredScopes()
-        {
-            await Create().SignInAsync();
-
-            StringAssert.Contains("offline", _browser.LastUrl);
-            StringAssert.DoesNotContain("offline_access", _browser.LastUrl);
-            StringAssert.Contains("client_id=client-stage", _browser.LastUrl);
         }
     }
 }

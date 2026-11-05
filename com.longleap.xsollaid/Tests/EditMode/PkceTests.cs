@@ -42,11 +42,7 @@ namespace LongLeap.XsollaId.Tests
         {
             byte[] fixedBytes = Encoding.ASCII.GetBytes("0123456789abcdef0123456789abcdef");
 
-            string first = Pkce.CreateVerifier(_ => fixedBytes);
-            string second = Pkce.CreateVerifier(_ => fixedBytes);
-
-            Assert.AreEqual(first, second, "the same bytes must produce the same verifier");
-            Assert.AreEqual(Pkce.Base64UrlEncode(fixedBytes), first);
+            Assert.AreEqual(Pkce.Base64UrlEncode(fixedBytes), Pkce.CreateVerifier(_ => fixedBytes));
         }
 
         [Test]
@@ -54,6 +50,17 @@ namespace LongLeap.XsollaId.Tests
         {
             // A predictable verifier defeats the purpose of PKCE.
             Assert.AreNotEqual(Pkce.CreateVerifier(), Pkce.CreateVerifier());
+        }
+
+        // state is the CSRF check of the callback: it must be URL-safe and
+        // unpredictable. 16 bytes are 22 unpadded base64url characters.
+        [Test]
+        public void CreateState_IsUrlSafeAndDiffersEachTime()
+        {
+            string first = Pkce.CreateState();
+
+            StringAssert.IsMatch("^[A-Za-z0-9_-]{22}$", first);
+            Assert.AreNotEqual(first, Pkce.CreateState());
         }
 
         [Test]

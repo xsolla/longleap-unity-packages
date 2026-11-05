@@ -1,7 +1,6 @@
 using System;
 using System.Threading.Tasks;
 using LongLeap.Core.Leagues;
-using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
 namespace LongLeap.XsollaId.Web.Tests
@@ -92,16 +91,22 @@ namespace LongLeap.XsollaId.Web.Tests
 
             await Create(transport).SubmitScoreAsync(League, 1500, "Tester");
 
-            HttpCall call = transport.Calls[0];
-            Assert.AreEqual("POST", call.Method);
-            Assert.AreEqual(BaseUrl + "/leagues/dev_weekly/scores", call.Url);
-            Assert.AreEqual("application/json", call.ContentType);
+            Assert.AreEqual(BaseUrl + "/leagues/dev_weekly/scores", transport.Calls[0].Url);
+            RequestAssert.AccountBody(transport.Calls[0], GameId, AccountId, 1500, "Tester");
+        }
 
-            var body = JObject.Parse(call.Body);
-            Assert.AreEqual(GameId, (string)body["gameId"]);
-            Assert.AreEqual(AccountId, (string)body["xsollaId"]);
-            Assert.AreEqual(1500, (long)body["score"]);
-            Assert.AreEqual("Tester", (string)body["displayName"]);
+        // The reply to a submit is the fresh state, so the UI needs no second request.
+        [Test]
+        public async Task Submit_ReturnsTheStateFromTheReply()
+        {
+            var transport = new FakeTransport(HttpReply.Ok(StateJson));
+
+            LeagueState state = await Create(transport).SubmitScoreAsync(League, 1500, "Tester");
+
+            Assert.AreEqual(1, transport.Calls.Count);
+            Assert.AreEqual("sidewalk", state.TierId);
+            Assert.AreEqual(900, state.Group.Score);
+            Assert.AreEqual(3, state.Group.Entries.Count);
         }
 
         [Test]
@@ -139,6 +144,23 @@ namespace LongLeap.XsollaId.Web.Tests
         public void FailedRequest_Throws()
         {
             var transport = new FakeTransport(HttpReply.Status(500, "boom"));
+
+            Assert.ThrowsAsync<InvalidOperationException>(() => Create(transport).GetStateAsync(League));
+        }
+
+        [Test]
+        public void FailedClaim_Throws()
+        {
+            var transport = new FakeTransport(HttpReply.Status(500, "boom"));
+
+            Assert.ThrowsAsync<InvalidOperationException>(() => Create(transport).ClaimAsync(League, 3));
+        }
+
+        // LeagueService decides what to do about it, so no swallowing here.
+        [Test]
+        public void TransportError_Throws()
+        {
+            var transport = new FakeTransport(HttpReply.Transport("Cannot connect"));
 
             Assert.ThrowsAsync<InvalidOperationException>(() => Create(transport).GetStateAsync(League));
         }

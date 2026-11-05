@@ -1,77 +1,47 @@
 using System.Collections.Generic;
-using LongLeap.Core.CloudSaves;
 using NUnit.Framework;
+using static LongLeap.XsollaId.Accounts.Tests.TestSaves;
 
 namespace LongLeap.XsollaId.Accounts.Tests
 {
     [TestFixture]
     public class SaveMergeRulesTests
     {
-        private static Dictionary<string, CloudSaveEntry> Save(params (string key, string value)[] pairs)
-        {
-            var save = new Dictionary<string, CloudSaveEntry>();
-
-            foreach (var (key, value) in pairs)
-                save[key] = new CloudSaveEntry(value, 100);
-
-            return save;
-        }
-
-        [Test]
-        public void Max_TakesTheLargerNumber()
-        {
-            Assert.AreEqual("7", SaveMergeRules.Apply(SaveMergeRule.Max, "7", "3"));
-            Assert.AreEqual("9", SaveMergeRules.Apply(SaveMergeRule.Max, "7", "9"));
-            Assert.AreEqual("1.5", SaveMergeRules.Apply(SaveMergeRule.Max, "1.5", "1.25"));
-        }
-
-        [Test]
-        public void Max_MissingOrGarbageSideLoses()
-        {
-            Assert.AreEqual("4", SaveMergeRules.Apply(SaveMergeRule.Max, null, "4"));
-            Assert.AreEqual("4", SaveMergeRules.Apply(SaveMergeRule.Max, "4", null));
-            Assert.AreEqual("4", SaveMergeRules.Apply(SaveMergeRule.Max, "junk", "4"));
-            Assert.AreEqual("junk", SaveMergeRules.Apply(SaveMergeRule.Max, "other", "junk"), "neither parses — keep the account's");
-        }
-
-        [Test]
-        public void MaxMin_CompareLargeIntegersExactly()
-        {
-            // 2^53 + 1 and 2^53 are the same double.
-            Assert.AreEqual("9007199254740993", SaveMergeRules.Apply(SaveMergeRule.Max, "9007199254740993", "9007199254740992"));
-            Assert.AreEqual("9007199254740992", SaveMergeRules.Apply(SaveMergeRule.Min, "9007199254740993", "9007199254740992"));
-        }
+        [TestCase(SaveMergeRule.Max, "7", "3", ExpectedResult = "7")]
+        [TestCase(SaveMergeRule.Max, "7", "9", ExpectedResult = "9")]
+        [TestCase(SaveMergeRule.Max, "1.5", "1.25", ExpectedResult = "1.5")]
+        // A missing or unparsable side loses.
+        [TestCase(SaveMergeRule.Max, null, "4", ExpectedResult = "4")]
+        [TestCase(SaveMergeRule.Max, "4", null, ExpectedResult = "4")]
+        [TestCase(SaveMergeRule.Max, "junk", "4", ExpectedResult = "4")]
+        // Neither parses: keep the account's raw value.
+        [TestCase(SaveMergeRule.Max, "other", "junk", ExpectedResult = "junk")]
+        // 2^53 + 1 and 2^53 are the same double: integers compare exactly.
+        [TestCase(SaveMergeRule.Max, "9007199254740993", "9007199254740992", ExpectedResult = "9007199254740993")]
+        [TestCase(SaveMergeRule.Min, "9007199254740993", "9007199254740992", ExpectedResult = "9007199254740992")]
+        // Min ignores zero as "unknown".
+        [TestCase(SaveMergeRule.Min, "100", "200", ExpectedResult = "100")]
+        [TestCase(SaveMergeRule.Min, "0", "200", ExpectedResult = "200")]
+        [TestCase(SaveMergeRule.Min, null, "200", ExpectedResult = "200")]
+        // Or: set if either is set.
+        [TestCase(SaveMergeRule.Or, "1", null, ExpectedResult = "1")]
+        [TestCase(SaveMergeRule.Or, "0", "1", ExpectedResult = "1")]
+        [TestCase(SaveMergeRule.Or, "true", "0", ExpectedResult = "true")]
+        [TestCase(SaveMergeRule.Or, "0", "0", ExpectedResult = "0")]
+        // Union: account items first, in their order, then new guest items.
+        [TestCase(SaveMergeRule.Union, "b\nc", "a\nb", ExpectedResult = "a\nb\nc")]
+        [TestCase(SaveMergeRule.Union, null, null, ExpectedResult = null)]
+        [TestCase(SaveMergeRule.PreferAccount, "guest", "acc", ExpectedResult = "acc")]
+        [TestCase(SaveMergeRule.PreferAccount, "guest", null, ExpectedResult = "guest")]
+        [TestCase(SaveMergeRule.PreferLocal, "guest", "acc", ExpectedResult = "guest")]
+        [TestCase(SaveMergeRule.PreferLocal, null, "acc", ExpectedResult = "acc")]
+        public string Apply(SaveMergeRule rule, string local, string account) =>
+            SaveMergeRules.Apply(rule, local, account);
 
         [Test]
-        public void Min_IgnoresZeroAsUnknown()
+        public void Union_UsesTheGivenSeparator()
         {
-            Assert.AreEqual("100", SaveMergeRules.Apply(SaveMergeRule.Min, "100", "200"));
-            Assert.AreEqual("200", SaveMergeRules.Apply(SaveMergeRule.Min, "0", "200"));
-            Assert.AreEqual("200", SaveMergeRules.Apply(SaveMergeRule.Min, null, "200"));
-        }
-
-        [Test]
-        public void Or_IsSetIfEitherIsSet()
-        {
-            Assert.AreEqual("1", SaveMergeRules.Apply(SaveMergeRule.Or, "1", null));
-            Assert.AreEqual("1", SaveMergeRules.Apply(SaveMergeRule.Or, "0", "1"));
-            Assert.AreEqual("true", SaveMergeRules.Apply(SaveMergeRule.Or, "true", "0"));
-            Assert.AreEqual("0", SaveMergeRules.Apply(SaveMergeRule.Or, "0", "0"));
-        }
-
-        [Test]
-        public void Union_KeepsAccountOrderAndAddsGuestItems()
-        {
-            Assert.AreEqual("a\nb\nc", SaveMergeRules.Apply(SaveMergeRule.Union, "b\nc", "a\nb"));
             Assert.AreEqual("a,b", SaveMergeRules.Apply(SaveMergeRule.Union, "b", "a", ','));
-            Assert.IsNull(SaveMergeRules.Apply(SaveMergeRule.Union, null, null));
-        }
-
-        [Test]
-        public void PreferAccount_FallsBackToGuest()
-        {
-            Assert.AreEqual("acc", SaveMergeRules.Apply(SaveMergeRule.PreferAccount, "guest", "acc"));
-            Assert.AreEqual("guest", SaveMergeRules.Apply(SaveMergeRule.PreferAccount, "guest", null));
         }
 
         [Test]

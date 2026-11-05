@@ -11,88 +11,62 @@ namespace LongLeap.XsollaId.Tests
             "https://game.example.com"
         };
 
-        [Test]
-        public void LocalhostIsNotTheSameOriginAsLoopbackIp()
+        // localhost: the exact mistake that breaks sign-in locally — the dev
+        // server listens on 127.0.0.1, while the developer types localhost.
+        // The problem names the page origin and what is allowed instead.
+        [TestCase("http://localhost:8081/index.html", "localhost")]
+        [TestCase("http://127.0.0.1:9000/index.html", "http://127.0.0.1:9000")]
+        [TestCase("http://game.example.com/", "http://game.example.com")]
+        public void IsAllowed_Rejects(string pageUrl, string pageOriginInProblem)
         {
-            // The exact mistake that breaks sign-in locally: the dev server listens
-            // on 127.0.0.1, while the developer types localhost out of habit.
-            bool ok = OriginGuard.IsAllowed(
-                "http://localhost:8081/index.html", Allowed, out string problem);
-
-            Assert.IsFalse(ok);
-            StringAssert.Contains("localhost", problem);
-            StringAssert.Contains("127.0.0.1", problem);
+            Assert.IsFalse(OriginGuard.IsAllowed(pageUrl, Allowed, out string problem));
+            StringAssert.Contains(pageOriginInProblem, problem);
+            StringAssert.Contains("127.0.0.1:8081", problem);
         }
 
-        [Test]
-        public void AllowedOrigin_PassesRegardlessOfPath()
+        // (pageUrl, allowlist)
+        private static readonly TestCaseData[] AllowedCases =
         {
-            Assert.IsTrue(OriginGuard.IsAllowed(
-                "http://127.0.0.1:8081/index.html", Allowed, out _));
-
-            Assert.IsTrue(OriginGuard.IsAllowed(
-                "https://game.example.com/some/deep/path", Allowed, out _));
-        }
-
-        [Test]
-        public void DifferentPort_IsNotAllowed()
-        {
-            Assert.IsFalse(OriginGuard.IsAllowed("http://127.0.0.1:9000/index.html", Allowed, out _));
-        }
-
-        [Test]
-        public void DifferentScheme_IsNotAllowed()
-        {
-            Assert.IsFalse(OriginGuard.IsAllowed("http://game.example.com/", Allowed, out _));
-        }
-
-        [Test]
-        public void GameAndCallbackNeedNotShareAnOrigin()
-        {
+            new TestCaseData("http://127.0.0.1:8081/index.html", Allowed)
+                .SetName("IsAllowed_Passes(exact origin)"),
+            new TestCaseData("https://game.example.com/some/deep/path", Allowed)
+                .SetName("IsAllowed_Passes(regardless of path)"),
             // Portal build: the portal serves the game, while the callback page
             // lives on our own domain. Requiring the origins to match is wrong.
-            string[] withPortal = { "https://portal.example.com", "https://game.example.com" };
+            new TestCaseData(
+                    "https://portal.example.com/games/demo/index.html",
+                    new[] { "https://portal.example.com", "https://game.example.com" })
+                .SetName("IsAllowed_Passes(portal origin, callback elsewhere)"),
+            new TestCaseData("http://127.0.0.1:8081/a", new[] { "not a url", "http://127.0.0.1:8081" })
+                .SetName("IsAllowed_Passes(unparseable entries are skipped)")
+        };
 
-            Assert.IsTrue(OriginGuard.IsAllowed(
-                "https://portal.example.com/games/demo/index.html", withPortal, out _));
+        [TestCaseSource(nameof(AllowedCases))]
+        public void IsAllowed_Passes(string pageUrl, string[] allowlist)
+        {
+            Assert.IsTrue(OriginGuard.IsAllowed(pageUrl, allowlist, out string problem));
+            Assert.IsNull(problem);
         }
 
-        [Test]
-        public void EmptyPageUrl_PassesBecauseThereIsNoOrigin()
+        // No basis to block: no origin (editor, standalone), no usable allowlist
+        // (an empty config must not silently break sign-in), or an unparseable
+        // page address. The server decides then.
+        private static readonly TestCaseData[] NotBlockingCases =
         {
-            // Editor and standalone: there is no origin, so nothing to block.
-            Assert.IsTrue(OriginGuard.IsAllowed("", Allowed, out _));
-            Assert.IsTrue(OriginGuard.IsAllowed(null, Allowed, out _));
-        }
+            new TestCaseData("", Allowed).SetName("DoesNotBlock(empty page url)"),
+            new TestCaseData(null, Allowed).SetName("DoesNotBlock(null page url)"),
+            new TestCaseData("not a url", Allowed).SetName("DoesNotBlock(unparseable page url)"),
+            new TestCaseData("http://example.com/", new string[0]).SetName("DoesNotBlock(empty allowlist)"),
+            new TestCaseData("http://example.com/", null).SetName("DoesNotBlock(null allowlist)"),
+            new TestCaseData("http://example.com/", new[] { "not a url", "also not a url" })
+                .SetName("DoesNotBlock(all entries unparseable)")
+        };
 
-        [Test]
-        public void EmptyAllowlist_DoesNotBlock()
+        [TestCaseSource(nameof(NotBlockingCases))]
+        public void DoesNotBlock(string pageUrl, string[] allowlist)
         {
-            // An empty config must not silently break sign-in; let the server decide.
-            Assert.IsTrue(OriginGuard.IsAllowed("http://example.com/", new string[0], out _));
-            Assert.IsTrue(OriginGuard.IsAllowed("http://example.com/", null, out _));
-        }
-
-        [Test]
-        public void UnparseableEntries_AreSkippedNotFatal()
-        {
-            string[] messy = { "not a url", "http://127.0.0.1:8081" };
-
-            Assert.IsTrue(OriginGuard.IsAllowed("http://127.0.0.1:8081/a", messy, out _));
-        }
-
-        [Test]
-        public void AllEntriesUnparseable_BehavesLikeNoAllowlist()
-        {
-            string[] junk = { "not a url", "also not a url" };
-
-            Assert.IsTrue(OriginGuard.IsAllowed("http://example.com/", junk, out _));
-        }
-
-        [Test]
-        public void UnparseablePageUrl_DoesNotBlock()
-        {
-            Assert.IsTrue(OriginGuard.IsAllowed("not a url", Allowed, out _));
+            Assert.IsTrue(OriginGuard.IsAllowed(pageUrl, allowlist, out string problem));
+            Assert.IsNull(problem);
         }
 
         [Test]

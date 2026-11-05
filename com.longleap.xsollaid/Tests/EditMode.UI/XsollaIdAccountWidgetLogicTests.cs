@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 
 namespace LongLeap.XsollaId.UI.Tests
@@ -6,25 +7,70 @@ namespace LongLeap.XsollaId.UI.Tests
     [TestFixture]
     public class XsollaIdAccountWidgetLogicTests
     {
-        // Named arguments are mandatory: eight bools in a row are readable
-        // only this way.
-        private static AccountWidgetState Resolve(
-            bool serviceExists = true,
-            bool isAvailable = true,
-            bool isReady = true,
-            bool readyTimedOut = false,
-            bool isSignedIn = false,
-            bool signInPending = false,
-            bool signOutPending = false,
-            bool hasError = false) =>
-            XsollaIdAccountWidgetLogic.Resolve(
-                serviceExists, isAvailable, isReady, readyTimedOut,
-                isSignedIn, signInPending, signOutPending, hasError);
+        // ---- Resolve ----
 
-        // ---- Hidden ----
+        // Flags are given as words: the defaults are "service exists, available,
+        // ready, nothing else", and each word flips one of them.
+        //   noService, unavailable, notReady  — turn a default off
+        //   timedOut, signedIn, signInPending, signOutPending, error — turn a flag on
+        private static AccountWidgetState Resolve(string flags)
+        {
+            var set = new HashSet<string>(
+                (flags ?? "").Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
 
-        // Unavailability overrides EVERYTHING else, in any combination of the other flags.
-        [Test]
+            var known = new[]
+            {
+                "noService", "unavailable", "notReady", "timedOut",
+                "signedIn", "signInPending", "signOutPending", "error"
+            };
+
+            foreach (string flag in set)
+                Assert.Contains(flag, known, "typo in the test case");
+
+            return XsollaIdAccountWidgetLogic.Resolve(
+                serviceExists: !set.Contains("noService"),
+                isAvailable: !set.Contains("unavailable"),
+                isReady: !set.Contains("notReady"),
+                readyTimedOut: set.Contains("timedOut"),
+                isSignedIn: set.Contains("signedIn"),
+                signInPending: set.Contains("signInPending"),
+                signOutPending: set.Contains("signOutPending"),
+                hasError: set.Contains("error"));
+        }
+
+        // No service yet: the game may bind it after the widget's OnEnable. The
+        // sign-in button must not flash — a signed-in player would think they
+        // were signed out. A missing service wins even over "unavailable".
+        [TestCase("noService unavailable", ExpectedResult = AccountWidgetState.Checking)]
+        [TestCase("noService", ExpectedResult = AccountWidgetState.Checking)]
+        [TestCase("noService signedIn", ExpectedResult = AccountWidgetState.Checking)]
+        // Restore still running.
+        [TestCase("notReady", ExpectedResult = AccountWidgetState.Checking)]
+        [TestCase("notReady error", ExpectedResult = AccountWidgetState.Checking)]
+        // Not "checking" forever: restore goes to the network.
+        [TestCase("notReady timedOut", ExpectedResult = AccountWidgetState.SignedOut)]
+        [TestCase("", ExpectedResult = AccountWidgetState.SignedOut)]
+        [TestCase("signOutPending", ExpectedResult = AccountWidgetState.SignedOut)]
+        [TestCase("signInPending", ExpectedResult = AccountWidgetState.SigningIn)]
+        [TestCase("notReady signInPending", ExpectedResult = AccountWidgetState.SigningIn)]
+        // A new attempt hides the stale error.
+        [TestCase("signInPending error", ExpectedResult = AccountWidgetState.SigningIn)]
+        [TestCase("error", ExpectedResult = AccountWidgetState.SignedOutWithError)]
+        [TestCase("signedIn", ExpectedResult = AccountWidgetState.SignedIn)]
+        // Regression: SignedIn fires before the SignInAsync task completes; the
+        // label must not flash back to "Signing in...".
+        [TestCase("signedIn signInPending", ExpectedResult = AccountWidgetState.SignedIn)]
+        [TestCase("signedIn notReady", ExpectedResult = AccountWidgetState.SignedIn)]
+        // A leftover error never shows next to an account.
+        [TestCase("signedIn error", ExpectedResult = AccountWidgetState.SignedIn)]
+        [TestCase("signedIn signOutPending", ExpectedResult = AccountWidgetState.SigningOut)]
+        [TestCase("signedIn signOutPending error", ExpectedResult = AccountWidgetState.SigningOut)]
+        public AccountWidgetState Resolve_Table(string flags) => Resolve(flags);
+
+        // An existing but unavailable service is Hidden whatever the other
+        // flags say (a missing service is Checking instead — see the table).
+        // Pairwise keeps the intent without all 64 combinations.
+        [Test, Pairwise]
         public void Unavailable_IsHidden_WhateverElseIsTrue(
             [Values(true, false)] bool isReady,
             [Values(true, false)] bool readyTimedOut,
@@ -33,7 +79,8 @@ namespace LongLeap.XsollaId.UI.Tests
             [Values(true, false)] bool signOutPending,
             [Values(true, false)] bool hasError)
         {
-            AccountWidgetState state = Resolve(
+            AccountWidgetState state = XsollaIdAccountWidgetLogic.Resolve(
+                serviceExists: true,
                 isAvailable: false,
                 isReady: isReady,
                 readyTimedOut: readyTimedOut,
@@ -45,235 +92,88 @@ namespace LongLeap.XsollaId.UI.Tests
             Assert.AreEqual(AccountWidgetState.Hidden, state);
         }
 
-        // ---- Checking ----
+        // ---- ShortName / Shorten ----
 
-        // The game's bootstrap may bind the account service later than the
-        // widget's OnEnable, so for the first frames there may be no service at
-        // all. The sign-in button must not flash then: a player who signed in last
-        // time would see "Sign in" and think they were signed out.
-        [Test]
-        public void NoServiceYet_IsChecking()
+        public enum Shortener
         {
-            Assert.AreEqual(AccountWidgetState.Checking, Resolve(serviceExists: false, isAvailable: false));
-            Assert.AreEqual(AccountWidgetState.Checking, Resolve(serviceExists: false));
+            ShortName,
+            Shorten
         }
 
-        [Test]
-        public void NotReadyYet_IsChecking()
-        {
-            Assert.AreEqual(AccountWidgetState.Checking, Resolve(isReady: false));
-        }
-
-        // The player should not see "checking" forever: restore goes to the network.
-        [Test]
-        public void ReadyTimedOut_FallsBackToSignedOut()
-        {
-            Assert.AreEqual(AccountWidgetState.SignedOut, Resolve(isReady: false, readyTimedOut: true));
-        }
-
-        // ---- sign-in ----
-
-        [Test]
-        public void ReadyAndSignedOut_ShowsTheButton()
-        {
-            Assert.AreEqual(AccountWidgetState.SignedOut, Resolve());
-        }
-
-        [Test]
-        public void SignInPending_IsSigningIn()
-        {
-            Assert.AreEqual(AccountWidgetState.SigningIn, Resolve(signInPending: true));
-        }
-
-        // Regression: XsollaIdAuth raises SignedIn before the SignInAsync task
-        // completes, so both flags are true for a while. If signInPending won,
-        // the label would flash back to "Signing in..." after a successful sign-in.
-        [Test]
-        public void SignedInWhileTheTaskIsStillRunning_ShowsSignedIn()
-        {
-            Assert.AreEqual(AccountWidgetState.SignedIn, Resolve(isSignedIn: true, signInPending: true));
-        }
-
-        // The player pressed "Sign in" again: the previous error must not stay
-        // on the button.
-        [Test]
-        public void NewAttempt_OutranksAStaleError()
-        {
-            Assert.AreEqual(AccountWidgetState.SigningIn, Resolve(signInPending: true, hasError: true));
-        }
-
-        [Test]
-        public void ErrorWithNothingPending_ShowsTheErrorLine()
-        {
-            Assert.AreEqual(AccountWidgetState.SignedOutWithError, Resolve(hasError: true));
-        }
-
-        // ---- sign-out ----
-
-        [Test]
-        public void SignedIn_ShowsTheRow()
-        {
-            Assert.AreEqual(AccountWidgetState.SignedIn, Resolve(isSignedIn: true));
-        }
-
-        [Test]
-        public void SignOutPending_IsSigningOut()
-        {
-            Assert.AreEqual(AccountWidgetState.SigningOut, Resolve(isSignedIn: true, signOutPending: true));
-        }
-
-        [Test]
-        public void SignedIn_OutranksALeftoverError()
-        {
-            Assert.AreEqual(
-                AccountWidgetState.SigningOut,
-                Resolve(isSignedIn: true, signOutPending: true, hasError: true));
-
-            Assert.AreEqual(AccountWidgetState.SignedIn, Resolve(isSignedIn: true, hasError: true));
-        }
-
-        // ---- ShortName ----
-
-        // How the domain is cut is DisplayNameFormat.LocalPart's job and is tested
-        // there; here only that ShortName uses it, and that having nothing to show
-        // is null, so the widget substitutes a fallback.
+        // Cutting the domain is DisplayNameFormat.LocalPart's job and is tested
+        // there; here only that ShortName delegates to it, and that "nothing to
+        // show" becomes null.
         [TestCase("user@mail.com", ExpectedResult = "user")]
-        [TestCase(null, ExpectedResult = null)]
-        [TestCase("", ExpectedResult = null)]
         [TestCase("   ", ExpectedResult = null)]
-        public string ShortName_StripsTheDomain(string displayName) =>
+        public string ShortName_UsesTheLocalPart(string displayName) =>
             XsollaIdAccountWidgetLogic.ShortName(displayName, 18);
 
-        [Test]
-        public void ShortName_TruncatesWithAnEllipsis()
-        {
-            Assert.AreEqual("averyve…", XsollaIdAccountWidgetLogic.ShortName("averyveryverylongname", 8));
-        }
-
-        [Test]
-        public void ShortName_ExactlyAtTheLimit_IsNotTruncated()
-        {
-            Assert.AreEqual("exact8ch", XsollaIdAccountWidgetLogic.ShortName("exact8ch", 8));
-        }
-
-        [Test]
-        public void ShortName_NonPositiveLimit_DisablesTruncation()
-        {
-            Assert.AreEqual("averyveryverylongname", XsollaIdAccountWidgetLogic.ShortName("averyveryverylongname", 0));
-            Assert.AreEqual("averyveryverylongname", XsollaIdAccountWidgetLogic.ShortName("averyveryverylongname", -1));
-        }
-
-        // Truncation must not split a surrogate pair: half an emoji renders as
-        // garbage. "ab" + 😀: the emoji takes two chars, and the 4-character
-        // limit falls right on it.
-        [Test]
-        public void ShortName_DoesNotSplitASurrogatePair()
-        {
-            string result = XsollaIdAccountWidgetLogic.ShortName("ab\U0001F600cd", 4);
-
-            Assert.IsFalse(char.IsHighSurrogate(result[result.Length - 2]),
-                "the ellipsis must not follow a dangling high surrogate");
-            Assert.AreEqual("ab…", result);
-        }
+        [TestCase(Shortener.ShortName, "averyveryverylongname", 8, ExpectedResult = "averyve…")]
+        [TestCase(Shortener.ShortName, "exact8ch", 8, ExpectedResult = "exact8ch")]
+        // A non-positive limit disables truncation.
+        [TestCase(Shortener.ShortName, "averyveryverylongname", 0, ExpectedResult = "averyveryverylongname")]
+        [TestCase(Shortener.ShortName, "averyveryverylongname", -1, ExpectedResult = "averyveryverylongname")]
+        // The limit falls inside the emoji's surrogate pair: drop the whole emoji.
+        [TestCase(Shortener.ShortName, "ab\U0001F600cd", 4, ExpectedResult = "ab…")]
+        // A username has no '@' to cut at: Shorten keeps it whole.
+        [TestCase(Shortener.Shorten, "id12345678", 18, ExpectedResult = "id12345678")]
+        [TestCase(Shortener.Shorten, "a@b.c", 18, ExpectedResult = "a@b.c")]
+        [TestCase(Shortener.Shorten, "  id1  ", 18, ExpectedResult = "id1")]
+        [TestCase(Shortener.Shorten, "id1234567890123", 10, ExpectedResult = "id1234567…")]
+        [TestCase(Shortener.Shorten, null, 18, ExpectedResult = null)]
+        [TestCase(Shortener.Shorten, "   ", 18, ExpectedResult = null)]
+        public string Truncation(Shortener shortener, string value, int maxChars) =>
+            shortener == Shortener.ShortName
+                ? XsollaIdAccountWidgetLogic.ShortName(value, maxChars)
+                : XsollaIdAccountWidgetLogic.Shorten(value, maxChars);
 
         // ---- ErrorKey ----
 
-        [Test]
-        public void ErrorKey_MapsTheTalkativeCodes()
+        // One explicit row per code. Cancelled (the player closed the window)
+        // and SessionExpired are not errors, so they stay silent.
+        private static readonly Dictionary<XsollaIdErrorCode, string> ExpectedErrorKeys =
+            new Dictionary<XsollaIdErrorCode, string>
+            {
+                [XsollaIdErrorCode.Cancelled] = null,
+                [XsollaIdErrorCode.PopupBlocked] = XsollaIdAccountWidgetLogic.ErrorKeyPopupBlocked,
+                [XsollaIdErrorCode.Unavailable] = XsollaIdAccountWidgetLogic.ErrorKeyUnavailable,
+                [XsollaIdErrorCode.NotConfigured] = XsollaIdAccountWidgetLogic.ErrorKeyUnavailable,
+                [XsollaIdErrorCode.Network] = XsollaIdAccountWidgetLogic.ErrorKeyNetwork,
+                [XsollaIdErrorCode.Timeout] = XsollaIdAccountWidgetLogic.ErrorKeyTimeout,
+                [XsollaIdErrorCode.InvalidState] = XsollaIdAccountWidgetLogic.ErrorKeyFailed,
+                [XsollaIdErrorCode.TokenExchangeFailed] = XsollaIdAccountWidgetLogic.ErrorKeyFailed,
+                [XsollaIdErrorCode.SessionExpired] = null,
+                [XsollaIdErrorCode.PictureUnavailable] = XsollaIdAccountWidgetLogic.ErrorKeyFailed,
+            };
+
+        private static IEnumerable<XsollaIdErrorCode> ErrorCodes => ExpectedErrorKeys.Keys;
+
+        [TestCaseSource(nameof(ErrorCodes))]
+        public void ErrorKey(XsollaIdErrorCode code)
         {
-            Assert.AreEqual(
-                XsollaIdAccountWidgetLogic.ErrorKeyPopupBlocked,
-                XsollaIdAccountWidgetLogic.ErrorKey(XsollaIdErrorCode.PopupBlocked));
-
-            Assert.AreEqual(
-                XsollaIdAccountWidgetLogic.ErrorKeyNetwork,
-                XsollaIdAccountWidgetLogic.ErrorKey(XsollaIdErrorCode.Network));
-
-            Assert.AreEqual(
-                XsollaIdAccountWidgetLogic.ErrorKeyTimeout,
-                XsollaIdAccountWidgetLogic.ErrorKey(XsollaIdErrorCode.Timeout));
-
-            Assert.AreEqual(
-                XsollaIdAccountWidgetLogic.ErrorKeyUnavailable,
-                XsollaIdAccountWidgetLogic.ErrorKey(XsollaIdErrorCode.NotConfigured));
-
-            Assert.AreEqual(
-                XsollaIdAccountWidgetLogic.ErrorKeyFailed,
-                XsollaIdAccountWidgetLogic.ErrorKey(XsollaIdErrorCode.TokenExchangeFailed));
+            Assert.AreEqual(ExpectedErrorKeys[code], XsollaIdAccountWidgetLogic.ErrorKey(code));
         }
 
-        // Covers every code, including ones added later: a new code either gets a
-        // key or is silent on purpose — never an empty space where the reason
-        // should be. Cancelled (the player closed the window) and SessionExpired
-        // are not errors.
+        // A new code must get its own row above, so its mapping (the generic
+        // "failed" by default) is a decision, not an accident.
         [Test]
-        public void ErrorKey_EveryCodeIsEitherSilentOnPurposeOrHasAKey()
+        public void ErrorKey_TableCoversEveryCode()
         {
-            foreach (XsollaIdErrorCode code in (XsollaIdErrorCode[])Enum.GetValues(typeof(XsollaIdErrorCode)))
-            {
-                string key = XsollaIdAccountWidgetLogic.ErrorKey(code);
-
-                bool silentOnPurpose =
-                    code == XsollaIdErrorCode.Cancelled || code == XsollaIdErrorCode.SessionExpired;
-
-                if (silentOnPurpose)
-                {
-                    Assert.IsNull(key, $"{code} must stay silent");
-                    continue;
-                }
-
-                Assert.IsFalse(string.IsNullOrEmpty(key), $"{code} has no localization key");
-            }
+            CollectionAssert.AreEquivalent(Enum.GetValues(typeof(XsollaIdErrorCode)), ExpectedErrorKeys.Keys);
         }
 
         // ---- expanded card ----
 
+        // The card shows only while signed in — including SigningOut, so it does
+        // not flicker while the token is revoked. Collapsed always wins.
         [Test]
-        public void ShowsExpandedPanel_CollapsedFlagAlwaysWins()
+        public void ShowsExpandedPanel(
+            [Values] AccountWidgetState state,
+            [Values] bool expanded)
         {
-            foreach (AccountWidgetState state in (AccountWidgetState[])Enum.GetValues(typeof(AccountWidgetState)))
-            {
-                Assert.IsFalse(
-                    XsollaIdAccountWidgetLogic.ShowsExpandedPanel(state, expanded: false),
-                    $"{state} with the collapsed flag must not show the card");
-            }
-        }
+            bool signedIn = state == AccountWidgetState.SignedIn || state == AccountWidgetState.SigningOut;
 
-        // Covers every state: the card with the player's name and username shows
-        // only while signed in — including SigningOut, so the card does not
-        // flicker while the token is being revoked. Forgetting to collapse it on
-        // sign-out is a bug visible only on the next sign-in.
-        [Test]
-        public void ShowsExpandedPanel_HiddenInEveryStateButSignedIn()
-        {
-            foreach (AccountWidgetState state in (AccountWidgetState[])Enum.GetValues(typeof(AccountWidgetState)))
-            {
-                bool allowed =
-                    state == AccountWidgetState.SignedIn || state == AccountWidgetState.SigningOut;
-
-                Assert.AreEqual(
-                    allowed,
-                    XsollaIdAccountWidgetLogic.ShowsExpandedPanel(state, expanded: true),
-                    $"{state}");
-            }
-        }
-
-        // ---- Shorten ----
-
-        [Test]
-        public void Shorten_KeepsUsernameWhole_AndDoesNotCutAtAtSign()
-        {
-            // Exactly why ShortName does not fit here: '@' is not a separator.
-            Assert.AreEqual("id12345678", XsollaIdAccountWidgetLogic.Shorten("id12345678", 18));
-            Assert.AreEqual("a@b.c", XsollaIdAccountWidgetLogic.Shorten("a@b.c", 18));
-        }
-
-        [Test]
-        public void Shorten_TruncatesTooLong_AndNullsOutEmpty()
-        {
-            Assert.AreEqual("id1234567…", XsollaIdAccountWidgetLogic.Shorten("id1234567890123", 10));
-            Assert.IsNull(XsollaIdAccountWidgetLogic.Shorten(null, 18));
-            Assert.IsNull(XsollaIdAccountWidgetLogic.Shorten("   ", 18));
+            Assert.AreEqual(expanded && signedIn, XsollaIdAccountWidgetLogic.ShowsExpandedPanel(state, expanded));
         }
     }
 }

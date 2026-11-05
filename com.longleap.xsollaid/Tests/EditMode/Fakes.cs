@@ -57,6 +57,9 @@ namespace LongLeap.XsollaId.Tests
         // Override the returned state to test the CSRF protection.
         public string StateOverride;
 
+        // The code returned on success; empty tests the "no code" branch.
+        public string Code = "auth-code";
+
         // When set, the window "hangs" until the test completes the task. Needed
         // to test single-flight: with an instant reply the second call would
         // happen after the first one finished and prove nothing.
@@ -78,7 +81,7 @@ namespace LongLeap.XsollaId.Tests
             if (Result.HasValue)
                 return Task.FromResult(Result.Value);
 
-            return Task.FromResult(BrowserAuthResult.Ok("auth-code", StateOverride ?? expectedState));
+            return Task.FromResult(BrowserAuthResult.Ok(Code, StateOverride ?? expectedState));
         }
     }
 
@@ -95,6 +98,9 @@ namespace LongLeap.XsollaId.Tests
 
         public bool RevokeThrows;
 
+        // The contract says "never throws"; this checks XsollaIdAuth survives it anyway.
+        public bool ExchangeThrows;
+
         public int ExchangeCalls;
         public int RefreshCalls;
         public int UserInfoCalls;
@@ -106,6 +112,10 @@ namespace LongLeap.XsollaId.Tests
         {
             ExchangeCalls++;
             LastVerifier = codeVerifier;
+
+            if (ExchangeThrows)
+                throw new InvalidOperationException("transport blew up");
+
             return Task.FromResult(ExchangeResult);
         }
 
@@ -129,6 +139,23 @@ namespace LongLeap.XsollaId.Tests
                 throw new InvalidOperationException("405");
 
             return Task.CompletedTask;
+        }
+    }
+
+    // Plain in-memory store: unlike the PlayerPrefs one, it hands back any
+    // session as is, so XsollaIdAuth's own checks can be reached.
+    internal sealed class FakeSessionStore : IXsollaIdSessionStore
+    {
+        public XsollaIdSession Session;
+        public int ClearCalls;
+
+        public XsollaIdSession Load() => Session;
+        public void Save(XsollaIdSession session) => Session = session;
+
+        public void Clear()
+        {
+            ClearCalls++;
+            Session = null;
         }
     }
 

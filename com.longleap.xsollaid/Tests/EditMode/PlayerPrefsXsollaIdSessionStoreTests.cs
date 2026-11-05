@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 
 namespace LongLeap.XsollaId.Tests
@@ -104,117 +105,85 @@ namespace LongLeap.XsollaId.Tests
             StringAssert.Contains("\"profileFetched\"", written);
         }
 
-        [Test]
-        public void Load_CorruptJson_ReturnsNullAndClearsKey()
+        // Corrupt, or missing what a restore needs (refresh token, subject):
+        // dropped and deleted, not re-read on every launch.
+        [TestCase("{ this is not json")]
+        [TestCase("{\"subject\":\"sub-1\",\"access\":\"a\"}")]
+        [TestCase("{\"access\":\"a\",\"refresh\":\"r\"}")]
+        public void Load_Unusable_ReturnsNullAndClearsKey(string json)
         {
-            _prefs.SetString(StoreKey, "{ this is not json");
+            _prefs.SetString(StoreKey, json);
 
             Assert.IsNull(_store.Load());
-            Assert.IsFalse(_prefs.HasKey(StoreKey), "a corrupted blob must be deleted, not re-read on every launch");
+            Assert.IsFalse(_prefs.HasKey(StoreKey), "an unusable blob must be deleted");
+            Assert.AreEqual(1, _prefs.SaveCalls, "the deletion must be flushed, or it comes back next launch");
         }
 
-        [Test]
-        public void Load_WithoutRefreshToken_ReturnsNull()
+        private const string Base = "\"subject\":\"sub-1\",\"access\":\"access-1\",\"refresh\":\"refresh-1\"";
+
+        // Junk in ONE optional field must not cost the session. Regression: a
+        // field of the wrong JSON type used to throw inside Load, whose catch
+        // clears the key. On WebGL the blob is in IndexedDB, editable by hand.
+        private static readonly TestCaseData[] JunkOptionalFields =
         {
-            // Without a refresh token there is nothing to restore; silently treat
-            // it as no session.
-            _prefs.SetString(StoreKey, "{\"subject\":\"sub-1\",\"access\":\"a\"}");
-
-            Assert.IsNull(_store.Load());
-            Assert.IsFalse(_prefs.HasKey(StoreKey));
-        }
-
-        [Test]
-        public void Load_NullPicture_IsTreatedAsNoPictureButKeepsTheFlag()
-        {
-            _prefs.SetString(
-                StoreKey,
-                "{\"subject\":\"sub-1\",\"access\":\"access-1\",\"refresh\":\"refresh-1\"," +
-                "\"picture\":null,\"profileFetched\":true}");
-
-            XsollaIdSession loaded = _store.Load();
-
-            Assert.IsNotNull(loaded);
-            Assert.IsFalse(loaded.Picture.IsValid);
-
             // Already fetched and there was no picture: no reason to ask again.
-            Assert.IsTrue(loaded.ProfileFetched);
-        }
+            new TestCaseData(
+                    "{" + Base + ",\"picture\":null,\"profileFetched\":true}",
+                    (Action<XsollaIdSession>)(s =>
+                    {
+                        Assert.IsFalse(s.Picture.IsValid);
+                        Assert.IsTrue(s.ProfileFetched);
+                    }))
+                .SetName("Load_JunkOptionalField_KeepsSession(null picture)"),
+            // The url is re-validated on read, not trusted.
+            new TestCaseData(
+                    "{" + Base + ",\"picture\":\"javascript:alert(1)\",\"profileFetched\":true}",
+                    (Action<XsollaIdSession>)(s => Assert.IsFalse(s.Picture.IsValid)))
+                .SetName("Load_JunkOptionalField_KeepsSession(garbage picture)"),
+            new TestCaseData(
+                    "{" + Base + ",\"profileFetched\":\"yes\"}",
+                    (Action<XsollaIdSession>)(s =>
+                        Assert.IsFalse(s.ProfileFetched, "an unreadable flag falls back to \"not asked\"")))
+                .SetName("Load_JunkOptionalField_KeepsSession(non-boolean profileFetched)"),
+            new TestCaseData(
+                    "{" + Base + ",\"displayName\":{\"first\":\"A\"},\"expiresAtUnixMs\":1700000000000}",
+                    (Action<XsollaIdSession>)(s =>
+                    {
+                        Assert.IsNull(s.DisplayName, "only the unreadable field is dropped");
+                        Assert.AreEqual(1_700_000_000_000, s.ExpiresAtUnixMs);
+                    }))
+                .SetName("Load_JunkOptionalField_KeepsSession(non-string displayName)"),
+            // 0 means "expired long ago": the session goes to refresh instead of disappearing.
+            new TestCaseData(
+                    "{" + Base + ",\"expiresAtUnixMs\":\"whenever\"}",
+                    (Action<XsollaIdSession>)(s => Assert.AreEqual(0L, s.ExpiresAtUnixMs)))
+                .SetName("Load_JunkOptionalField_KeepsSession(non-numeric expiry)")
+        };
 
-        // The address is re-validated on read: the blob may have been written by a
-        // build with different rules, and in WebGL it lives in IndexedDB, which the
-        // player can edit by hand.
-        [Test]
-        public void Load_GarbagePicture_DropsOnlyThePicture()
+        [TestCaseSource(nameof(JunkOptionalFields))]
+        public void Load_JunkOptionalField_KeepsSession(string json, Action<XsollaIdSession> check)
         {
-            _prefs.SetString(
-                StoreKey,
-                "{\"subject\":\"sub-1\",\"access\":\"access-1\",\"refresh\":\"refresh-1\"," +
-                "\"picture\":\"javascript:alert(1)\",\"profileFetched\":true}");
-
-            XsollaIdSession loaded = _store.Load();
-
-            Assert.IsNotNull(loaded);
-            Assert.IsFalse(loaded.Picture.IsValid);
-            Assert.AreEqual("refresh-1", loaded.Refresh.Value);
-        }
-
-        [Test]
-        public void Load_NonBooleanProfileFetched_DoesNotLoseTheSession()
-        {
-            _prefs.SetString(
-                StoreKey,
-                "{\"subject\":\"sub-1\",\"access\":\"access-1\",\"refresh\":\"refresh-1\"," +
-                "\"profileFetched\":\"yes\"}");
-
-            XsollaIdSession loaded = _store.Load();
-
-            Assert.IsNotNull(loaded);
-            Assert.IsFalse(loaded.ProfileFetched, "an unreadable flag falls back to \"not asked\"");
-        }
-
-        // Regression: a field of the wrong JSON type used to throw inside Load,
-        // whose catch clears the key — one garbage field cost the whole session.
-        [Test]
-        public void Load_NonStringDisplayName_KeepsTheSession()
-        {
-            _prefs.SetString(
-                StoreKey,
-                "{\"subject\":\"sub-1\",\"displayName\":{\"first\":\"A\"}," +
-                "\"access\":\"access-1\",\"refresh\":\"refresh-1\",\"expiresAtUnixMs\":1700000000000}");
+            _prefs.SetString(StoreKey, json);
 
             XsollaIdSession loaded = _store.Load();
 
             Assert.IsNotNull(loaded, "junk in one optional field must not cost the player the session");
             Assert.AreEqual("sub-1", loaded.Subject.Value);
             Assert.AreEqual("refresh-1", loaded.Refresh.Value);
-            Assert.IsNull(loaded.DisplayName, "only the unreadable field is dropped");
             Assert.IsTrue(_prefs.HasKey(StoreKey), "the blob must survive an unreadable optional field");
+            check(loaded);
         }
 
+        // Both writes are flushed: on WebGL PlayerPrefs reach IndexedDB only on
+        // Save, and a page reload would otherwise lose (or resurrect) the session.
         [Test]
-        public void Load_NonNumericExpiry_KeepsTheSession()
-        {
-            _prefs.SetString(
-                StoreKey,
-                "{\"subject\":\"sub-1\",\"access\":\"access-1\",\"refresh\":\"refresh-1\"," +
-                "\"expiresAtUnixMs\":\"whenever\"}");
-
-            XsollaIdSession loaded = _store.Load();
-
-            Assert.IsNotNull(loaded);
-
-            // 0 means "expired long ago": the session goes to refresh instead of
-            // disappearing.
-            Assert.AreEqual(0L, loaded.ExpiresAtUnixMs);
-        }
-
-        [Test]
-        public void Clear_RemovesSession()
+        public void SaveAndClear_FlushPrefs()
         {
             _store.Save(Session());
-            _store.Clear();
+            Assert.AreEqual(1, _prefs.SaveCalls);
 
+            _store.Clear();
+            Assert.AreEqual(2, _prefs.SaveCalls);
             Assert.IsNull(_store.Load());
         }
 

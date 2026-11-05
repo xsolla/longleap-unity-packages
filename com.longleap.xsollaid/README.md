@@ -302,8 +302,8 @@ EditMode tests, one assembly per runtime assembly:
 
 | Assembly | Covers | Needs |
 |---|---|---|
-| `LongLeap.XsollaId.Tests` | sign-in flow, PKCE, origin guard, redirect derivation, session store, value types | — |
-| `LongLeap.XsollaId.Web.Tests` | discovery, token client, avatar loader, leaderboard and league providers | `XSOLLA_ID` |
+| `LongLeap.XsollaId.Tests` | sign-in flow, PKCE, origin guard, redirect derivation, config, session and session store, value types | — |
+| `LongLeap.XsollaId.Web.Tests` | HTTP helpers, discovery, token client, browser callback receiver, avatar loader, cloud save provider and scope, leaderboard and league providers | `XSOLLA_ID` |
 | `LongLeap.XsollaId.UI.Tests` | account widget state logic | — |
 | `LongLeap.XsollaId.Accounts.Tests` | startup gate, save switch, merge rules | — |
 
@@ -315,4 +315,6 @@ Unity runs package tests only for packages listed in the project's
 ```
 
 All fakes are hand-written (no mocking library); the shared ones live in
-`Tests/EditMode/Fakes.cs` and `Tests/EditMode.Web/Fakes.cs`.
+`Fakes.cs` of each test folder (`EditMode`, `EditMode.Web`, `EditMode.Accounts`).
+`LongLeap.XsollaId.Web` exposes its internals (the JS callback receiver) to its
+test assembly via `Runtime.Web/AssemblyInfo.cs`.

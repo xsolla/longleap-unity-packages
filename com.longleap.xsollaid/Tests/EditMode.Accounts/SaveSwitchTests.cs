@@ -5,6 +5,7 @@ using LongLeap.Core.CloudSaves;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using static LongLeap.XsollaId.Accounts.Tests.TestSaves;
 
 namespace LongLeap.XsollaId.Accounts.Tests
 {
@@ -21,6 +22,8 @@ namespace LongLeap.XsollaId.Accounts.Tests
             public int Resets;
             public bool FailWrites;
             public bool FailReset;
+            public bool FailSnapshot;
+            public bool ThrowOnSnapshot;
 
             public Task InitializeAsync() => Task.CompletedTask;
 
@@ -64,6 +67,13 @@ namespace LongLeap.XsollaId.Accounts.Tests
 
             public Task<IReadOnlyDictionary<string, CloudSaveEntry>> SnapshotAsync()
             {
+                if (ThrowOnSnapshot)
+                    throw new System.InvalidOperationException("snapshot threw");
+
+                if (FailSnapshot)
+                    return Task.FromException<IReadOnlyDictionary<string, CloudSaveEntry>>(
+                        new System.InvalidOperationException("snapshot failed"));
+
                 var snapshot = new Dictionary<string, CloudSaveEntry>();
 
                 foreach (var pair in Values)
@@ -75,17 +85,6 @@ namespace LongLeap.XsollaId.Accounts.Tests
             public void Dispose()
             {
             }
-        }
-
-        private sealed class FakeScope : IAccountCloudSaveScope
-        {
-            public bool IsAccountScoped => !string.IsNullOrEmpty(AccountId);
-            public string AccountId { get; private set; } = "";
-            public void UseAccount(string accountId) => AccountId = accountId;
-            public void UseGuest() => AccountId = "";
-
-            public Task<IReadOnlyDictionary<string, CloudSaveEntry>> PeekAccountAsync(string accountId) =>
-                Task.FromResult<IReadOnlyDictionary<string, CloudSaveEntry>>(new Dictionary<string, CloudSaveEntry>());
         }
 
         private FakeCloud _cloud;
@@ -100,7 +99,8 @@ namespace LongLeap.XsollaId.Accounts.Tests
 
             var rules = new SaveMergeRules(SaveMergeRule.PreferAccount)
                 .Add("coins", SaveMergeRule.Max)
-                .Add("skins", SaveMergeRule.Union);
+                .Add("skins", SaveMergeRule.Union)
+                .Add("tmp_*", (key, input) => null);
 
             _switch = new SaveSwitch(_cloud, _cloud, _scope, rules, _cloud.ResetAsync);
         }
@@ -110,16 +110,6 @@ namespace LongLeap.XsollaId.Accounts.Tests
             Task<SaveSwitchOutcome> task = _switch.RunAtStartupAsync(accountId, account);
             Assert.IsTrue(task.IsCompleted, "fakes are synchronous — the switch must not wait");
             return task.Result;
-        }
-
-        private static Dictionary<string, CloudSaveEntry> Save(params (string key, string value)[] pairs)
-        {
-            var save = new Dictionary<string, CloudSaveEntry>();
-
-            foreach (var (key, value) in pairs)
-                save[key] = new CloudSaveEntry(value, 100);
-
-            return save;
         }
 
         [Test]
@@ -233,15 +223,88 @@ namespace LongLeap.XsollaId.Accounts.Tests
             Assert.AreEqual("acc-1", _scope.AccountId, "acc-1's data must not be labelled as acc-2's");
         }
 
-        [Test]
-        public void CanUseAccount()
+        // mirrorOwner: "" is a guest mirror, null is no scope at all.
+        [TestCase(null, true, "", ExpectedResult = false)]
+        [TestCase("", true, "acc-1", ExpectedResult = false)]
+        [TestCase("acc-1", true, "", ExpectedResult = true)]
+        [TestCase("acc-1", false, "", ExpectedResult = false)]
+        [TestCase("acc-1", false, "acc-2", ExpectedResult = false)]
+        [TestCase("acc-1", false, "acc-1", ExpectedResult = true)]
+        [TestCase("acc-1", false, null, ExpectedResult = false)]
+        public bool CanUseAccount(string accountId, bool accountSaveKnown, string mirrorOwner)
         {
-            Assert.IsFalse(SaveSwitch.CanUseAccount(null, true, _scope), "guest");
-            Assert.IsTrue(SaveSwitch.CanUseAccount("acc-1", true, _scope), "account save was read");
-            Assert.IsFalse(SaveSwitch.CanUseAccount("acc-1", false, _scope), "not read, guest mirror");
+            if (mirrorOwner == null)
+                return SaveSwitch.CanUseAccount(accountId, accountSaveKnown, null);
 
+            if (mirrorOwner.Length > 0)
+                _scope.UseAccount(mirrorOwner);
+
+            return SaveSwitch.CanUseAccount(accountId, accountSaveKnown, _scope);
+        }
+
+        // Nothing on the server and nothing locally: nothing to upload.
+        [Test]
+        public void SameAccount_EmptyServerAndEmptyLocal_ChangesNothing()
+        {
             _scope.UseAccount("acc-1");
-            Assert.IsTrue(SaveSwitch.CanUseAccount("acc-1", false, _scope), "not read, but the mirror is this account's");
+
+            Assert.AreEqual(SaveSwitchOutcome.Unchanged, Run("acc-1", Save()));
+            CollectionAssert.IsEmpty(_cloud.Writes);
+            Assert.AreEqual("acc-1", _scope.AccountId);
+        }
+
+        // The server was not read: the own mirror runs local-first as it is.
+        [Test]
+        public void SameAccount_UnreadServer_ChangesNothing()
+        {
+            _scope.UseAccount("acc-1");
+            _cloud.Values["coins"] = "5";
+
+            Assert.AreEqual(SaveSwitchOutcome.Unchanged, Run("acc-1", null));
+            CollectionAssert.IsEmpty(_cloud.Writes);
+            Assert.AreEqual(0, _cloud.Resets);
+        }
+
+        // A rule returning null drops the key, locally and in the account.
+        [Test]
+        public void GuestSignsIn_RuleReturnsNull_DeletesTheKey()
+        {
+            _cloud.Values["tmp_local"] = "x";
+            _cloud.Values["coins"] = "5";
+
+            Assert.AreEqual(SaveSwitchOutcome.Merged, Run("acc-1", Save(("tmp_account", "y"))));
+            CollectionAssert.AreEqual(new[] { "tmp_account", "tmp_local" }, _cloud.Deletes);
+            Assert.IsFalse(_cloud.Values.ContainsKey("tmp_local"));
+            CollectionAssert.AreEqual(new[] { "coins" }, _cloud.Writes);
+        }
+
+        // Merging with an unknown guest save would throw the guest progress away.
+        [Test]
+        public void GuestSignsIn_SnapshotFails_KeepsGuestScope([Values] bool throwsSynchronously)
+        {
+            _cloud.Values["coins"] = "50";
+            _cloud.ThrowOnSnapshot = throwsSynchronously;
+            _cloud.FailSnapshot = !throwsSynchronously;
+
+            LogAssert.Expect(LogType.Error, new Regex("failed to read the local save"));
+
+            Assert.AreEqual(SaveSwitchOutcome.Failed, Run("acc-1", Save(("coins", "30"))));
+            Assert.IsFalse(_scope.IsAccountScoped);
+            CollectionAssert.IsEmpty(_cloud.Writes);
+        }
+
+        [Test]
+        public void SameAccount_EmptyServer_SnapshotFails_IsFailed()
+        {
+            _scope.UseAccount("acc-1");
+            _cloud.Values["coins"] = "5";
+            _cloud.FailSnapshot = true;
+
+            LogAssert.Expect(LogType.Error, new Regex("failed to read the local save"));
+
+            Assert.AreEqual(SaveSwitchOutcome.Failed, Run("acc-1", Save()));
+            Assert.AreEqual("acc-1", _scope.AccountId);
+            CollectionAssert.IsEmpty(_cloud.Writes);
         }
 
         [Test]
@@ -252,6 +315,19 @@ namespace LongLeap.XsollaId.Accounts.Tests
             var account = Save(("a", "1"), ("b", "2"), ("c", "3"));
 
             CollectionAssert.AreEqual(new[] { "c", "d" }, SaveSwitch.BuildWriteSet(target, local, account));
+        }
+
+        // The server lost the save: every non-null key is written, even unchanged
+        // ones; null keys are still skipped.
+        [Test]
+        public void WriteSet_ForceWrite_WritesEveryNonNullKey()
+        {
+            var target = new Dictionary<string, string> { ["a"] = "1", ["b"] = "2", ["d"] = null };
+            var local = Save(("a", "1"), ("d", "x"));
+            var account = Save(("a", "1"));
+
+            CollectionAssert.AreEqual(new[] { "b", "d" }, SaveSwitch.BuildWriteSet(target, local, account));
+            CollectionAssert.AreEqual(new[] { "a", "b" }, SaveSwitch.BuildWriteSet(target, local, account, forceWrite: true));
         }
     }
 }

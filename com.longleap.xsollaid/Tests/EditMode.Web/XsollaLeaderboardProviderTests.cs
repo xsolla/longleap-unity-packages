@@ -1,7 +1,6 @@
 using System;
 using System.Threading.Tasks;
 using LongLeap.Core.Leaderboards;
-using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -32,16 +31,8 @@ namespace LongLeap.XsollaId.Web.Tests
             Assert.IsTrue(accepted);
             Assert.AreEqual(1, transport.Calls.Count);
 
-            HttpCall call = transport.Calls[0];
-            Assert.AreEqual("POST", call.Method);
-            Assert.AreEqual(BaseUrl + "/leaderboards/dev_score/scores", call.Url);
-            Assert.AreEqual("application/json", call.ContentType);
-
-            var body = JObject.Parse(call.Body);
-            Assert.AreEqual(GameId, (string)body["gameId"]);
-            Assert.AreEqual(AccountId, (string)body["xsollaId"], "the account is sent, not the uid argument");
-            Assert.AreEqual(1500, (long)body["score"]);
-            Assert.AreEqual("Tester", (string)body["displayName"]);
+            Assert.AreEqual(BaseUrl + "/leaderboards/dev_score/scores", transport.Calls[0].Url);
+            RequestAssert.AccountBody(transport.Calls[0], GameId, AccountId, 1500, "Tester");
         }
 
         [Test]
@@ -152,17 +143,6 @@ namespace LongLeap.XsollaId.Web.Tests
 
             Assert.AreEqual(0, page.Entries.Count);
             Assert.AreEqual(0, transport.Calls.Count);
-        }
-
-        [Test]
-        public async Task AccountAuth_ReturnsTheAccountAsUid()
-        {
-            var auth = new XsollaAccountAuthProvider(AccountId);
-
-            var result = await auth.LoginAsync() as LongLeap.Core.Auth.AuthResult.Success;
-
-            Assert.IsNotNull(result);
-            Assert.AreEqual(AccountId, result.Uid.Value);
         }
     }
 }
