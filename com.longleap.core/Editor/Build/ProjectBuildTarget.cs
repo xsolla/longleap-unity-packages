@@ -3,13 +3,13 @@ using System.Collections.Generic;
 
 namespace LongLeap.Core.Editor
 {
-    // Один способ собрать игру.
+    // One way to build the game.
     //
-    // Пакетов, умеющих собирать, может быть несколько, а кнопка «Build» одна:
-    // она выбирает способ по текущей конфигурации. Включён GAMEPIX — собирает
-    // вендорный билдер площадки, иначе обычный BuildPipeline. Благодаря этому
-    // окно НЕ знает ничего про GamePix: знание остаётся в пакете GamePix,
-    // который регистрирует свой способ сам.
+    // Several packages may know how to build, but there is a single "Build"
+    // button: it picks the target that fits the current configuration (e.g. a
+    // portal package's vendor builder when its define is on, otherwise the
+    // plain BuildPipeline). The window knows nothing about any portal; each
+    // package registers its own target.
     public sealed class ProjectBuildTarget
     {
         private readonly Func<IProjectOptionState, bool> _isApplicable;
@@ -21,7 +21,7 @@ namespace LongLeap.Core.Editor
 
         public string Description { get; }
 
-        // Побеждает наибольший среди подходящих.
+        // The highest priority among applicable targets wins.
         public int Priority { get; }
 
         public Action Build { get; }

@@ -18,6 +18,13 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `using LongLeap.RemoteConfig.Storage;` with `using LongLeap.Core;`. Integers are
   now written and read culture-invariantly.
 
+### Changed
+
+- All code comments, exception messages and test messages are now in English.
+  Exception texts of `IdToken`, `UserId` and `CloudSaveKey` changed accordingly.
+- README rewritten to cover every module (leagues, ads/portal, shared types,
+  Editor project options) and to match current behaviour. CONTEXT.md updated.
+
 ### Removed
 
 - `LongLeap.Core.Ads.NoAdsProvider`. Use `LongLeap.Null.NullAdsProvider` from

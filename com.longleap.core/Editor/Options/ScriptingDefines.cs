@@ -5,23 +5,14 @@ using UnityEditor.Build;
 
 namespace LongLeap.Core.Editor
 {
-    // Единственное место, где проект читает и пишет символы компиляции.
-    //
-    // До этой таблицы то же самое было написано ЧЕТЫРЕ раза и по-разному:
-    // GamePixPluginMenu через перегрузку с out string[], XsollaIdMenu и
-    // DevToolsMenu через строковую перегрузку со Split(';'), а
-    // XsollaIdCallbackPagePostprocessor разбирал строку сам ещё раз. Все
-    // четыре работали, но одна реализация лучше четырёх.
+    // The single place that reads and writes scripting define symbols.
     public static class ScriptingDefines
     {
-        // Дефайны хранятся отдельно на каждую платформу. Проект задаёт их
-        // только для WebGL — это записано в комментарии каждого из трёх меню и
-        // подтверждается ProjectSettings.asset, где в scriptingDefineSymbols
-        // есть ровно одна строка, WebGL.
+        // Defines are stored per platform. This class reads and writes them for
+        // NamedBuildTarget.WebGL ONLY.
         //
-        // Если пакет понадобится в проекте с другой целевой платформой,
-        // менять надо здесь: платформу придётся протащить в DefineOption и
-        // группировать записи по платформе в ProjectWriteContext.Flush.
+        // To support other platforms, pass the target through DefineOption and
+        // group writes per target in ProjectWriteContext.Flush.
         public static readonly NamedBuildTarget Target = NamedBuildTarget.WebGL;
 
         public static ISet<string> Read()
@@ -46,12 +37,11 @@ namespace LongLeap.Core.Editor
 
         public static bool IsOn(string symbol) => Read().Contains(symbol);
 
-        // Возвращает true, если набор действительно изменился.
+        // Returns true if the set actually changed.
         //
-        // Пишем ОТСОРТИРОВАННЫМ: прежний код дописывал символ в конец, из-за
-        // чего строка 835 в ProjectSettings.asset меняла порядок в
-        // зависимости от последовательности нажатий. Файл правят трое, и это
-        // был бесплатный источник конфликтов при мерже.
+        // Symbols are written SORTED, so the define line in
+        // ProjectSettings.asset does not change order depending on click
+        // order, which would be a needless source of merge conflicts.
         public static bool Write(IEnumerable<string> symbols)
         {
             var target = new HashSet<string>();

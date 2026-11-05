@@ -2,16 +2,16 @@ using UnityEditor;
 
 namespace LongLeap.Core.Editor
 {
-    // Связка таблицы настроек с пунктами меню.
+    // Binds the option table to menu items.
     //
-    // Сами атрибуты [MenuItem] генерировать нельзя: путь у них — константа
-    // времени компиляции, и метод нужен на каждый пункт. Поэтому в каждом меню
-    // остаётся по паре методов на настройку, но тело у них теперь одна строка,
-    // а вся логика — подтверждение, каскад, запись, журнал — живёт здесь в
-    // одном экземпляре и совпадает с тем, что делает окно.
+    // [MenuItem] attributes cannot be generated: the path is a compile-time
+    // constant and each item needs its own method. So each menu keeps a pair
+    // of one-line methods per option, while all the logic (confirmation,
+    // cascade, write, logging) lives here once and matches what the window
+    // does.
     public static class ProjectOptionMenu
     {
-        // Галочка. Возвращает, активен ли пункт.
+        // Toggle. Returns whether the menu item is enabled.
         public static bool Validate(string menuPath, string optionId)
         {
             if (!ProjectOptionRegistry.TryGetOption(optionId, out ProjectOption option))
@@ -28,16 +28,14 @@ namespace LongLeap.Core.Editor
             if (!option.GetAvailability(state).IsAvailable)
                 return false;
 
-            // Односторонняя настройка активна только пока делать есть что —
-            // так вёл себя пункт ремонта asmdef-ов: стоит ограничениям встать
-            // на место, и он гаснет.
+            // A one-way option is enabled only while there is something to do:
+            // once the repair is applied, the item is disabled.
             return !option.OneWay || !on;
         }
 
-        // Выбор одного значения из нескольких: по пункту на значение, галочка
-        // стоит у активного. Так сделана среда у Xsolla ID — два пункта, а не
-        // один чекбокс, чтобы было видно, куда именно ходит вход, и не
-        // приходилось догадываться, что значит снятая галочка.
+        // One value out of several: one menu item per value, with a check mark
+        // on the active one. Separate items instead of one checkbox make it
+        // clear which value is selected (e.g. which environment sign-in uses).
         public static bool Validate(string menuPath, string optionId, string expectedValue)
         {
             if (!ProjectOptionRegistry.TryGetOption(optionId, out ProjectOption option))
@@ -77,8 +75,7 @@ namespace LongLeap.Core.Editor
             var state = new SavedProjectOptionState();
             string current = state.GetValue(optionId);
 
-            // Ничего не менялось — не пишем и не шумим в журнал. Прежний
-            // SetDefine ради этого возвращал bool.
+            // Nothing changed: do not write and do not log.
             if (current == value)
                 return;
 

@@ -4,38 +4,38 @@ using UnityEngine;
 
 namespace LongLeap.Core.Ads
 {
-    // Кольцевой журнал событий рекламы для экранного оверлея.
+    // Ring buffer of ad events for an on-screen debug overlay.
     //
-    // Нужен потому, что в портальной сборке игра живёт в чужом iframe: консоль
-    // браузера там достать неудобно, а результат показа знать надо — особенно
-    // отказ и таймаут, которые иначе выглядят как «кнопка просто не работает».
+    // In a portal build the game runs inside someone else's iframe, where the
+    // browser console is awkward to reach, yet the outcome of each show matters
+    // — especially refusals and timeouts, which otherwise look like "the button
+    // does nothing".
     //
-    // Пишут сюда сами провайдеры, а не места вызова: только провайдер знает про
-    // таймаут и про то, что площадка проглотила повторный запрос.
+    // Providers write here, not call sites: only the provider knows about the
+    // timeout and about the portal swallowing a repeated request.
     public static class AdsDebug
     {
         private const int Capacity = 12;
 
         private static readonly List<string> _lines = new List<string>();
 
-        // Оверлей перерисовывается по этому событию, а не опросом каждый кадр.
+        // The overlay redraws on this event instead of polling every frame.
         public static event Action Changed;
 
         public static IReadOnlyList<string> Lines => _lines;
 
         public static void Record(string message)
         {
-            // Время берём системное (DateTime, не Time.realtimeSinceStartup):
-            // строка нужна человеку, а не игровой логике, и часы на ней должны
-            // совпадать с тем, что покажет консоль браузера.
+            // Wall-clock time (DateTime, not Time.realtimeSinceStartup): the line
+            // is for a human, and its time should match the browser console.
             string formattedMessage = DateTime.Now.ToString("HH:mm:ss") + "  " + message;
 
             _lines.Add(formattedMessage);
 
-            // Дублируем в консоль, а не только в оверлей: на опубликованной
-            // странице лог можно выгрузить и разобрать потом, а оверлей живёт
-            // только пока открыта вкладка — и в сборке на ревью он выключен.
-            // Метку времени оставляем: консоль браузера своих часов не рисует.
+            // Also written to the console, not only to the overlay: on a published
+            // page the log can be exported and inspected later, while the overlay
+            // lives only as long as the tab and is disabled in review builds.
+            // The timestamp stays because the browser console does not add one.
             Debug.Log(formattedMessage);
 
             if (_lines.Count > Capacity)

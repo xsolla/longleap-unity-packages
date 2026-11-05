@@ -3,40 +3,40 @@ using System.Threading.Tasks;
 
 namespace LongLeap.Core.CloudSaves
 {
-    // Куда провайдер пишет и откуда читает.
+    // Where the provider reads and writes.
     //
-    // До появления входа в аккаунт у сейва был один владелец — анонимная
-    // личность Firebase, и путь был один. Теперь их два: гостевой (по анонимному
-    // uid) и аккаунтный (по идентификатору аккаунта). Область — состояние
-    // ПРОВАЙДЕРА, а не сервиса: CloudSaveService про пути не знает вовсе и знать
-    // не должен, он работает с ключами.
+    // A save can have two owners: the guest (keyed by the anonymous uid) and an
+    // account (keyed by an external account id). The scope is state of the
+    // PROVIDER, not of the service: CloudSaveService knows nothing about storage
+    // paths and works with keys only.
     //
-    // Интерфейс отдельный, а не пара методов в ICloudSaveProvider: смена области
-    // — не часть обычной работы с сейвом, её делает ровно один переключатель
-    // сейвов при входе и выходе. Кто читает и пишет ключи, о ней не знает.
+    // A separate interface rather than extra methods on ICloudSaveProvider:
+    // switching scope is not part of regular save access. Exactly one caller
+    // does it (the game's save switch, on sign-in and sign-out); code that reads
+    // and writes keys never needs to know about it.
     public interface IAccountCloudSaveScope
     {
-        // Сейчас читаем и пишем сейв аккаунта, а не гостевой.
+        // True when the account's save is in use rather than the guest one.
         bool IsAccountScoped { get; }
 
-        // Идентификатор аккаунта, чей сейв сейчас в работе. Пусто в гостевой
-        // области.
+        // Id of the account whose save is in use. Empty in the guest scope.
         string AccountId { get; }
 
-        // Переключить область. Выбор переживает перезагрузку сцены и запуск игры
-        // заново — иначе после переключения сейвов игра вернулась бы к гостевому
-        // прогрессу, а игрок счёл бы аккаунтный потерянным.
+        // Switch the scope. The choice must survive a scene reload and a
+        // restart — otherwise after switching saves the game would come back to
+        // the guest progress and the player would think the account save was lost.
         void UseAccount(string accountId);
         void UseGuest();
 
-        // Прочитать сейв аккаунта, НЕ переключая область и ничего не применяя.
+        // Read an account's save WITHOUT switching scope or applying anything.
         //
-        // Именно этим строят сводку для окна выбора: показать содержимое чужого
-        // сейва нужно ДО того, как игрок решит, брать его или нет. Конверты уже
-        // разобраны, поэтому результат кладётся прямо в SaveSummary.FromEntries.
+        // Used to build the summary for a "which save do you want?" window: the
+        // contents must be shown BEFORE the player decides whether to take it.
+        // Envelopes are already unpacked, so the result can be used directly.
         //
-        // Не бросает: пустой словарь означает и «сейва нет», и «прочитать не
-        // удалось». Различать их незачем — в обоих случаях брать нечего.
+        // Never throws: an empty dictionary means either "no save" or "could not
+        // read". There is no need to tell them apart — there is nothing to take
+        // in either case.
         Task<IReadOnlyDictionary<string, CloudSaveEntry>> PeekAccountAsync(string accountId);
     }
 }

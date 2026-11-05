@@ -12,13 +12,13 @@ namespace LongLeap.Core.CloudSaves
     {
         private const string DirtyKey = "cloudsave_dirty";
 
-        // Список ВСЕХ ключей, у которых есть локальная копия.
+        // Index of EVERY key that has a local copy.
         //
-        // Нужен потому, что перечислять ключи негде: ни IPlayerPrefs, ни
-        // PlayerPrefs так не умеют. Без него локальное зеркало нельзя вычистить
-        // целиком, а забытый ключ с более свежей меткой при следующей загрузке
-        // победил бы облачный — то есть прогресс одной личности протёк бы в
-        // другую.
+        // Needed because keys cannot be enumerated: neither IPlayerPrefs nor
+        // PlayerPrefs can do it. Without the index the local mirror could not be
+        // cleared completely, and a forgotten key with a newer timestamp would
+        // beat the cloud value on the next load — leaking one identity's
+        // progress into another.
         private const string IndexKey = "cloudsave_index";
         private const string TsLocalSuffix = "_ts";
 
@@ -41,17 +41,17 @@ namespace LongLeap.Core.CloudSaves
         private readonly Dictionary<string, long> _timestamps = new Dictionary<string, long>();
         private readonly HashSet<string> _dirtyKeys = new HashSet<string>();
 
-        // Что лежит в PlayerPrefs — включая ключи, которые в этой сессии никто
-        // не читал, поэтому в _cache их нет.
+        // What is in PlayerPrefs, including keys nobody has read this session
+        // (and that are therefore not in _cache).
         private readonly HashSet<string> _knownKeys = new HashSet<string>();
 
-        // Замок состояния: кеш, метки времени, набор «грязных» ключей и PlayerPrefs.
-        // Под ним делается только работа с памятью и локальным хранилищем, то есть
-        // мгновенная. Сеть под ним держать НЕЛЬЗЯ — см. PushDirtyKeysAsync.
+        // State lock: cache, timestamps, dirty set and PlayerPrefs. Only memory
+        // and local storage work happens under it, i.e. it is held briefly.
+        // Network calls must NEVER run under it — see PushDirtyKeysAsync.
         private readonly SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
 
-        // Отдельный замок на сетевые отправки. Нужен, чтобы две досылки не разошлись
-        // на одном наборе ключей, но при этом не задевал читателей кеша.
+        // Separate lock for network pushes, so two pushes do not race over the
+        // same set of keys without blocking cache readers.
         private readonly SemaphoreSlim _pushLock = new SemaphoreSlim(1, 1);
 
         private bool _initialized;
@@ -143,7 +143,7 @@ namespace LongLeap.Core.CloudSaves
                 _lock.Release();
             }
 
-            // Досылку локальных изменений — уже вне замка: это сеть.
+            // Pushing local changes happens outside the lock: it is network.
             await PushDirtyKeysAsync();
         }
 
@@ -153,9 +153,9 @@ namespace LongLeap.Core.CloudSaves
 
             var keyStr = key.Value;
 
-            // Под замком — только память и PlayerPrefs. Это и есть настоящая запись:
-            // сервис local-first, значение уже сохранено и уже читается всеми, кто
-            // спросит, независимо от того, доехало ли оно до облака.
+            // Only memory and PlayerPrefs under the lock. This IS the write: the
+            // service is local-first, so the value is saved and readable by
+            // everyone from here on, whether or not it has reached the cloud.
             await _lock.WaitAsync();
             try
             {
@@ -183,15 +183,15 @@ namespace LongLeap.Core.CloudSaves
 
             Debug.Log($"{nameof(CloudSaveService)}: saved '{keyStr}'");
 
-            // Отправка в облако — ВНЕ замка. Раньше она стояла внутри, и это было
-            // самой дорогой ошибкой всей загрузки: один сетевой PUT (у него свой
-            // таймаут в 10 с) держал замок, а за ним в очередь вставали ВСЕ читатели
-            // кеша. На холодном запуске из-за одной фоновой записи профиля молча
-            // проваливались по таймауту настройки, статы, ежедневные награды и
-            // ачивки — при том, что каждому из них нужно было лишь чтение из памяти.
+            // The cloud push runs OUTSIDE the lock. Holding the lock over a
+            // network request (which can take up to the HTTP timeout) would
+            // queue every cache reader behind it: on a cold start a single
+            // background write could make settings, stats, daily rewards and
+            // achievements time out, although each of them only needs a
+            // memory read.
             //
-            // Ждать отправку по-прежнему можно (метод её awaits) — просто теперь это
-            // ожидание касается только того, кто сам решил дождаться.
+            // The push can still be awaited (this method awaits it); only the
+            // caller who chose to wait is affected.
             //
             // A batch provider is the exception: the write accumulates and goes
             // out in a batch a bit later. We can't wait for it here — callers
@@ -238,13 +238,13 @@ namespace LongLeap.Core.CloudSaves
             }
         }
 
-        // Снимок всего, что сервис считает текущим состоянием: значения плюс их
-        // метки времени.
+        // Snapshot of everything the service considers the current state:
+        // values plus their timestamps.
         //
-        // Только чтение памяти под общим замком — ни записи, ни обращения к
-        // провайдеру. Именно поэтому им можно показать игроку содержимое сейва,
-        // ничего за него не решив: InitializeAsync, в отличие от этого метода,
-        // выбирает победителя по каждому ключу и тут же затирает проигравшего.
+        // Only reads memory under the shared lock — no writes, no provider
+        // calls. That is why it can show the player the save's contents without
+        // deciding anything for them: InitializeAsync, unlike this method, picks
+        // a winner per key and immediately overwrites the loser.
         public async Task<IReadOnlyDictionary<string, CloudSaveEntry>> SnapshotAsync()
         {
             ThrowIfDisposed();
@@ -368,20 +368,20 @@ namespace LongLeap.Core.CloudSaves
                 _lock.Release();
             }
 
-            // Тоже вне замка: удаление в облаке — такой же сетевой запрос.
+            // Also outside the lock: deleting in the cloud is a network request too.
             await _provider.DeleteAllAsync();
         }
 
-        // Забыть локальное зеркало, НЕ удаляя ничего в облаке.
+        // Forget the local mirror WITHOUT deleting anything in the cloud.
         //
-        // Не путать с DeleteAllAsync: тот стирает сейв у владельца. Здесь
-        // наоборот — сейв в облаке остаётся неприкосновенным, уходит только его
-        // локальная копия. Нужно при смене личности: гостевое зеркало не имеет
-        // права остаться в аккаунте и наоборот, иначе следующая же досылка
-        // записала бы чужие значения владельцу.
+        // Not to be confused with DeleteAllAsync, which erases the owner's save.
+        // Here the cloud save stays untouched and only its local copy goes.
+        // Needed on an identity switch: the guest mirror must not stay behind
+        // under the account (or vice versa), otherwise the next push would write
+        // someone else's values to the new owner.
         //
-        // Сервис после этого считается неинициализированным — следующий
-        // InitializeAsync поднимет всё заново, уже из ветви новой личности.
+        // Afterwards the service counts as not initialized — the next
+        // InitializeAsync loads everything again from the new identity's save.
         public async Task ResetLocalCacheAsync()
         {
             ThrowIfDisposed();
@@ -403,12 +403,12 @@ namespace LongLeap.Core.CloudSaves
             Debug.Log($"{nameof(CloudSaveService)}: local mirror cleared, cloud untouched");
         }
 
-        // Общая часть DeleteAllAsync и ResetLocalCacheAsync. Зовётся ТОЛЬКО под
-        // _lock.
+        // Shared part of DeleteAllAsync and ResetLocalCacheAsync. Call ONLY
+        // under _lock.
         //
-        // Чистим по объединению кеша и указателя: в кеше нет ключей, которых
-        // никто не читал в этой сессии, а в указателе они есть — ровно для этого
-        // он и ведётся.
+        // Clears the union of the cache and the key index: keys nobody has read
+        // this session are missing from the cache but present in the index —
+        // which is exactly why the index exists.
         private void ForgetLocalLocked()
         {
             var keys = new HashSet<string>(_knownKeys);
@@ -438,20 +438,22 @@ namespace LongLeap.Core.CloudSaves
             _pushLock.Dispose();
         }
 
-        // Досылка «грязных» ключей в облако. Единственное место сервиса, где идёт
-        // сеть, и потому единственное, что не имеет права держать _lock: пока едет
-        // запрос (у HTTP-клиента таймаут 10 с), кеш обязан оставаться читаемым.
+        // Push dirty keys to the cloud. The only place in the service that does
+        // network I/O, and therefore the only one that must not hold _lock: while
+        // a request is in flight (up to the HTTP client timeout) the cache must
+        // stay readable.
         //
-        // Вместо этого сеть накрыта своим замком _pushLock — он серилизует досылки
-        // между собой, не задевая читателей, — а состояние берётся и правится
-        // короткими заходами под _lock.
+        // Instead, network work is guarded by its own _pushLock, which serialises
+        // pushes without blocking readers, and state is read and updated in short
+        // sections under _lock.
         private async Task PushDirtyKeysAsync()
         {
-            // Отправка живёт дольше вызывающего: её запускают и не ждут (сохранение
-            // профиля, отметка ачивки), а сцена между тем перезагружается и сервис
-            // получает Dispose. Возвращаться к уже уничтоженным семафорам нельзя —
-            // ловим это здесь, иначе в лог валится ObjectDisposedException на каждом
-            // рестарте, хотя терять нечего: локально всё уже сохранено.
+            // A push can outlive its caller: it is often started without being
+            // awaited (a profile save, an achievement update) while the scene
+            // reloads and the service is disposed. Returning to disposed
+            // semaphores is not allowed — catch it here, otherwise every restart
+            // logs an ObjectDisposedException although nothing is lost:
+            // everything is already saved locally.
             try
             {
                 await PushDirtyKeysCoreAsync();
@@ -517,8 +519,8 @@ namespace LongLeap.Core.CloudSaves
             await _pushLock.WaitAsync();
             try
             {
-                // Список снимаем копией: во время отправки кто-то может добавить
-                // новый ключ, а перечислять изменяемый набор нельзя.
+                // Take a copy of the list: a new key may be added during the
+                // push, and a set cannot be enumerated while it changes.
                 List<string> pending;
                 await _lock.WaitAsync();
                 try
@@ -730,8 +732,8 @@ namespace LongLeap.Core.CloudSaves
             _stateLoaded = true;
         }
 
-        // Формат конверта живёт в CloudSaveEnvelope: его же читает сводка чужого
-        // сейва, и два разных парсера рано или поздно разошлись бы.
+        // The envelope format lives in CloudSaveEnvelope: save summaries read it
+        // too, and two separate parsers would eventually drift apart.
         private static string SerializeCloudEntry(string value, long ts) =>
             CloudSaveEnvelope.Serialize(value, ts);
 
@@ -767,11 +769,12 @@ namespace LongLeap.Core.CloudSaves
             _prefs.SetString(DirtyKey, dirty);
         }
 
-        // true — ключ раньше не был известен, указатель пора переписать.
+        // true: the key was not known before, so the index must be rewritten.
         //
-        // Признак изменения, а не запись на месте: у статов и ачивок ключей
-        // сотни, и переписывать весь список на каждое сохранение монеты было бы
-        // заметно. Новые ключи появляются только на прогреве.
+        // Returns a "changed" flag instead of writing in place: stats and
+        // achievements can have hundreds of keys, and rewriting the whole list
+        // on every small save would be noticeable. New keys appear mostly
+        // during warm-up.
         private bool Remember(string key) => _knownKeys.Add(key);
 
         private void LoadKnownKeys()

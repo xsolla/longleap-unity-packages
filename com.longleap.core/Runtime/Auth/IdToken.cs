@@ -10,7 +10,7 @@ namespace LongLeap.Core.Auth
         public IdToken(string value)
         {
             if (value != null && value.Length == 0)
-                throw new ArgumentException("IdToken: значение не может быть пустым.", nameof(value));
+                throw new ArgumentException("IdToken: value cannot be empty.", nameof(value));
             Value = value;
         }
 

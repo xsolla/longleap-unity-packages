@@ -5,14 +5,14 @@ using UnityEngine;
 
 namespace LongLeap.Core.Editor
 {
-    // Состояние проекта, как оно записано СЕЙЧАС. Это то, что видят пункты
-    // меню, и то, к чему возвращает Revert.
+    // The project state as it is written NOW. This is what menu items see and
+    // what Revert returns to.
     //
-    // Снимок, а не сквозные обращения к проекту: набор дефайнов читается один
-    // раз, SerializedObject кэшируется по одному на ассет, значение каждой
-    // настройки — по одному разу. Поэтому объект надо СОЗДАВАТЬ ЗАНОВО, когда
-    // нужно свежее состояние (при фокусе окна, после Apply, на Revert), а не
-    // держать один на всё время жизни окна.
+    // A snapshot, not live access: the define set is read once,
+    // SerializedObjects are cached one per asset, and each option value is
+    // read once. Create a NEW instance whenever fresh state is needed (window
+    // focus, after Apply, on Revert) instead of keeping one for the window's
+    // lifetime.
     public sealed class SavedProjectOptionState : IProjectReadContext, IProjectOptionState
     {
         private readonly Dictionary<string, SerializedObject> _assets =
@@ -41,8 +41,8 @@ namespace LongLeap.Core.Editor
 
         public string GetValue(string optionId)
         {
-            // null тоже кэшируем: «ассета нет» — это ответ, и переспрашивать
-            // его на каждую перерисовку незачем.
+            // Cache null too: "no asset" is an answer, and there is no point
+            // asking again on every repaint.
             if (_values.TryGetValue(optionId, out string cached))
                 return cached;
 
@@ -56,7 +56,7 @@ namespace LongLeap.Core.Editor
                 }
                 catch (Exception exception)
                 {
-                    // Сломанный описатель не должен ронять всё окно.
+                    // A broken option must not take the whole window down.
                     Debug.LogError($"Build options: reading '{optionId}' failed. {exception}");
                 }
             }

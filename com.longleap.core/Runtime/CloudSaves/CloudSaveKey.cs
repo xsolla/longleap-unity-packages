@@ -14,7 +14,7 @@ namespace LongLeap.Core.CloudSaves
         public CloudSaveKey(string key)
         {
             if (!string.IsNullOrEmpty(key) && !ValidPattern.IsMatch(key))
-                throw new ArgumentException($"CloudSaveKey: ключ '{key}' содержит запрещённые символы (. $ # [ ] /).");
+                throw new ArgumentException($"CloudSaveKey: key '{key}' contains forbidden characters (. $ # [ ] /).");
             Value = key ?? "";
         }
 

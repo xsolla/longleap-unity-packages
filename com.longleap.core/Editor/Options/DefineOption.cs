@@ -3,28 +3,28 @@ using System.Collections.Generic;
 
 namespace LongLeap.Core.Editor
 {
-    // Галочка, за которой стоит один символ компиляции.
+    // A toggle backed by a single scripting define symbol.
     public sealed class DefineOption : ProjectOption
     {
         private readonly Func<IProjectOptionState, ProjectOptionAvailability> _availability;
 
         public string Symbol { get; }
 
-        // Символы, которые уходят ВМЕСТЕ с этим, когда его выключают.
+        // Symbols removed TOGETHER with this one when it is turned off.
         //
-        // Это НЕ то же самое, что GetAvailability, и путать их нельзя —
-        // в проекте есть оба поведения, и они разные:
+        // This is NOT the same as GetAvailability; both behaviours exist and
+        // they differ:
         //
-        //   XSOLLA_ID выключили  -> XSOLLA_ID_DEBUG УБИРАЕТСЯ из списка
-        //                           (XsollaIdMenu.SetDefine, «отлаживать
-        //                           нечего, если самого входа нет»);
-        //   GAMEPIX выключили    -> GAMEPIX_ALLOW_ANALYTICS и остальные ОСТАЮТСЯ
-        //                           в списке, просто гаснут пункты меню
-        //                           (ValidateToggleAllowAnalytics).
+        //   a sign-in define turned off -> its debug define is REMOVED from
+        //                                  the list (nothing to debug without
+        //                                  sign-in);
+        //   a portal define turned off  -> its companion defines STAY in the
+        //                                  list; their options are only
+        //                                  disabled.
         //
-        // Поэтому общего правила «недоступна — значит выключить» здесь нет:
-        // оно тихо изменило бы поведение GamePix. Каскад объявляет только тот,
-        // кому он нужен.
+        // So there is no general "unavailable means off" rule: it would
+        // silently change the second behaviour. Only options that need the
+        // cascade declare it.
         public IReadOnlyList<string> CascadeOffSymbols { get; }
 
         public ProjectOptionConfirmation Confirmation { get; }
@@ -81,8 +81,8 @@ namespace LongLeap.Core.Editor
         public override ProjectOptionAvailability GetAvailability(IProjectOptionState state) =>
             _availability?.Invoke(state) ?? ProjectOptionAvailability.Available;
 
-        // Спрашиваем только при ВКЛЮЧЕНИИ: выключить отступление от условий
-        // площадки можно и без разрешения.
+        // Ask only when turning ON: turning off a deviation from a platform's
+        // terms needs no confirmation.
         public override ProjectOptionConfirmation GetConfirmation(string newValue) =>
             newValue == On ? Confirmation : null;
 

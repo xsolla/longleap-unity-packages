@@ -3,66 +3,61 @@ using UnityEditor;
 
 namespace LongLeap.Core.Editor
 {
-    // Снимок проекта для чтения настроек. Смысл именно в снимке: набор
-    // дефайнов читается ОДИН раз, SerializedObject кэшируется по одному на
-    // ассет, поэтому опросить все настройки разом стоит столько же, сколько
-    // одну. Без этого GamePixAsmdefConstraints читал бы два файла с диска на
-    // каждую перерисовку окна.
+    // A snapshot of the project for reading options. The define set is read
+    // ONCE and SerializedObjects are cached one per asset, so querying every
+    // option costs the same as querying one. Without it, options that read
+    // files from disk would do so on every window repaint.
     public interface IProjectReadContext
     {
         ISet<string> Defines { get; }
 
-        // null, если ассета нет. Вызывающий обязан это проверить: ассет могли
-        // не создать, переименовать или удалить.
+        // null if the asset does not exist. Callers must check: the asset may
+        // be missing, renamed or deleted.
         SerializedObject GetSerializedObject(string assetPath);
     }
 
-    // Представление состояния, против которого считается доступность.
+    // The view of the state that availability is evaluated against.
     //
-    // Реализаций две, и это главный приём всей конструкции: меню передаёт
-    // сохранённое состояние и ведёт себя точно как раньше, а окно — отложенное
-    // (сохранённое плюс незаписанные правки), и строка гаснет сразу, как
-    // только сняли галочку выше, ещё до Apply. Один интерфейс, два
-    // представления — и меню с окном не могут разойтись в понимании того, что
-    // такое «доступна».
+    // There are two implementations, and that is the point of the design: the
+    // menu passes the saved state, the window passes the staged one (saved
+    // plus unapplied edits), so a row is disabled as soon as the option above
+    // it is unticked, before Apply. One interface, two views: the menu and the
+    // window cannot disagree on what "available" means.
     public interface IProjectOptionState
     {
         bool IsDefineOn(string symbol);
 
-        // null, если настройка не зарегистрирована.
+        // null if the option is not registered.
         string GetValue(string optionId);
 
         bool TryGetOption(string optionId, out ProjectOption option);
     }
 
-    // Отложенное состояние, в которое можно писать, не трогая проект. Нужно
-    // пресетам: они раскладывают значения по настройкам, а записью занимается
-    // потом Apply.
+    // Staged state that can be written without touching the project. Used by
+    // presets: they spread values over options, and Apply writes them later.
     public interface IStagedOptionState : IProjectOptionState
     {
         void Set(string optionId, string value);
 
-        // Вернуть одну настройку к сохранённому значению. Именно это, а не
-        // «выключить», делает согласование пресета: недоступную настройку
-        // надо оставить как была, иначе строка покажется изменённой, а Apply
-        // полез бы её писать.
+        // Reset one option to its saved value. This, not "turn off", is what
+        // preset reconciliation does: an unavailable option must stay as it
+        // was, otherwise the row would look modified and Apply would write it.
         void Clear(string optionId);
     }
 
-    // Приёмник изменений. Ничего не пишет сам: НАКАПЛИВАЕТ и отдаёт всё одним
-    // вызовом в Flush. Ради этого он и существует — пять галочек за один Apply
-    // должны стоить один SetScriptingDefineSymbols и одну перезагрузку домена,
-    // а не пять.
+    // Change sink. Writes nothing itself: it ACCUMULATES changes and applies
+    // them all in Flush. Five toggles in one Apply must cost one
+    // SetScriptingDefineSymbols call and one domain reload, not five.
     public interface IProjectWriteContext
     {
         void SetDefine(string symbol, bool on);
 
-        // null, если ассета нет. Возвращённый объект будет применён и сохранён
-        // в Flush — руками ApplyModifiedProperties вызывать не нужно.
+        // null if the asset does not exist. The returned object is applied and
+        // saved in Flush; do not call ApplyModifiedProperties yourself.
         SerializedObject GetSerializedObject(string assetPath);
 
-        // Попросить AssetDatabase.Refresh в конце. Нужно тем, кто пишет файлы
-        // в обход AssetDatabase — так делает ремонт asmdef-ов.
+        // Request AssetDatabase.Refresh at the end. For writers that change
+        // files bypassing AssetDatabase (e.g. an asmdef repair).
         void RequestAssetRefresh();
 
         void Log(string message);

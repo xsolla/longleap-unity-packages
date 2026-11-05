@@ -10,7 +10,7 @@ namespace LongLeap.Core.Auth
         public UserId(string value)
         {
             if (value != null && value.Length == 0)
-                throw new ArgumentException("UserId: значение не может быть пустым.", nameof(value));
+                throw new ArgumentException("UserId: value cannot be empty.", nameof(value));
             Value = value;
         }
 

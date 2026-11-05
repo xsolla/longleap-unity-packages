@@ -3,56 +3,52 @@ using System.Collections.Generic;
 
 namespace LongLeap.Core.Editor
 {
-    // Описание одной настройки проекта, влияющей на сборку: галочка «дефайн
-    // включён», выбор среды в ассете, ремонт asmdef-ов вендорного плагина.
+    // Describes one project setting that affects the build: a define toggle,
+    // an environment chosen in an asset, a one-off repair of a vendor plugin's
+    // asmdefs.
     //
-    // Зачем таблица, если раньше были просто пункты меню: у MenuItem нет
-    // тултипов (только menuItem/priority/secondaryPriority/validate/
-    // editorModes), поэтому причина «зачем эта галочка» уезжала в Debug.Log
-    // и читалась уже ПОСЛЕ переключения. Здесь причина лежит рядом с
-    // настройкой в Tooltip, и окно показывает её до нажатия.
+    // Options are data rather than plain menu items because MenuItem has no
+    // tooltips: the reason for a toggle lives next to it in Tooltip, and the
+    // window shows it before the change is made.
     //
-    // Значение ЛЮБОЙ настройки — строка: On/Off для галочек, имя члена
-    // перечисления для выбора. Одно представление на все виды даёт три вещи
-    // бесплатно: отложенное состояние сериализуется как список пар строк и
-    // переживает перекомпиляцию; «изменено ли» — это один string.Equals без
-    // ветвления по виду настройки; среда хранится по ИМЕНИ, а не по индексу,
-    // поэтому перестановка членов перечисления не переключит сервер молча
-    // (та же причина, что у XsollaIdMenu.IndexOf).
+    // Every option value is a string: On/Off for toggles, the enum member name
+    // for choices. One representation for all kinds means the staged state
+    // serializes as a list of string pairs and survives recompilation, "is it
+    // modified" is a single string.Equals, and choices are stored by NAME, not
+    // index, so reordering enum members never silently switches a value.
     //
-    // Описатель не имеет права держать ссылку на UnityEngine.Object — только
-    // пути и делегаты. Иначе реестр протухал бы после обновления
-    // AssetDatabase, а живёт он до перезагрузки домена.
+    // An option must not hold UnityEngine.Object references, only paths and
+    // delegates. The registry lives until the domain reloads and would
+    // otherwise go stale after an AssetDatabase refresh.
     public abstract class ProjectOption
     {
         public const string On = "1";
         public const string Off = "0";
 
-        // Ключ для пресетов и отложенного состояния. Живёт дольше подписи:
-        // подпись можно переписать, Id менять нельзя — иначе пресеты
-        // перестанут находить настройку.
+        // Key for presets and staged state. Unlike the label, it must never
+        // change, or presets stop finding the option.
         public string Id { get; }
 
         public string Label { get; }
 
         public string Tooltip { get; }
 
-        // Обязательная или отладочная. Ровно то же деление, что у подменю
-        // Required/Optional: без Required портальная сборка не соберётся или
-        // не пройдёт ревью, Optional в готовую сборку попадать не должно.
+        // Required or debug-only. Required options are needed for the build to
+        // work or pass a platform review; optional ones must not end up in a
+        // release build.
         public bool Required { get; }
 
-        // Совпадает с priority у MenuItem, чтобы порядок строк в окне был тем
-        // же, что порядок пунктов в меню, и глаз не искал заново.
+        // Matches the MenuItem priority, so rows in the window appear in the
+        // same order as the menu items.
         public int Order { get; }
 
-        // Настройку можно только ВКЛЮЧИТЬ. Ремонт asmdef-ов именно такой:
-        // обратной операции не существует, и пункт меню гаснет, когда чинить
-        // уже нечего.
+        // The option can only be turned ON. Used for repairs that have no
+        // inverse (e.g. fixing asmdefs); the menu item is disabled once there
+        // is nothing left to fix.
         public bool OneWay { get; }
 
-        // Видна ли настройка в окне. Скрытая по-прежнему доступна из меню и
-        // по-прежнему участвует в пресетах.
+        // Whether the option is shown in the window. Hidden options are still
+        // available from the menu and still take part in presets.
         public bool VisibleInWindow { get; }
 
         protected ProjectOption(
@@ -79,40 +75,39 @@ namespace LongLeap.Core.Editor
             VisibleInWindow = visibleInWindow;
         }
 
-        // Значение «выключено» для сквозных пресетов. null означает, что
-        // естественного «выключено» нет — так у выбора среды: сбрасывать её
-        // в никуда нельзя, поэтому пресет её и не тронет, если не назвал явно.
+        // The "off" value used by exhaustive presets. null means there is no
+        // natural "off" (e.g. an environment choice): such an option cannot be
+        // reset to nothing, so a preset leaves it alone unless it names it.
         public virtual string OffValue => Off;
 
-        // null — галочка, иначе выбор из перечисленного.
+        // null for a toggle, otherwise the list of choices.
         public virtual IReadOnlyList<ProjectOptionChoice> Choices => null;
 
-        // Текущее значение. Читать только через контекст: он снимает набор
-        // дефайнов один раз и кэширует по одному SerializedObject на ассет,
-        // поэтому опросить все настройки разом стоит столько же, сколько одну.
+        // Current value. Read only through the context: it reads the define set
+        // once and caches one SerializedObject per asset, so querying every
+        // option costs the same as querying one.
         public abstract string Read(IProjectReadContext context);
 
-        // Записать значение. Контекст НАКАПЛИВАЕТ изменения и пишет их одним
-        // вызовом на весь Apply — см. ProjectWriteContext.Flush.
+        // Writes the value. The context ACCUMULATES changes and applies them in
+        // one go per Apply; see ProjectWriteContext.Flush.
         public abstract void Write(string value, IProjectWriteContext context);
 
-        // Доступна ли настройка. Считается против ПРЕДСТАВЛЕНИЯ состояния, а
-        // не против проекта: меню передаёт сохранённое состояние и ведёт себя
-        // как раньше, окно передаёт отложенное — и строка гаснет сразу, как
-        // только сняли галочку выше, ещё до Apply.
+        // Whether the option is available. Evaluated against a VIEW of the
+        // state, not the project: the menu passes the saved state, the window
+        // passes the staged one, so a row is disabled as soon as the option it
+        // depends on is unticked, before Apply.
         public virtual ProjectOptionAvailability GetAvailability(IProjectOptionState state) =>
             ProjectOptionAvailability.Available;
 
-        // Спросить подтверждение перед записью. Нужно там, где галочка — не
-        // удобство, а отступление от условий площадки.
+        // Ask for confirmation before writing. For options that are not a
+        // convenience but a deviation from a platform's terms.
         public virtual ProjectOptionConfirmation GetConfirmation(string newValue) => null;
 
-        // Что сказать в журнал после применения. Здесь живут те самые
-        // напоминания «выключите перед отправкой на ревью», которые раньше
-        // печатал каждый пункт меню.
+        // Message to log after applying, e.g. a reminder to turn a debug option
+        // off before submitting the build for review.
         public virtual string DescribeApplied(string value) => null;
 
-        // Человекочитаемое значение для журнала и для подписи «(off -> on)».
+        // Human-readable value for the log and for the "(off -> on)" label.
         public virtual string DescribeValue(string value)
         {
             if (Choices == null)
@@ -130,7 +125,7 @@ namespace LongLeap.Core.Editor
         public override string ToString() => $"{Id} ({Label})";
     }
 
-    // Один вариант выбора: значение — имя члена перечисления в ассете.
+    // One choice: the value is the name of an enum member in the asset.
     public readonly struct ProjectOptionChoice
     {
         public string Value { get; }

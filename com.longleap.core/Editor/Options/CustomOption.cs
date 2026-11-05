@@ -2,12 +2,12 @@ using System;
 
 namespace LongLeap.Core.Editor
 {
-    // Настройка, у которой чтение и запись — произвольный код.
+    // An option whose read and write are arbitrary code.
     //
-    // Существует ровно для того, чтобы Core НЕ пришлось узнавать, что такое
-    // asmdef. Ремонт ограничений вендорного плагина GamePix читает два файла
-    // с диска регуляркой и дописывает в них символ — вся эта логика остаётся
-    // в LongLeap.GamePix.Editor и приезжает сюда двумя делегатами.
+    // Keeps Core free of package-specific details. For example, a vendor
+    // plugin's asmdef repair reads two files from disk with a regex and adds
+    // a symbol to them; all of that logic stays in its own package and
+    // arrives here as two delegates.
     public sealed class CustomOption : ProjectOption
     {
         private readonly Func<IProjectReadContext, string> _read;

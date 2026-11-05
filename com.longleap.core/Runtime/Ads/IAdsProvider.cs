@@ -2,38 +2,40 @@ using System;
 
 namespace LongLeap.Core.Ads
 {
-    // Реклама портала. Игровой код работает только с этим интерфейсом и ничего
-    // не знает о конкретной площадке — за GamePix отвечает com.longleap.gamepix,
-    // за её отсутствие NullAdsProvider.
+    // Portal ads. Game code works only with this interface and knows nothing
+    // about the specific portal: com.longleap.gamepix implements it for GamePix,
+    // NullAdsProvider (com.longleap.nullproviders) for builds without a portal.
     public interface IAdsProvider
     {
-        // Есть ли площадка вообще. По этому признаку прячут кнопки «за рекламу»:
-        // вне портала предлагать заведомо неработающее действие нечестно.
-        // Отличается от IsRewardedReady — та говорит «можно прямо сейчас».
+        // Whether there is an ad portal at all. Use it to hide "watch an ad"
+        // buttons: outside a portal they could never work.
+        // Differs from IsRewardedReady, which means "can be requested right now".
         bool IsAvailable { get; }
 
-        // Можно ли прямо сейчас запросить ролик за награду. Ложь, пока предыдущий
-        // запрос не завершился: площадки обычно молча игнорируют повторный вызов,
-        // поэтому кнопку надо гасить, а не давать нажать её впустую.
+        // Whether a rewarded ad can be requested right now. False while the
+        // previous request is still pending: portals usually ignore a repeated
+        // call silently, so disable the button instead of letting it be pressed
+        // for nothing.
         bool IsRewardedReady { get; }
 
-        // Идёт ли показ прямо сейчас. Портал сам останавливает время и звук, но
-        // код на нескалируемом времени (WaitForSecondsRealtime, unscaledDeltaTime,
-        // async-продолжения) продолжает работать — его надо гейтить этим флагом.
+        // Whether an ad is on screen right now. The portal pauses time and audio
+        // itself, but code on unscaled time (WaitForSecondsRealtime,
+        // unscaledDeltaTime, async continuations) keeps running and should be
+        // gated by this flag.
         bool IsAdShowing { get; }
 
-        // Ролик за награду. onComplete зовётся ровно один раз.
+        // Rewarded ad. onComplete is called exactly once.
         void ShowRewarded(Action<AdResult> onComplete);
 
-        // Межуровневая реклама. onComplete зовётся ровно один раз.
+        // Interstitial ad. onComplete is called exactly once.
         void ShowInterstitial(Action<AdResult> onComplete);
 
-        // Текущий счёт забега для витрины портала. Вне портала — no-op.
+        // Current run score for the portal's showcase. No-op outside a portal.
         void ReportScore(long score);
 
-        // Дёргается каждый кадр из бутстраппера. Нужен, потому что площадки не
-        // присылают события «показ не состоялся»: протухшие запросы провайдер
-        // закрывает сам по таймеру. У заглушки — пустой метод.
+        // Call every frame (e.g. from the bootstrapper). Portals do not send a
+        // "show did not happen" event, so the provider closes stale requests
+        // itself on a timer. Empty in the null provider.
         void Tick();
     }
 }

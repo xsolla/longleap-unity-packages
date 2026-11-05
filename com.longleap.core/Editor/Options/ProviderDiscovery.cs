@@ -5,14 +5,13 @@ using UnityEngine;
 
 namespace LongLeap.Core.Editor
 {
-    // Общий сбор поставщиков: настроек, пресетов, способов сборки,
-    // предупреждений. Четыре одинаковых цикла с одинаковыми оговорками про
-    // конструктор и try/catch — это ровно та дубликация, из-за которой
-    // SetDefine в проекте существовал в четырёх видах.
+    // Shared provider discovery for options, presets, build targets and
+    // warnings: one loop with the constructor check and try/catch instead of
+    // four copies.
     internal static class ProviderDiscovery
     {
-        // Имя типа-поставщика возвращаем рядом с элементом: без него сообщение
-        // о дублирующемся Id не говорит, КОГО править.
+        // The provider type name is returned with each item: without it a
+        // duplicate-Id message would not say WHICH provider to fix.
         public static List<(TItem Item, string Provider)> Collect<TProvider, TItem>(
             Func<TProvider, IEnumerable<TItem>> select)
             where TProvider : class
@@ -33,8 +32,8 @@ namespace LongLeap.Core.Editor
                     continue;
                 }
 
-                // Каждый поставщик в своём try: один сломанный описатель не
-                // должен оставить окно пустым.
+                // Each provider in its own try: one broken provider must not
+                // leave the window empty.
                 try
                 {
                     var provider = (TProvider)Activator.CreateInstance(type);

@@ -6,9 +6,9 @@ namespace LongLeap.Core.Editor
 {
     public static class ProjectOptionPresets
     {
-        // Больше восьми проходов согласования означает, что кто-то написал
-        // circular-предикат доступности. Это ошибка описателя, и молчать о ней
-        // нельзя.
+        // More than eight reconciliation passes means some availability
+        // predicate is circular. That is a bug in an option and must be
+        // reported.
         private const int MaxReconcilePasses = 8;
 
         private static IReadOnlyList<ProjectOptionPreset> _presets;
@@ -17,7 +17,7 @@ namespace LongLeap.Core.Editor
 
         public static void Invalidate() => _presets = null;
 
-        // Разложить пресет по отложенному состоянию.
+        // Spreads the preset over the staged state.
         public static void Stage(ProjectOptionPreset preset, IStagedOptionState staged)
         {
             if (preset == null || staged == null)
@@ -31,7 +31,7 @@ namespace LongLeap.Core.Editor
                     continue;
                 }
 
-                // Не ошибка: в проекте без этого пакета так и должно быть.
+                // Not an error: expected in a project without that package.
                 Debug.Log(
                     $"Build options: preset '{preset.Label}' names option '{value.Key}', " +
                     "which no package registered. Skipping it.");
@@ -54,15 +54,14 @@ namespace LongLeap.Core.Editor
             Reconcile(staged);
         }
 
-        // Уводим недоступные настройки назад к сохранённому значению, пока
-        // состояние не перестанет меняться.
+        // Reverts unavailable options to their saved values until the state
+        // stops changing.
         //
-        // Проход нужен не один, и это не перестраховка. Пример из текущего
-        // состояния проекта, где нет папки Assets/Plugins/GamePix: пресет
-        // GamePix ставит GAMEPIX включённым, но настройка недоступна -> её
-        // возвращаем к сохранённому «выключено» -> и ТОЛЬКО ТЕПЕРЬ становится
-        // недоступен GAMEPIX_ALLOW_ANALYTICS, которому нужен GAMEPIX. За один
-        // проход он остался бы включённым без GAMEPIX за ним.
+        // One pass is not enough. Example: a portal preset turns the portal
+        // define on, but that option is unavailable (the vendor plugin is not
+        // installed) -> it is reverted to its saved "off" -> only NOW does a
+        // companion option that requires the portal define become unavailable.
+        // A single pass would leave it on without the define it depends on.
         public static void Reconcile(IStagedOptionState staged)
         {
             if (staged == null)
@@ -94,9 +93,9 @@ namespace LongLeap.Core.Editor
                 $"{MaxReconcilePasses} passes. Some GetAvailability predicate is cyclic.");
         }
 
-        // Совпадает ли состояние с пресетом. Недоступные настройки не
-        // учитываем: согласование оставило их как были, и требовать от них
-        // значения пресета значило бы навсегда показывать «(modified)».
+        // Whether the state matches the preset. Unavailable options are
+        // ignored: reconciliation left them as they were, and requiring the
+        // preset value from them would show "(modified)" forever.
         public static bool Matches(ProjectOptionPreset preset, IProjectOptionState state)
         {
             if (preset == null || state == null)

@@ -6,12 +6,12 @@ using NUnit.Framework;
 
 namespace LongLeap.Core.Tests
 {
-    // Указатель ключей и локальный сброс зеркала.
+    // Key index and local mirror reset.
     //
-    // Оба нужны смене личности: без указателя вычистить зеркало целиком нельзя
-    // (перечислять PlayerPrefs нечем), а забытый ключ с более свежей меткой при
-    // следующей загрузке победил бы облачный — то есть прогресс одной личности
-    // протёк бы в другую.
+    // Both are needed for an identity switch: without the index the mirror
+    // cannot be cleared completely (PlayerPrefs cannot be enumerated), and a
+    // forgotten key with a newer timestamp would beat the cloud value on the
+    // next load — leaking one identity's progress into another.
     [TestFixture]
     public class CloudSaveServiceLocalResetTests
     {
@@ -97,9 +97,8 @@ namespace LongLeap.Core.Tests
             }
         }
 
-        // Главное, ради чего указатель и заведён: ключ, который в ЭТОЙ сессии
-        // никто не читал и не писал, в кеше отсутствует — и всё равно обязан
-        // уйти из зеркала.
+        // The reason the index exists: a key nobody read or wrote in THIS
+        // session is not in the cache, yet it must still leave the mirror.
         [Test]
         public async Task ResetLocalCache_ClearsKeysNobodyTouchedThisSession()
         {
@@ -110,7 +109,7 @@ namespace LongLeap.Core.Tests
                 await first.SetStringAsync(new CloudSaveKey("heroes_owned"), "[\"monk\"]");
             }
 
-            // Новый сервис ничего не читает — только поднимает указатель.
+            // The new service reads no keys — it only loads the index.
             using (CloudSaveService second = NewService())
             {
                 await second.InitializeAsync();
@@ -124,8 +123,8 @@ namespace LongLeap.Core.Tests
             Assert.IsNull(_prefs.GetString("cloudsave_dirty", null));
         }
 
-        // Сброс — ЛОКАЛЬНЫЙ. Тронув облако, он отобрал бы у владельца сейв,
-        // который мы как раз собирались оставить нетронутым.
+        // The reset is LOCAL. Touching the cloud would take away the owner's
+        // save, which is exactly what must stay untouched.
         [Test]
         public async Task ResetLocalCache_DoesNotTouchProvider()
         {
@@ -142,8 +141,8 @@ namespace LongLeap.Core.Tests
             }
         }
 
-        // После сброса сервис снова не инициализирован: следующая загрузка
-        // должна поднять всё заново, уже из ветви новой личности.
+        // After a reset the service is not initialized again: the next load
+        // must bring everything back from the new identity's save.
         [Test]
         public async Task ResetLocalCache_ThenInitialize_RestoresFromCloud()
         {
@@ -170,12 +169,12 @@ namespace LongLeap.Core.Tests
                 await service.DeleteAllAsync();
 
                 Assert.IsNull(_prefs.GetString("cloudsave_index", null));
-                Assert.AreEqual(1, _provider.DeleteAllCalls, "DeleteAll обязан дойти до облака");
+                Assert.AreEqual(1, _provider.DeleteAllCalls, "DeleteAll must reach the cloud");
             }
         }
 
-        // Указатель обязан переживать перезапуск: иначе на следующей сессии он
-        // знал бы только то, что успели тронуть, и смысл его пропал бы.
+        // The index must survive a restart: otherwise the next session would
+        // know only the keys it happened to touch, and the index would be useless.
         [Test]
         public async Task Index_SurvivesServiceRestart()
         {
@@ -188,7 +187,7 @@ namespace LongLeap.Core.Tests
             string index = _prefs.GetString("cloudsave_index", null);
 
             Assert.IsNotNull(index);
-            Assert.IsTrue(index.Contains("wallet"), "в указателе должен быть записанный ключ");
+            Assert.IsTrue(index.Contains("wallet"), "the index must contain the written key");
         }
     }
 }

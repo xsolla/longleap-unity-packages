@@ -4,19 +4,17 @@ using UnityEditor;
 
 namespace LongLeap.Core.Editor
 {
-    // Выбор из перечисления, лежащего полем в ассете.
+    // A choice from an enum stored as a field in an asset.
     //
-    // Адрес сервера и среда — это ДАННЫЕ, и лежать они должны там же, где
-    // остальные данные, а не в Player Settings; ровно это объясняет
-    // BackPackConfigSO в своём заголовке. Поэтому такая настройка пишется не
-    // в дефайны, а в ассет.
+    // Values such as a server address or an environment are DATA and belong
+    // in an asset with the rest of the data, not in Player Settings, so this
+    // option writes to an asset rather than to defines.
     //
-    // К ассету обращаемся через SerializedObject и поле ПО ИМЕНИ, без
-    // типизированной ссылки. Причина та же, по которой так сделан
-    // XsollaIdMenu: редакторной сборке, которая включает дефайны, нельзя
-    // зависеть от рантайм-сборки, иначе появится риск, что она исчезнет
-    // вместе с ней. Побочная выгода — описатель работает и тогда, когда
-    // рантайм-сборка выключена своим defineConstraints.
+    // The asset is accessed through SerializedObject and the field NAME,
+    // without a typed reference: the editor assembly that toggles defines
+    // must not depend on a runtime assembly that those defines may exclude.
+    // As a bonus, the option still works when the runtime assembly is
+    // disabled by its defineConstraints.
     public sealed class AssetEnumOption : ProjectOption
     {
         private readonly Func<IProjectOptionState, ProjectOptionAvailability> _availability;
@@ -26,8 +24,8 @@ namespace LongLeap.Core.Editor
 
         public string PropertyPath { get; }
 
-        // Что сделать после записи: обычно предупредить, что у выбранной среды
-        // не заполнены поля. Аналог XsollaIdMenu.WarnIfIncomplete.
+        // What to do after writing, typically warn that the selected
+        // environment has empty fields.
         public Action<string, IProjectWriteContext> OnApplied { get; }
 
         public AssetEnumOption(
@@ -60,8 +58,8 @@ namespace LongLeap.Core.Editor
             OnApplied = onApplied;
         }
 
-        // Сбросить среду «в выключено» нельзя — такого значения у неё нет.
-        // Поэтому сквозной пресет её не тронет, если не назовёт явно.
+        // An environment has no "off" value, so an exhaustive preset leaves it
+        // alone unless it names it.
         public override string OffValue => null;
 
         public override IReadOnlyList<ProjectOptionChoice> Choices => _choices;
@@ -94,9 +92,8 @@ namespace LongLeap.Core.Editor
                 return;
             }
 
-            // Ищем по ИМЕНИ, а не пишем номер: перестановка членов
-            // перечисления иначе тихо переключила бы среду. Та же причина, что
-            // у XsollaIdMenu.IndexOf.
+            // Look up by NAME rather than writing the index: reordering enum
+            // members would otherwise silently switch the value.
             int index = Array.IndexOf(property.enumNames, value);
 
             if (index < 0)
@@ -117,13 +114,12 @@ namespace LongLeap.Core.Editor
             if (_availability != null)
                 return _availability(state);
 
-            // Ассета нет — переключать нечего. Ровно то же говорил
-            // XsollaIdMenu.ValidateEnvironment, возвращая environment != null.
+            // No asset, nothing to switch.
             //
-            // Спрашиваем готовое значение, а не грузим ассет заново: Read
-            // отдаёт null ровно в этом случае, а состояние уже держит его в
-            // кэше. Иначе на каждую перерисовку окна создавался бы новый
-            // SerializedObject на каждую такую настройку.
+            // Uses the already-read value instead of loading the asset again:
+            // Read returns null exactly in this case, and the state caches it.
+            // Otherwise every repaint would create a new SerializedObject for
+            // each such option.
             return state?.GetValue(Id) != null
                 ? ProjectOptionAvailability.Available
                 : ProjectOptionAvailability.Blocked($"{AssetPath} not found — nothing to switch.");

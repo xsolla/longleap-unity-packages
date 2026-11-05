@@ -2,15 +2,14 @@ using System;
 
 namespace LongLeap.Core.Editor
 {
-    // Доступна ли настройка, и если нет — ПОЧЕМУ. Причина обязательна:
-    // погашенный пункт меню без объяснения приходилось разгадывать чтением
-    // исходников (почему не включается GAMEPIX — потому что нет папки
-    // Assets/Plugins/GamePix, но узнать это было негде).
+    // Whether an option is available and, if not, WHY. The reason is
+    // mandatory: a disabled menu item with no explanation can only be
+    // understood by reading the source.
     public readonly struct ProjectOptionAvailability
     {
         public bool IsAvailable { get; }
 
-        // null, когда доступна.
+        // null when available.
         public string Reason { get; }
 
         private ProjectOptionAvailability(bool isAvailable, string reason)
@@ -29,20 +28,18 @@ namespace LongLeap.Core.Editor
             return new ProjectOptionAvailability(false, reason);
         }
 
-        // Самый частый случай: настройка имеет смысл только при включённом
-        // другом дефайне. Именно так GAMEPIX гасит своих спутников — но
-        // ТОЛЬКО гасит: значения из списка дефайнов при этом не убираются,
-        // ровно как было в ValidateToggleAllowAnalytics. Убирать зависимые дефайны
-        // умеет DefineOption.CascadeOffSymbols, и это другое поведение —
-        // единственный его носитель XSOLLA_ID.
+        // The most common case: the option only makes sense while another
+        // define is on. This only DISABLES the option; its define stays in the
+        // list. Removing dependent defines is a different behaviour, provided
+        // by DefineOption.CascadeOffSymbols.
         public static ProjectOptionAvailability RequireDefine(
             IProjectOptionState state, string symbol, string reason) =>
             state != null && state.IsDefineOn(symbol) ? Available : Blocked(reason);
     }
 
-    // Диалог перед записью значения. Отмена отменяет ровно эту настройку, а
-    // не весь Apply: отказ от одного юридического согласия не повод терять
-    // остальные подготовленные изменения.
+    // Dialog shown before writing a value. Cancelling skips only this option,
+    // not the whole Apply: declining one legal consent is no reason to lose
+    // the other staged changes.
     public sealed class ProjectOptionConfirmation
     {
         public string Title { get; }

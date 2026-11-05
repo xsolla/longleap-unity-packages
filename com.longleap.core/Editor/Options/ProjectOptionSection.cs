@@ -3,27 +3,26 @@ using System.Collections.Generic;
 
 namespace LongLeap.Core.Editor
 {
-    // Блок настроек одного пакета: заголовок плюс список настроек и действий.
+    // A package's block of options: a title plus a list of options and actions.
     //
-    // Деление Required/Optional здесь НЕ объявляется — оно выводится из самих
-    // настроек. Раньше это деление существовало только как кусок строки в
-    // пути меню («GamePix/Required/...»), то есть не было данными вообще.
+    // The Required/Optional split is NOT declared here; it is derived from the
+    // options themselves.
     public sealed class ProjectOptionSection
     {
         public string Id { get; }
 
         public string Title { get; }
 
-        // Необязательная строка под заголовком.
+        // Optional line under the title.
         public string Description { get; }
 
         public int Order { get; }
 
         public IReadOnlyList<ProjectOption> Options { get; }
 
-        // То, что состоянием проекта не является: «запаковать zip», «выделить
-        // ассет конфига», «вернуть ограничения в asmdef-ы». Это действия, и
-        // откладывать их бессмысленно — у них нет отложенного значения.
+        // Things that are not project state: "pack a zip", "select the config
+        // asset", "restore asmdef constraints". These are actions with no
+        // staged value, so there is nothing to defer.
         public IReadOnlyList<ProjectOptionAction> Actions { get; }
 
         public ProjectOptionSection(
@@ -51,7 +50,7 @@ namespace LongLeap.Core.Editor
         public override string ToString() => $"{Id} ({Title})";
     }
 
-    // Кнопка, а не галочка.
+    // A button rather than a toggle.
     public sealed class ProjectOptionAction
     {
         private readonly Func<string> _disabledReason;
@@ -78,12 +77,12 @@ namespace LongLeap.Core.Editor
             _disabledReason = disabledReason;
         }
 
-        // null — кнопка активна. Иначе причина, по которой она погашена.
+        // null when the button is enabled, otherwise the reason it is disabled.
         public string GetDisabledReason() => _disabledReason?.Invoke();
     }
 
-    // Пакет объявляет свои настройки, реализовав этот интерфейс. Реестр найдёт
-    // реализацию сам, см. ProjectOptionRegistry.
+    // A package declares its options by implementing this interface. The
+    // registry finds implementations itself; see ProjectOptionRegistry.
     public interface IProjectOptionSectionProvider
     {
         IEnumerable<ProjectOptionSection> GetSections();

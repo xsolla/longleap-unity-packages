@@ -12,10 +12,10 @@ namespace LongLeap.Core.Editor
 
         public static void Invalidate() => _targets = null;
 
-        // Кто соберёт игру при текущей конфигурации. Побеждает наибольший
-        // Priority среди подходящих, поэтому вендорный билдер площадки
-        // (Priority 100) перебивает обычный WebGL (Priority 0), когда включён
-        // GAMEPIX.
+        // The target that builds the game for the current configuration: the
+        // highest Priority among applicable targets wins, so a vendor builder
+        // (e.g. Priority 100) overrides the plain WebGL build (Priority 0)
+        // whenever it applies.
         public static ProjectBuildTarget Select(IProjectOptionState state)
         {
             ProjectBuildTarget best = null;

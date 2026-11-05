@@ -3,16 +3,16 @@ using System.Collections.Generic;
 
 namespace LongLeap.Core.Editor
 {
-    // Названный набор значений: «это сборка для GamePix», «это самостоятельный
-    // HTML5 с входом через Xsolla ID».
+    // A named set of values, e.g. "build for a web portal" or "standalone
+    // HTML5 with Xsolla ID sign-in".
     //
-    // Пресет адресует настройки ПО СТРОКОВОМУ Id, а не по типу. Из-за этого он
-    // может назвать настройки из разных пакетов, не заводя между ними ссылок —
-    // и именно поэтому пресет способен сказать «GAMEPIX включён И XSOLLA_ID
-    // выключен», чего ни один пакет про себя сказать не может.
+    // A preset addresses options by string Id, not by type, so it can name
+    // options from different packages without references between them. That
+    // is why a preset can say "portal define ON and sign-in define OFF",
+    // which no single package can say about itself.
     //
-    // Неизвестные Id пропускаются с сообщением в журнал, а не с ошибкой: в
-    // проекте без пакета GamePix пресет обязан просто применить остальное.
+    // Unknown Ids are skipped with a log message, not an error: in a project
+    // without some package, the preset must still apply the rest.
     public sealed class ProjectOptionPreset
     {
         public string Id { get; }
@@ -25,15 +25,16 @@ namespace LongLeap.Core.Editor
 
         public IReadOnlyDictionary<string, string> Values { get; }
 
-        // Не названные явно настройки уводятся в своё «выключено».
+        // Options the preset does not name are set to their "off" value.
         //
         // This is what lets the "Local" preset mean "sign-in and no other
         // defines" without listing symbols this project may not even have, and
         // what makes switching GamePix -> Xsolla ID really turn GAMEPIX off
         // instead of leaving it on.
         //
-        // Не трогает настройки без естественного «выключено» (выбор среды) и
-        // односторонние (ремонт asmdef-ов): сбрасывать их некуда, да и нечем.
+        // Options without a natural "off" (environment choices) and one-way
+        // options (asmdef repairs) are left alone: there is nothing to reset
+        // them to.
         public bool Exhaustive { get; }
 
         public ProjectOptionPreset(

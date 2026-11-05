@@ -10,24 +10,23 @@ namespace LongLeap.Core.Editor
         Error
     }
 
-    // Замечание о конфигурации: «прод смотрит на 127.0.0.1», «включён GAMEPIX,
-    // а папки плагина нет», «сжатие не то для этого способа загрузки».
+    // A note about the configuration, e.g. "production points to 127.0.0.1",
+    // "the portal define is on but the plugin is missing", "compression does
+    // not match this loading method".
     //
-    // Поставляется пакетами, а не зашито в окно — иначе окно пришлось бы
-    // научить и условиям площадки GamePix, и устройству конфига Xsolla ID.
+    // Supplied by packages, not hard-coded in the window; otherwise the window
+    // would have to know every platform's rules and every config's layout.
     //
-    // Считается против ОТЛОЖЕННОГО состояния: замечание должно показывать
-    // последствие того, что вы собираетесь применить, а не того, что уже
-    // применено.
+    // Evaluated against the STAGED state: a warning shows the consequence of
+    // what you are about to apply, not of what is already applied.
     public sealed class ProjectWarning
     {
         public ProjectWarningSeverity Severity { get; }
 
         public string Message { get; }
 
-        // Замечания не мешают Apply — только сборке. Запрещать Apply нечего и
-        // незачем: настройки как раз может понадобиться применить именно для
-        // того, чтобы замечание исчезло.
+        // Warnings never block Apply, only the build: applying settings may be
+        // exactly what clears the warning.
         public bool BlocksBuild { get; }
 
         public string FixLabel { get; }

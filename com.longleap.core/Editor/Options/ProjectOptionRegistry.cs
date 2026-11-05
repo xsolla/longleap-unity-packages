@@ -5,22 +5,20 @@ using UnityEngine;
 
 namespace LongLeap.Core.Editor
 {
-    // Собирает таблицы настроек со всех загруженных сборок.
+    // Collects option tables from all loaded assemblies.
     //
-    // Через TypeCache, а НЕ через статическую регистрацию из
-    // [InitializeOnLoad]. Причина конкретная: сборки проекта
-    // (Assembly-CSharp-Editor, Darkslide.BackPack.Editor) компилируются ПОСЛЕ
-    // пакетных, и при статической регистрации блок BackPack появлялся бы или
-    // не появлялся в зависимости от порядка инициализации классов — а выглядело
-    // бы это как баг Unity. TypeCache заполняется после загрузки ВСЕХ сборок и
-    // от порядка не зависит.
+    // Uses TypeCache, NOT static registration from [InitializeOnLoad]. Project
+    // assemblies (e.g. Assembly-CSharp-Editor) compile AFTER package
+    // assemblies, so with static registration a section would appear or not
+    // depending on class initialization order. TypeCache is filled after ALL
+    // assemblies load and does not depend on order.
     //
-    // Отсюда правило: ни один [InitializeOnLoad] не имеет права спрашивать
-    // реестр. Спрашивают его OnEnable окна, валидаторы меню и обработчики
-    // кнопок — то есть код, который заведомо работает уже после загрузки.
+    // Hence the rule: no [InitializeOnLoad] code may query the registry. Query
+    // it from window OnEnable, menu validators and button handlers, i.e. code
+    // that runs after loading is done.
     //
-    // Кэш живёт в статическом поле, поэтому умирает вместе с доменом. Это
-    // именно то, что нужно: после перекомпиляции таблицы соберутся заново.
+    // The cache is a static field, so it dies with the domain. That is
+    // intended: after recompilation the tables are rebuilt.
     public static class ProjectOptionRegistry
     {
         private static IReadOnlyList<ProjectOptionSection> _sections;
@@ -50,7 +48,7 @@ namespace LongLeap.Core.Editor
             return _byId.TryGetValue(optionId, out option);
         }
 
-        // Нужно каскаду: он назван символами, а гасить надо настройки.
+        // Used by the cascade: it is expressed in symbols, but it is options that get disabled.
         public static bool TryGetDefineOption(string symbol, out DefineOption option)
         {
             EnsureIndex();
@@ -102,9 +100,8 @@ namespace LongLeap.Core.Editor
                 ProviderDiscovery.Collect<IProjectOptionSectionProvider, ProjectOptionSection>(
                     provider => provider.GetSections());
 
-            // Имя типа в ключе сортировки — чтобы порядок не менялся от
-            // перезагрузки к перезагрузке, если у двух блоков совпали Order и
-            // заголовок.
+            // The provider type name is part of the sort key, so the order stays
+            // stable across reloads when two sections share Order and title.
             found.Sort((left, right) =>
             {
                 int byOrder = left.Section.Order.CompareTo(right.Section.Order);

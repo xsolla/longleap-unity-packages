@@ -3,10 +3,10 @@ using System.Threading.Tasks;
 
 namespace LongLeap.Core.CloudSaves
 {
-    // Значение вместе с меткой времени — то же, что лежит в конверте.
+    // A value together with its timestamp — the same data the envelope holds.
     //
-    // 0 в метке означает «время неизвестно» (значение записано до появления
-    // конвертов). Показывать такую метку как дату нельзя.
+    // Timestamp 0 means "time unknown" (the value was written before envelopes
+    // existed). Do not show it as a date.
     public readonly struct CloudSaveEntry
     {
         public string Value { get; }
@@ -19,19 +19,19 @@ namespace LongLeap.Core.CloudSaves
         }
     }
 
-    // Чтение сейва целиком, одним снимком.
+    // Reading the whole save as one snapshot.
     //
-    // Отдельно от ICloudSaveService намеренно: тот отдаёт значения по одному, и
-    // сводке сейва пришлось бы перечислять сотни ключей (у статов ключ на каждый
-    // лист). А ещё интерфейс реализует только CloudSaveService — навешивать
-    // массовое чтение на заглушки и тестовые подделки незачем.
+    // Separate from ICloudSaveService on purpose: that interface returns values
+    // one at a time, and a save summary would have to enumerate hundreds of keys
+    // (stats alone can use a key per entry). Also, only CloudSaveService
+    // implements it — null providers and test fakes have no need for bulk reads.
     public interface ICloudSaveBulkAccess
     {
-        // Снимок того, что сервис считает текущим состоянием.
+        // Snapshot of what the service considers the current state.
         //
-        // Ничего не пишет и в сеть не ходит: это чтение памяти под тем же
-        // замком, что GetStringAsync. Нужен, чтобы показать игроку содержимое
-        // сейва, НЕ применяя его и ничего не решая за него.
+        // Writes nothing and does not touch the network: it reads memory under
+        // the same lock as GetStringAsync. Use it to show the player what is in
+        // the save WITHOUT applying it or deciding anything on their behalf.
         Task<IReadOnlyDictionary<string, CloudSaveEntry>> SnapshotAsync();
     }
 }

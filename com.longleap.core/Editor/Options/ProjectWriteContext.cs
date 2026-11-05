@@ -4,12 +4,10 @@ using UnityEngine;
 
 namespace LongLeap.Core.Editor
 {
-    // Накопитель изменений. Смысл его существования — в Flush: сколько бы
-    // настроек ни поменяли за один Apply, символы компиляции запишутся ОДНИМ
-    // вызовом, ассеты сохранятся ОДНИМ, и перезагрузка домена будет ОДНА.
-    //
-    // Раньше каждый пункт меню писал дефайны сам, поэтому смена конфигурации
-    // на другую площадку стоила полдюжины перекомпиляций подряд.
+    // Change accumulator. The point is Flush: however many options change in
+    // one Apply, defines are written in ONE call, assets are saved ONCE, and
+    // there is ONE domain reload, so switching to another platform
+    // configuration costs one recompilation instead of several.
     public sealed class ProjectWriteContext : IProjectWriteContext
     {
         private readonly ISet<string> _defines = ScriptingDefines.Read();
@@ -63,12 +61,12 @@ namespace LongLeap.Core.Editor
                 _errors.Add(message);
         }
 
-        // Порядок шагов важен: сначала файлы и ассеты, только потом дефайны.
+        // Step order matters: files and assets first, defines last.
         //
-        // Ремонт asmdef-ов должен лежать на диске ПРАВИЛЬНЫМ до того, как
-        // начнётся компиляция, которую запустит запись дефайна — иначе первая
-        // компиляция пойдёт по старым ограничениям. Unity всё равно сольёт
-        // оба повода в одну перезагрузку домена.
+        // Files repaired on disk (e.g. asmdefs) must be CORRECT before the
+        // compilation triggered by the define change starts, otherwise the
+        // first compilation would use the old constraints. Unity merges both
+        // triggers into a single domain reload.
         public ProjectWriteResult Flush()
         {
             bool assetsChanged = false;
@@ -87,7 +85,7 @@ namespace LongLeap.Core.Editor
 
             bool definesChanged = _definesTouched && ScriptingDefines.Write(_defines);
 
-            // ProjectSettings.asset сам на диск не просится.
+            // ProjectSettings.asset is not saved to disk on its own.
             if (definesChanged)
                 AssetDatabase.SaveAssets();
 
@@ -103,8 +101,8 @@ namespace LongLeap.Core.Editor
 
     public readonly struct ProjectWriteResult
     {
-        // Символы компиляции изменились, а значит будет перекомпиляция — и до
-        // её конца собирать игру нельзя: код под #if соберётся по старому.
+        // Defines changed, so a recompilation follows. Do not build until it
+        // finishes: code under #if would be compiled the old way.
         public bool DefinesChanged { get; }
 
         public bool AssetsChanged { get; }
