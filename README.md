@@ -1,5 +1,4 @@
 # LongLeap Packages
-test
 <https://gitea.longleap.games/Long_Leap_Games/Packages>
 
 Shared Unity package library for LongLeap games. 20 UPM packages in a single Git
