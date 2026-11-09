@@ -53,6 +53,16 @@ namespace LongLeap.BuildManager.Editor
         // fires before the reload, while the old assemblies are still loaded.)
         [SerializeField] private bool _awaitingRecompile;
 
+        // The version the next Build writes to PlayerSettings.bundleVersion,
+        // and the current version it was suggested for. When the current
+        // version moves (a Build saved it, or someone edited Player Settings)
+        // the new one is suggested again; otherwise the typed text is kept,
+        // even while it is invalid, so a half-typed value is not overwritten.
+        [SerializeField] private string _newVersion;
+        [SerializeField] private string _versionSeen;
+
+        private string _currentVersion;
+
         private SavedProjectOptionState _saved;
         private Dictionary<string, string> _pendingMap;
         private StagedProjectOptionState _staged;
@@ -137,6 +147,10 @@ namespace LongLeap.BuildManager.Editor
                     MessageType.Info);
             }
 
+            // After every option section, so it reads as the last step before
+            // Build.
+            DrawVersion();
+
             DrawWarnings();
 
             EditorGUILayout.EndScrollView();
@@ -170,6 +184,8 @@ namespace LongLeap.BuildManager.Editor
             // Before RefreshDerived, which builds the toolbar label from it.
             if (string.IsNullOrEmpty(_selectedPresetId))
                 _selectedPresetId = InferPreset();
+
+            SyncVersion();
 
             RefreshDerived();
 
@@ -241,6 +257,21 @@ namespace LongLeap.BuildManager.Editor
                 "You have staged build options that have not been applied.";
 
             titleContent = new GUIContent(IsDirty ? DirtyTitle : Title);
+        }
+
+        private void SyncVersion()
+        {
+            _currentVersion = PlayerSettings.bundleVersion ?? string.Empty;
+
+            if (_versionSeen == _currentVersion && _newVersion != null)
+                return;
+
+            _versionSeen = _currentVersion;
+            _newVersion = BundleVersion.Increment(_currentVersion);
+
+            // A focused text field keeps showing its own edit buffer and would
+            // hide the new suggestion.
+            GUIUtility.keyboardControl = 0;
         }
 
         private ProjectOptionAvailability SafeAvailability(ProjectOption option)
@@ -696,7 +727,10 @@ namespace LongLeap.BuildManager.Editor
                     using (new EditorGUI.DisabledScope(buildBlocked != null))
                     {
                         if (GUILayout.Button(
-                                new GUIContent(_buildLabel, "Build with the options as applied."),
+                                new GUIContent(
+                                    _buildLabel,
+                                    "Save the new version to Player Settings, then build with the " +
+                                    "options as applied."),
                                 GUILayout.Height(24f)))
                         {
                             EditorApplication.delayCall += Build;
@@ -708,6 +742,37 @@ namespace LongLeap.BuildManager.Editor
                     EditorGUILayout.HelpBox(buildBlocked, MessageType.Info);
             }
         }
+
+        // Current version (locked) -> new version (editable). The new version
+        // is written by Build, not by Apply: it needs no recompile, and every
+        // build gets its own number, failed builds included.
+        private void DrawVersion()
+        {
+            const string tooltip =
+                "The left value is the current PlayerSettings.bundleVersion (Application.version). " +
+                "Build saves the right value there before building. It must be higher.";
+
+            bool busy = EditorApplication.isCompiling
+                || EditorApplication.isUpdating
+                || EditorApplication.isPlayingOrWillChangePlaymode;
+
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label(new GUIContent("Version", tooltip), GUILayout.Width(52f));
+
+                using (new EditorGUI.DisabledScope(true))
+                    EditorGUILayout.TextField(_currentVersion, GUILayout.MinWidth(60f));
+
+                GUILayout.Label("->", GUILayout.Width(20f));
+
+                using (new EditorGUI.DisabledScope(busy))
+                    _newVersion = EditorGUILayout.TextField(_newVersion, GUILayout.MinWidth(60f));
+            }
+        }
+
+        private string VersionProblem() =>
+            BundleVersion.Validate(_currentVersion, _newVersion?.Trim());
 
         // The label is computed from the STAGED state, so you can see what an
         // edit will lead to before Apply. The build itself always uses the
@@ -743,7 +808,9 @@ namespace LongLeap.BuildManager.Editor
             if (EditorApplication.isPlayingOrWillChangePlaymode)
                 return "Exit Play Mode first.";
 
-            return _buildBlockedReason;
+            // Checked live: the field changes on every keystroke, and the
+            // check is a cheap string parse.
+            return _buildBlockedReason ?? VersionProblem();
         }
 
         private string ProjectBuildBlockedReason()
@@ -979,6 +1046,8 @@ namespace LongLeap.BuildManager.Editor
             if (target == null)
                 return;
 
+            SaveVersion();
+
             try
             {
                 target.Build();
@@ -990,6 +1059,23 @@ namespace LongLeap.BuildManager.Editor
 
             _stateValid = false;
             Repaint();
+        }
+
+        // Runs BEFORE the build: Application.version is baked into the player
+        // at build time. A failed build keeps the new number, so the next
+        // Build suggests the one after it.
+        private void SaveVersion()
+        {
+            string from = PlayerSettings.bundleVersion;
+            string to = _newVersion.Trim();
+
+            PlayerSettings.bundleVersion = to;
+
+            // Writes ProjectSettings.asset now, so the version survives an
+            // editor crash during the build.
+            AssetDatabase.SaveAssets();
+
+            Debug.Log($"{Title}: version {from} -> {to}.");
         }
 
         private readonly struct Change
