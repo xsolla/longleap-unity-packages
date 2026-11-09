@@ -13,6 +13,7 @@
   "changelogUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.localization/CHANGELOG.md",
   "licensesUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.localization/LICENSE.md",
   "dependencies": {
+    "com.unity.addressables": "2.9.1",
     "com.unity.localization": "1.5.0",
     "com.unity.ugui": "2.0.0"
   }

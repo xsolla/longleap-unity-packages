@@ -4,15 +4,7 @@ Hierarchical stat system with wildcard subscriptions, accumulate/max cascading, 
 
 ## Data Sources
 
-Cloud save JSON under key `"stats_data"`. Only `Value` and `MaxValue` leaves are persisted; non-leaf aggregates are recalculated on load.
-
-```json
-{
-  "kill:monk:grunt": 3,
-  "kill:monk:brute": 7,
-  "bighit:monk": 50
-}
-```
+Leaf values (`Value`, `MaxValue`) are saved one by one through an `IStatPersistence` the game provides; non-leaf aggregates are recalculated on load. The package ships no persistence — a cloud-save one typically stores each leaf under its own key, e.g. `stat_kill:monk:grunt` → `"3"`, `stat_bighit:monk` → `"50"`.
 
 ## Public API
 
@@ -21,6 +13,7 @@ Cloud save JSON under key `"stats_data"`. Only `Value` and `MaxValue` leaves are
 | `StatType` | Enum | `Value`, `MaxValue` (leaves), `Accumulate`, `Max` (branches) |
 | `StatPath` | Readonly struct `: IEquatable<StatPath>` | Colon-delimited hierarchical key. Validation, `Parent`, `Append`, `Matches` with `*` wildcard. Implicit from `string` |
 | `IStatSystem` | Interface | `Subscribe(StatPath, Action<StatPath, long>)`, `Unsubscribe`, `UnsubscribeAll`, `GetAggregate(StatPath)` -> long |
+| `IStatPersistence` | Interface | Game-implemented storage: `SaveAsync(StatPath, long)`, `LoadAsync(StatPath)` -> `StatValue` (`StatValue.None` when nothing is stored) |
 | `StatsSystem` | Sealed class `: IStatSystem` | Full implementation. Thread-safe. `Define`, `Set`, `Add`, `Get`, `SaveAsync`, `LoadAsync` |
 
 ## Initialization
@@ -35,7 +28,8 @@ stats.Define("kill:monk:grunt", StatType.Value);
 stats.Define("bighit", StatType.Max);
 stats.Define("bighit:monk", StatType.MaxValue);
 
-await stats.LoadAsync(cloudSave);  // restores saved values
+IStatPersistence persistence = myPersistence;  // game-implemented, e.g. over cloud saves
+await stats.LoadAsync(persistence);  // restores saved values
 ```
 
 ## Usage
@@ -68,8 +62,8 @@ long allKills = stats.GetAggregate("kill");             // pre-computed branch v
 ### Persistence
 
 ```csharp
-await stats.SaveAsync(cloudSave);  // writes leaves changed since the last successful save
-await stats.LoadAsync(cloudSave);
+await stats.SaveAsync(persistence);  // writes leaves changed since the last successful save
+await stats.LoadAsync(persistence);
 ```
 
 There is no built-in auto-save: `Task.Delay` does not work on WebGL, so the game calls

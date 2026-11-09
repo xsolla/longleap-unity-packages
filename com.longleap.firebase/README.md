@@ -15,7 +15,7 @@ Production Firebase backends for LongLeap services: anonymous auth, cloud saves,
 
 Interfaces come from `com.longleap.core`, except `IRemoteConfigProvider` (from `com.longleap.remoteconfig`) and `ILeaderboardProvider` (from `com.longleap.xsollaid`).
 
-`FirebaseLeaderboardProvider` is in its own assembly, `LongLeap.Firebase.Leaderboards` (`Runtime.Leaderboards/`), compiled only with `XSOLLA_ID`, because the leaderboard contracts exist only with that define. This package does not declare a dependency on `com.longleap.xsollaid`; that assembly needs it present.
+`FirebaseLeaderboardProvider` is in its own assembly, `LongLeap.Firebase.Leaderboards` (`Runtime.Leaderboards/`), compiled only with `XSOLLA_ID`, because the leaderboard contracts exist only with that define. `com.longleap.xsollaid` is an optional dependency: it is not in `package.json`, and the assembly also requires the `LONGLEAP_XSOLLAID` version define, so without that package it is simply not compiled instead of failing.
 
 ## Setup
 

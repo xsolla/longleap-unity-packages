@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -61,23 +62,13 @@ namespace LongLeap.GamePix.Editor
             return true;
         }
 
+        // The plugin asmdefs, for the import watcher (GamePixPluginImportWatcher).
+        public static IReadOnlyList<string> AsmdefPaths => PluginAsmdefPaths;
+
         // Returns the number of files patched.
         public static int Restore(IProjectWriteContext context)
         {
-            int patched = 0;
-
-            foreach (string path in PluginAsmdefPaths)
-            {
-                if (!File.Exists(path))
-                {
-                    context.LogError(
-                        $"GamePixAsmdefConstraints: {path} not found — the plugin is damaged or was not fully reinstalled.");
-                    continue;
-                }
-
-                if (TryAddConstraint(path, context))
-                    patched++;
-            }
+            int patched = RestoreFiles(context.LogError);
 
             if (patched == 0)
             {
@@ -92,6 +83,29 @@ namespace LongLeap.GamePix.Editor
             context.Log(
                 $"GamePixAsmdefConstraints: the {DefineSymbol} constraint was restored in {patched} asmdef(s). " +
                 "The plugin is switched off together with the define again; a regular WebGL build no longer pulls it in.");
+
+            return patched;
+        }
+
+        // Patches the files only: no refresh, no summary log. Returns the number
+        // of files changed. Shared by the Build Manager option (Restore) and the
+        // automatic repair after a plugin import.
+        public static int RestoreFiles(Action<string> logError)
+        {
+            int patched = 0;
+
+            foreach (string path in PluginAsmdefPaths)
+            {
+                if (!File.Exists(path))
+                {
+                    logError(
+                        $"GamePixAsmdefConstraints: {path} not found — the plugin is damaged or was not fully reinstalled.");
+                    continue;
+                }
+
+                if (TryAddConstraint(path, logError))
+                    patched++;
+            }
 
             return patched;
         }
@@ -113,7 +127,7 @@ namespace LongLeap.GamePix.Editor
         }
 
         // Returns true if the file was actually changed.
-        private static bool TryAddConstraint(string asmdefPath, IProjectWriteContext context)
+        private static bool TryAddConstraint(string asmdefPath, Action<string> logError)
         {
             string text = File.ReadAllText(asmdefPath);
 
@@ -121,7 +135,7 @@ namespace LongLeap.GamePix.Editor
 
             if (!match.Success)
             {
-                context.LogError(
+                logError(
                     $"GamePixAsmdefConstraints: no defineConstraints field in {asmdefPath} — " +
                     "the asmdef format has changed, add the constraint manually.");
                 return false;

@@ -9,9 +9,12 @@ Every package is embedded (local), so an Editor change is live at once — there
 no publish step.
 
 This file is the single entry point: what every package is, how to add it, and how
-to use it. Each package folder also keeps its own `README.md` (full API tables,
-internals) and usually a `CONTEXT.md` (vocabulary and invariants) — follow the
-**Details** link at the end of each package section when you need more.
+to use it. Each released package also keeps its own `README.md` (full API tables,
+internals) and `CONTEXT.md` (vocabulary and invariants) — follow the **Details**
+link at the end of each package section when you need more.
+
+Four packages are internal and not released; they are described separately in
+[Internal packages](#internal-packages-not-released).
 
 ## Contents
 
@@ -22,11 +25,12 @@ internals) and usually a `CONTEXT.md` (vocabulary and invariants) — follow the
 - [Typical startup order](#typical-startup-order)
 - Packages
   - Foundation: [core](#comlongleapcore) · [localization](#comlongleaplocalization) · [tools](#comlongleaptools)
-  - Features: [stats](#comlongleapstats) · [achievements](#comlongleapachievements) · [dailyrewards](#comlongleapdailyrewards) · [dailyquests](#comlongleapdailyquests) · [settings](#comlongleapsettings) · [analytics](#comlongleapanalytics) · [remoteconfig](#comlongleapremoteconfig) · [skins](#comlongleapskins) · [skins.spine](#comlongleapskinsspine) · [customization](#comlongleapcustomization)
+  - Features: [stats](#comlongleapstats) · [achievements](#comlongleapachievements) · [dailyrewards](#comlongleapdailyrewards) · [dailyquests](#comlongleapdailyquests) · [settings](#comlongleapsettings) · [analytics](#comlongleapanalytics) · [remoteconfig](#comlongleapremoteconfig)
   - Backends: [firebase](#comlongleapfirebase) · [nullproviders](#comlongleapnullproviders) · [gamepix](#comlongleapgamepix) · [backpack](#comlongleapbackpack)
   - Identity: [xsollaid](#comlongleapxsollaid)
   - Team kits: [bootstrap](#comlongleapbootstrap) · [ui](#comlongleapui)
-  - Tooling: [buildmanager](#comlongleapbuildmanager) · [devtools](#comlongleapdevtools)
+  - Tooling: [buildmanager](#comlongleapbuildmanager)
+- [Internal packages (not released)](#internal-packages-not-released): [skins](#comlongleapskins) · [skins.spine](#comlongleapskinsspine) · [customization](#comlongleapcustomization) · [devtools](#comlongleapdevtools)
 - [Scripting defines](#scripting-defines)
 - [Conventions](#conventions)
 - [Working on the library](#working-on-the-library)
@@ -79,8 +83,9 @@ change together.
 
 ### 3. Reference the assemblies
 
-Package assemblies are not auto-referenced. Add the runtime assembly (e.g.
-`LongLeap.Stats`) to your game's `.asmdef` references. Naming rule:
+Runtime assemblies are auto-referenced, so code in `Assembly-CSharp` sees them
+as soon as the package is in the manifest. A game with its own `.asmdef` files
+must add them to that asmdef's references (e.g. `LongLeap.Stats`). Naming rule:
 `com.longleap.stats` → `LongLeap.Stats`.
 
 ### 4. (Optional) Run the package tests
@@ -114,9 +119,6 @@ Unity runs package tests only for packages listed under `testables`:
 | `com.longleap.settings` | Typed settings (numeric / bool / enum / key binding) with per-group cloud persistence and a code-built settings panel. | core, localization, tools |
 | `com.longleap.analytics` | GA4 Measurement Protocol: validated events, batching/retry, sessions, consent, A/B tagging, WebGL `sendBeacon` transport. | core |
 | `com.longleap.remoteconfig` | Typed remote parameters with inline defaults, cache, throttling, deferred activation, A/B experiment info. | core |
-| `com.longleap.skins` | Engine-agnostic skin catalog model (`SkinId`, `ISkinCatalog`). | — |
-| `com.longleap.skins.spine` | Spine skin folders → customization categories (JSON layout), Skin Layout Editor. | skins (+ host Spine runtime) |
-| `com.longleap.customization` | Player skin inventory, equipped outfit, colours (cloud-saved), and the UGUI customization panel. | core, skins |
 
 **Backends** — provider implementations, chosen by game code at construction
 
@@ -145,7 +147,10 @@ Unity runs package tests only for packages listed under `testables`:
 | Package | What it is | Depends on | Gate |
 |---|---|---|---|
 | `com.longleap.buildmanager` | Editor window (**LongLeap / Build Manager**) that stages build options, applies them in one batch and dispatches the build. | — | Editor only |
-| `com.longleap.devtools` | In-build debug widgets; currently a cloud save viewer. | core, buildmanager | `LONGLEAP_DEBUG` |
+
+**Internal** — in the repo for our own games, not released: `customization`,
+`skins`, `skins.spine`, `devtools`. See
+[Internal packages](#internal-packages-not-released).
 
 ---
 
@@ -163,11 +168,7 @@ Three words carry the whole design. They are defined in
 Each service is constructed on its own (`new CloudSaveService(provider, prefs)`).
 The container that holds them (`ServiceContainer`) and the loading pipeline come
 from `com.longleap.bootstrap`; which services to build, and in what order, is game
-code.
-
-> `core/CONTEXT.md` also defines a **`ServiceBuilder`** with a fluent `Build()`.
-> **No `ServiceBuilder` exists anywhere in the repo** — that entry is stale; the
-> container is `ServiceContainer` in `com.longleap.bootstrap`.
+code. There is no `ServiceBuilder` — older docs mentioned one; it never existed.
 
 Rules worth knowing before you add anything:
 
@@ -176,9 +177,11 @@ Rules worth knowing before you add anything:
   constructs the service.
 - **Null backends are opt-in, never a silent fallback.** They ship in `Runtime`
   (not `Tests`) and must be chosen explicitly at construction.
-- **Avoid the names** *Manager*, *Controller*, *System*, *Adapter*, *Stub*, *Mock*
-  for these roles — each `CONTEXT.md` lists the rejected synonyms for its own
-  vocabulary.
+- **Name new services, providers and backends after what they are**, not with
+  *Manager*, *Controller*, *System*, *Adapter*, *Stub* or *Mock* — each
+  `CONTEXT.md` lists the rejected synonyms for its own vocabulary. A few older
+  names predate the rule (`StatsSystem`, `AchievementSystem`,
+  `UnityPlayerPrefsAdapter`) and are kept for compatibility.
 
 ---
 
@@ -193,7 +196,7 @@ How the packages fit together in a game's boot sequence. Each step is usually on
 4. **Identity** — Xsolla ID auth (`XsollaIdFactory.Create`), or the GamePix auth on the portal.
 5. **Account gate + save switch** — decide guest/account *before* the save service starts.
 6. **Cloud saves** — `CloudSaveService(provider, prefs)` → `InitializeAsync()`.
-7. **Feature services on top of saves** — stats → achievements → daily rewards / daily quests → settings → customization.
+7. **Feature services on top of saves** — stats → achievements → daily rewards / daily quests → settings.
 8. **UI** — `WindowService`, bind windows with `OnCreated<T>`, notifications.
 9. **Scene** — `LoadSceneTask`.
 
@@ -229,6 +232,8 @@ implementations.
 
 ```csharp
 using LongLeap.Core;
+using LongLeap.Core.Ads;
+using LongLeap.Core.Auth;
 using LongLeap.Core.CloudSaves;
 
 // Storage. PlayerPrefsPersistentStorage is WebGL-safe; FilePersistentStorage is not.
@@ -255,7 +260,7 @@ ads.ShowRewarded(r => { if (r == AdResult.Completed) GrantReward(); });
 - `CloudSaveKey` throws on `. $ # [ ] /`.
 - `FilePersistentStorage` runs on the thread pool — **not for WebGL**.
 - Call `IAdsProvider.Tick()` every frame; gate unscaled-time code with `IsAdShowing`.
-- `ResetLocalCacheAsync` forgets the local mirror only; `DeleteAllAsync` also erases the cloud save.
+- `CloudSaveService.ResetLocalCacheAsync` (concrete class only, not on `ICloudSaveService`) forgets the local mirror; `DeleteAllAsync` also erases the cloud save.
 
 **Details:** [`com.longleap.core/README.md`](com.longleap.core/README.md), [`CONTEXT.md`](com.longleap.core/CONTEXT.md).
 
@@ -270,7 +275,7 @@ locale, the serializable `LocKey`, and the `LocalizedText` component for TMP / u
 text.
 
 **Install.** `"com.longleap.localization": "file:LongLeap/com.longleap.localization"`.
-Assembly `LongLeap.Localization`. Pulls `com.unity.localization` 1.5.0 and `com.unity.ugui`.
+Assembly `LongLeap.Localization`. Pulls `com.unity.localization` 1.5.0, `com.unity.addressables` and `com.unity.ugui`.
 
 **How to use.**
 
@@ -356,7 +361,7 @@ PageVisibility.Changed += hidden => { if (hidden) Save(); };
 - `PageVisibility` only fires in WebGL players; keep `OnApplicationPause` for native mobile.
 - Don't check `Application.isMobilePlatform` / `UNITY_WEBGL` in game code — ask `DeviceInfo`.
 
-**Details:** [`com.longleap.tools/README.md`](com.longleap.tools/README.md).
+**Details:** [`com.longleap.tools/README.md`](com.longleap.tools/README.md), [`CONTEXT.md`](com.longleap.tools/CONTEXT.md).
 
 ---
 
@@ -364,9 +369,9 @@ PageVisibility.Changed += hidden => { if (hidden) Save(); };
 
 **What it is.** A hierarchical stat system. Paths are colon-delimited
 (`kill:monk:grunt`); branches aggregate their children (`Accumulate` = sum,
-`Max` = max); subscriptions accept `*` wildcards. Leaves are persisted to cloud
-saves under the key `stats_data`. Achievements and daily quests derive progress
-from it.
+`Max` = max); subscriptions accept `*` wildcards. Leaf values are saved one by
+one through an `IStatPersistence` the game provides (branches are recalculated on
+load). Achievements and daily quests derive progress from it.
 
 **Install.** `"com.longleap.stats": "file:LongLeap/com.longleap.stats"` (+ core).
 Assembly `LongLeap.Stats`.
@@ -383,7 +388,8 @@ stats.Define("kill:monk:grunt", StatType.Value);
 stats.Define("bighit", StatType.Max);
 stats.Define("bighit:monk", StatType.MaxValue);
 
-await stats.LoadAsync(cloudSave);
+IStatPersistence persistence = new CloudSaveStatPersistence(cloudSave);   // yours, see below
+await stats.LoadAsync(persistence);
 
 stats.Add("kill:monk:grunt", 1);        // parents recalculate automatically
 stats.Set("bighit:monk", 50);           // MaxValue keeps max(current, 50)
@@ -391,8 +397,32 @@ stats.Set("bighit:monk", 50);           // MaxValue keeps max(current, 50)
 stats.Subscribe("kill:*:grunt", (path, value) => { /* ... */ });
 long allKills = stats.GetAggregate("kill");
 
-await stats.SaveAsync(cloudSave);       // writes only leaves changed since the last save
+await stats.SaveAsync(persistence);     // writes only leaves changed since the last save
 ```
+
+The package ships no persistence; a cloud-save one is a few lines:
+
+```csharp
+public sealed class CloudSaveStatPersistence : IStatPersistence
+{
+    private readonly ICloudSaveService _saves;
+    public CloudSaveStatPersistence(ICloudSaveService saves) => _saves = saves;
+
+    public Task SaveAsync(StatPath path, long value) =>
+        _saves.SetStringAsync(Key(path), value.ToString(CultureInfo.InvariantCulture));
+
+    public async Task<StatValue> LoadAsync(StatPath path)
+    {
+        string raw = await _saves.GetStringAsync(Key(path));
+        return long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out long v)
+            ? StatValue.Of(v) : StatValue.None;
+    }
+
+    private static CloudSaveKey Key(StatPath path) => new CloudSaveKey("stat_" + path.Value);
+}
+```
+
+Colons in stat paths are valid in a `CloudSaveKey`, so nested stats need no renaming.
 
 **Pitfalls.**
 - **No auto-save** — call `SaveAsync` yourself (timer, pause, quit). `Task.Delay` does not work on WebGL.
@@ -463,7 +493,7 @@ calendar view-model for the UI, and crash-safe "save, then grant" claiming.
 
 **How to use.**
 
-1. Create the config: *Assets ▸ Create ▸ LongLeap ▸ Daily Rewards ▸ Config*. Fill `Days` (reward key such as `soft` + amount), `CyclePolicy`, `ResetHourUtc`, `GracePeriod`.
+1. Create the config: *Assets ▸ Create ▸ LongLeap ▸ Daily Rewards ▸ Config*. In the Inspector fill the days (each: reward key such as `soft` + amount), the cycle policy (`Once` / `Loop`), the reset hour (UTC) and the grace period.
 2. Pick a state store: `new JsonDailyRewardsStateStore(persistentStorage)`, or your own over cloud saves that reuses `JsonDailyRewardsStateStore.Parse(json)`.
 3. Implement the bridge — its only job is granting the reward:
 
@@ -552,7 +582,7 @@ JSON, progress comes from `IStatSystem`, state is stored through
 - A typo in `statPath` is only a validator **warning** — that quest can never complete.
 - A store that cannot answer must return `Unavailable()`; the service then stays off until restart, so claimed rewards can't be granted twice.
 
-**Details:** [`com.longleap.dailyquests/README.md`](com.longleap.dailyquests/README.md) (in Russian), [`CONTEXT.md`](com.longleap.dailyquests/CONTEXT.md).
+**Details:** [`com.longleap.dailyquests/README.md`](com.longleap.dailyquests/README.md), [`CONTEXT.md`](com.longleap.dailyquests/CONTEXT.md).
 
 ---
 
@@ -704,74 +734,6 @@ and call `remoteConfig.Activate()` at a safe moment.
 
 ---
 
-## com.longleap.skins
-
-**What it is.** An engine-agnostic skin catalog model: what skins and categories
-exist in the game (content, not player state). Typed ids `SkinId`, `SkinCategoryId`;
-`SkinAvailability` (`Locked`, `OwnedFromStart`, `Default`, `Disabled`);
-`ISkinCatalog` and its in-memory `SkinCatalog`. No Spine dependency.
-
-**Install.** `"com.longleap.skins": "file:LongLeap/com.longleap.skins"`. Assembly
-`LongLeap.Skins` (no references).
-
-**How to use.** Usually you don't build the catalog by hand — `com.longleap.skins.spine`
-builds it from a layout JSON (`SkinLayout.BuildCatalog`). For tests and tools,
-`SkinCatalog.Add` is public, so a catalog can be built without assets. Which skins a
-player owns is the job of `com.longleap.customization` (`InventoryService`).
-
-**Details:** [`com.longleap.skins/README.md`](com.longleap.skins/README.md).
-
----
-
-## com.longleap.skins.spine
-
-**What it is.** Maps the skin folders of a Spine skeleton onto customization
-categories, and edits that mapping. Runtime: `SkinLayout` (JSON model →
-`ISkinCatalog`), `SkinLayoutSourceSO` (skeleton + layout JSON + icons),
-`SpineAppearanceConfig` (colour zones, slot hide rules). Editor: the **Skin Layout
-Editor** window.
-
-**Install.** `"com.longleap.skins.spine": "file:LongLeap/com.longleap.skins.spine"`
-(+ skins). **The host project must provide the Spine runtime** with its standard
-assembly names `spine-unity` and `spine-csharp`, or this package does not compile.
-
-**How to use.**
-
-1. Open **LongLeap ▸ Skin Layout Editor**; drag Spine skin folders into categories; set titles, availability, default colours, colour zones, icons and hide rules.
-2. Create a `SkinLayoutSourceSO` pointing at the skeleton and the layout JSON (icons are stored here, since JSON can't hold sprite references).
-3. Load the asset however your game prefers (Resources, Addressables, a field) and build the catalog for `com.longleap.customization`.
-
-**Details:** [`com.longleap.skins.spine/README.md`](com.longleap.skins.spine/README.md).
-
----
-
-## com.longleap.customization
-
-**What it is.** Character customization: what the player owns
-(`InventoryService`), what they wear (`EquipmentService` — one skin per group, or
-many for multi-select groups), what colour it is (`ColorService`), all cloud-saved,
-plus the UGUI `CustomizationPanel` that drives them. Skeleton-agnostic: the host
-implements three small interfaces for its own character.
-
-**Install.** `"com.longleap.customization": "file:LongLeap/com.longleap.customization"`
-(+ core, skins). Assemblies `LongLeap.Customization` and `LongLeap.Customization.UI`.
-
-**How to use.**
-
-1. Build the catalog (`com.longleap.skins.spine`), then the services in this order: `InventoryService` → `EquipmentService` (needs inventory) → `ColorService`. Persist with the `CloudSave*Persistence` classes over `ICloudSaveService` (keys `inventory_skins`, `equipped_{category}`, `player_colors`).
-2. On your character, implement:
-   - `ISkinTarget.SetSkins(IReadOnlyList<string>)` — wear exactly this set (required);
-   - `IColorTarget` — `SetZoneColor`, `SetSkinColor` (optional; no colour button without it);
-   - `IPreviewPose.Focus(string group)` — turn the preview to the edited group (optional).
-3. Create materials from the shaders `LongLeap/Customization/HSVSquare` and `LongLeap/Customization/HueStrip` and put them on the palette and hue slider images.
-4. Bind the panel: `BindCharacter` / `Bind` with the character, `BindPlayer(inventory, equipment, colors)` with the services.
-
-Each service has a `Null*` implementation for builds without customization.
-
-**Details:** [`com.longleap.customization/README.md`](com.longleap.customization/README.md).
-
----
-
 ## com.longleap.firebase
 
 **What it is.** Production Firebase backends over REST (no Firebase SDK, so it
@@ -782,7 +744,7 @@ Remote Config with A/B info (`FirebaseRemoteConfigProvider`) and leaderboards
 
 **Install.** `"com.longleap.firebase": "file:LongLeap/com.longleap.firebase"` (+ core,
 remoteconfig). Assembly `LongLeap.Firebase`; leaderboards in
-`LongLeap.Firebase.Leaderboards` (needs `com.longleap.xsollaid` and `XSOLLA_ID`).
+`LongLeap.Firebase.Leaderboards` (compiles only with `XSOLLA_ID` and `com.longleap.xsollaid` installed — an optional dependency).
 
 **How to use.**
 
@@ -862,8 +824,8 @@ xsollaid, buildmanager). WebGL only.
 
 **How to use.**
 
-1. Import the vendor plugin into **`Assets/Plugins/GamePix`** (the path is hard-wired).
-2. **GamePix ▸ Required ▸ Plugin Has defineConstraints** — restore the plugin's `GAMEPIX` constraint (every plugin update wipes it).
+1. Import the vendor plugin `.unitypackage`; it installs into **`Assets/Plugins/GamePix`**. Keep it there — the vendor code is hard-wired to that path, so it cannot ship inside this package.
+2. Nothing to do for the plugin's asmdefs: every plugin import strips their `GAMEPIX` constraint, and the package puts it back automatically right after the import (logged in the console). **GamePix ▸ Required ▸ Plugin Has defineConstraints** does the same by hand, e.g. if the plugin was updated before this package was added.
 3. **GamePix ▸ Required ▸ Plugin Enabled (GAMEPIX)**.
 4. If the plugin has no `Assets/Plugins/GamePix/User` folder, also enable **GamePix ▸ Optional ▸ Xsolla ID via JS Bridge (GAMEPIX_JS)**.
 5. In code:
@@ -890,7 +852,7 @@ xsollaid, buildmanager). WebGL only.
 - `GAMEPIX_AD_DEBUG` must be off before portal review.
 - The portal has no sign-out (`CanSignOut == false`).
 
-**Details:** [`com.longleap.gamepix/README.md`](com.longleap.gamepix/README.md).
+**Details:** [`com.longleap.gamepix/README.md`](com.longleap.gamepix/README.md), [`CONTEXT.md`](com.longleap.gamepix/CONTEXT.md).
 
 ---
 
@@ -971,7 +933,7 @@ is not a compile error, so this is the first place to look when the account bloc
 
 Shared: `scopes` (default `openid offline email profile` — **`offline`, not
 `offline_access`**, or refresh can fail with `invalid_scope`) and
-`allowedGameOrigins` (checked before the window opens; empty = no check). Build
+`allowedGameOrigins` (checked before the window opens; default `http://127.0.0.1:8081` for local testing — add your real game origins, or empty the list to skip the check). Build
 Manager blocks the build when `XSOLLA_ID` is on and `clientId` / `redirectUri` is
 empty.
 
@@ -1084,7 +1046,7 @@ Providers: `XsollaLeaderboardProvider` / `XsollaLeagueProvider`, `FirebaseLeader
 **Pitfalls.**
 - Don't copy `XsollaId.jslib` or `xid-callback.html` into `Assets/`; don't create a `XsollaIdCallbacks` object — the package handles all three.
 - `XSOLLA_ID_DEBUG` (F9/F10/F11 debug sign-in) must not ship to the portal.
-- Working reference: `Assets/Scripts/Bootstrap/Loading/Tasks/XsollaIdTask.cs`.
+- Working reference (in the Darkslide game, not this repo): `Assets/Scripts/Bootstrap/Loading/Tasks/XsollaIdTask.cs`.
 
 **Details:** [`com.longleap.xsollaid/README.md`](com.longleap.xsollaid/README.md), [`UI/README.md`](com.longleap.xsollaid/UI/README.md), [`CONTEXT.md`](com.longleap.xsollaid/CONTEXT.md).
 
@@ -1139,10 +1101,10 @@ _wait = GameServices.WhenAvailable<IPlayerService>(Bind);   // dispose _wait in 
 
 **Pitfalls.**
 - Register under the contract callers ask for (`Register<IAudioService>(...)`); without a type argument it registers under the concrete type.
-- A failed `LoadingTask` is skipped; override `IsCritical => true` to stop loading instead.
+- A failed `LoadingTask` is skipped; add `protected override bool IsCritical => true;` to stop loading instead.
 - Frame-based (`Awaitable`), no threads — WebGL-safe.
 
-**Details:** [`com.longleap.bootstrap/README.md`](com.longleap.bootstrap/README.md).
+**Details:** [`com.longleap.bootstrap/README.md`](com.longleap.bootstrap/README.md), [`CONTEXT.md`](com.longleap.bootstrap/CONTEXT.md).
 
 ---
 
@@ -1230,7 +1192,89 @@ declare options.
 - An editor assembly that enables a define must never have that define in its own `defineConstraints`.
 - No `[InitializeOnLoad]` may query `ProjectOptionRegistry`; descriptors hold paths and delegates, never `UnityEngine.Object`.
 
-**Details:** [`com.longleap.buildmanager/README.md`](com.longleap.buildmanager/README.md).
+**Details:** [`com.longleap.buildmanager/README.md`](com.longleap.buildmanager/README.md), [`CONTEXT.md`](com.longleap.buildmanager/CONTEXT.md).
+
+---
+
+# Internal packages (not released)
+
+These stay in the repo for our own games. They are not part of a release, carry no
+compatibility promise and are exempt from the documentation conventions.
+
+| Package | What it is | Depends on | Gate |
+|---|---|---|---|
+| `com.longleap.skins` | Engine-agnostic skin catalog model (`SkinId`, `ISkinCatalog`). | — | — |
+| `com.longleap.skins.spine` | Spine skin folders → customization categories (JSON layout), Skin Layout Editor. | skins (+ host Spine runtime) | — |
+| `com.longleap.customization` | Player skin inventory, equipped outfit, colours (cloud-saved), and the UGUI customization panel. | core, skins | — |
+| `com.longleap.devtools` | In-build debug widgets; currently a cloud save viewer. | core, buildmanager | `LONGLEAP_DEBUG` |
+
+---
+
+## com.longleap.skins
+
+**What it is.** An engine-agnostic skin catalog model: what skins and categories
+exist in the game (content, not player state). Typed ids `SkinId`, `SkinCategoryId`;
+`SkinAvailability` (`Locked`, `OwnedFromStart`, `Default`, `Disabled`);
+`ISkinCatalog` and its in-memory `SkinCatalog`. No Spine dependency.
+
+**Install.** `"com.longleap.skins": "file:LongLeap/com.longleap.skins"`. Assembly
+`LongLeap.Skins` (no references).
+
+**How to use.** Usually you don't build the catalog by hand — `com.longleap.skins.spine`
+builds it from a layout JSON (`SkinLayout.BuildCatalog`). For tests and tools,
+`SkinCatalog.Add` is public, so a catalog can be built without assets. Which skins a
+player owns is the job of `com.longleap.customization` (`InventoryService`).
+
+**Details:** [`com.longleap.skins/README.md`](com.longleap.skins/README.md).
+
+---
+
+## com.longleap.skins.spine
+
+**What it is.** Maps the skin folders of a Spine skeleton onto customization
+categories, and edits that mapping. Runtime: `SkinLayout` (JSON model →
+`ISkinCatalog`), `SkinLayoutSourceSO` (skeleton + layout JSON + icons),
+`SpineAppearanceConfig` (colour zones, slot hide rules). Editor: the **Skin Layout
+Editor** window.
+
+**Install.** `"com.longleap.skins.spine": "file:LongLeap/com.longleap.skins.spine"`
+(+ skins). **The host project must provide the Spine runtime** with its standard
+assembly names `spine-unity` and `spine-csharp`, or this package does not compile.
+
+**How to use.**
+
+1. Open **LongLeap ▸ Skin Layout Editor**; drag Spine skin folders into categories; set titles, availability, default colours, colour zones, icons and hide rules.
+2. Create a `SkinLayoutSourceSO` pointing at the skeleton and the layout JSON (icons are stored here, since JSON can't hold sprite references).
+3. Load the asset however your game prefers (Resources, Addressables, a field) and build the catalog for `com.longleap.customization`.
+
+**Details:** [`com.longleap.skins.spine/README.md`](com.longleap.skins.spine/README.md).
+
+---
+
+## com.longleap.customization
+
+**What it is.** Character customization: what the player owns
+(`InventoryService`), what they wear (`EquipmentService` — one skin per group, or
+many for multi-select groups), what colour it is (`ColorService`), all cloud-saved,
+plus the UGUI `CustomizationPanel` that drives them. Skeleton-agnostic: the host
+implements three small interfaces for its own character.
+
+**Install.** `"com.longleap.customization": "file:LongLeap/com.longleap.customization"`
+(+ core, skins). Assemblies `LongLeap.Customization` and `LongLeap.Customization.UI`.
+
+**How to use.**
+
+1. Build the catalog (`com.longleap.skins.spine`), then the services in this order: `InventoryService` → `EquipmentService` (needs inventory) → `ColorService`. Persist with the `CloudSave*Persistence` classes over `ICloudSaveService` (keys `inventory_skins`, `equipped_{category}`, `player_colors`).
+2. On your character, implement:
+   - `ISkinTarget.SetSkins(IReadOnlyList<string>)` — wear exactly this set (required);
+   - `IColorTarget` — `SetZoneColor`, `SetSkinColor` (optional; no colour button without it);
+   - `IPreviewPose.Focus(string group)` — turn the preview to the edited group (optional).
+3. Create materials from the shaders `LongLeap/Customization/HSVSquare` and `LongLeap/Customization/HueStrip` and put them on the palette and hue slider images.
+4. Bind the panel: `BindCharacter` / `Bind` with the character, `BindPlayer(inventory, equipment, colors)` with the services.
+
+Each service has a `Null*` implementation for builds without customization.
+
+**Details:** [`com.longleap.customization/README.md`](com.longleap.customization/README.md).
 
 ---
 
@@ -1294,14 +1338,14 @@ All are **WebGL-target** defines, matching this project's only platform.
 `LongLeap.Stats.Editor`, `LongLeap.Stats.Tests`. Runtime code in `Runtime/`, editor
 code in `Editor/`, EditMode tests in `Tests/EditMode/`.
 
-**Two docs per package** — the convention, not yet the reality:
+**Two docs per package:**
 
 - `README.md` — how to use it: public API tables, initialization, usage snippets, internals.
 - `CONTEXT.md` — the vocabulary: what each term means, which synonyms to avoid, invariants and deliberate limits. Read this before naming anything.
 
-Current gaps: no `CONTEXT.md` in `bootstrap`, `buildmanager`, `customization`,
-`gamepix`, `skins`, `skins.spine`, `tools`; no `README.md` in `devtools` (covered
-above). `dailyquests/README.md` is the only package doc written in Russian.
+Every released package has both, in English. The
+[internal packages](#internal-packages-not-released) are exempt: `customization`,
+`skins` and `skins.spine` have no `CONTEXT.md`, and `devtools` has no `README.md`.
 
 **Typed newtypes over raw strings.** A raw `string` crossing a package boundary is
 a smell. All are `IEquatable<T>` and validate their input, but they do not share
@@ -1309,20 +1353,37 @@ one shape:
 
 | Newtype | Package | Invalid input |
 |---|---|---|
-| `UserId`, `IdToken` | core | `None` sentinel + `IsValid` |
+| `UserId`, `IdToken` | core | `None` sentinel + `IsValid`; throws on `""` |
 | `RewardKey` | core | `None` sentinel; throws on `""` |
 | `CloudSaveKey` | core | **throws** on `. $ # [ ] /` |
-| `BoardId` | xsollaid | regex-validated; invalid → `"invalid_board_id"`, `IsValid == false` |
-| `RewardId` | dailyrewards | `None` sentinel |
+| `BoardId` | xsollaid | `None` sentinel; regex-validated — invalid input logs an error and becomes `"invalid_board_id"` (`IsValid == false`) |
+| `RewardId` | dailyrewards | `None` sentinel; throws on `""` |
 | `StatPath` | stats | **throws**; `IsNone` for `default` |
 | `EventName` | analytics | `None` sentinel + `IsValid`; logs an error, service drops the event |
-| `SkinId`, `SkinCategoryId` | skins | `IsNone` for the empty value |
+| `SkinId`, `SkinCategoryId` | skins (internal) | `IsNone` for `default`; throws on `""` |
 | `LocKey` | localization | null and `""` are the same empty key (`IsEmpty`); the only one that is not a `readonly struct` (Unity serialization) |
 
-**Versions.** Each package keeps its own version in `package.json` (most are
-`0.1.0`). Nothing is enforced by a registry, so a `package.json` dependency list can
-drift from what the `.asmdef` actually references without anything failing. Treat
-the `.asmdef` as the truth and fix the manifest to match.
+**Versions and dependencies.** Each package keeps its own version in
+`package.json` (most are `0.1.0`). These are embedded packages, so no registry
+checks that `package.json` matches what the `.asmdef` files reference — run the
+check before a release instead:
+
+```bash
+python tools/check_dependencies.py          # all packages
+python tools/check_dependencies.py com.longleap.stats
+```
+
+It fails when an assembly references a package that `package.json` does not
+declare (directly or transitively), or when a declared LongLeap version is higher
+than the package's own. The `.asmdef` is the truth; fix `package.json` to match.
+
+**Optional dependencies.** An assembly that should compile only when another
+package is present does not list that package in `package.json`. Instead its
+`.asmdef` has a `versionDefines` entry for the package (`expression: "0.0.0"`,
+define `LONGLEAP_<NAME>`) and the same define in `defineConstraints`. Without the
+package the assembly is skipped rather than failing. Used by the `com.longleap.ui`
+feature modules and by the `XSOLLA_ID` assemblies of `firebase` and `nullproviders`
+(`LONGLEAP_XSOLLAID`). The check script understands this pattern.
 
 ---
 

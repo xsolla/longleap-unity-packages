@@ -16,6 +16,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Build Manager warnings: an error when `GAMEPIX_JS` is off but the plugin has no
   user API (`Assets/Plugins/GamePix/User`), info when `GAMEPIX_JS` is on although it has one.
 - README and this changelog.
+- `GamePixPluginImportWatcher`: restores the `GAMEPIX` constraint in the plugin's
+  asmdefs automatically after every plugin import (a plugin update used to leave a
+  plain WebGL build pulling the plugin in until the menu item was clicked).
+- `CONTEXT.md`.
 
 ### Changed
 

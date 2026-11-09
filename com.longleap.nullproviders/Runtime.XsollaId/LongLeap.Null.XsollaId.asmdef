@@ -12,7 +12,14 @@
   "precompiledReferences": [],
   "autoReferenced": true,
   "defineConstraints": [
-    "XSOLLA_ID"
+    "XSOLLA_ID",
+    "LONGLEAP_XSOLLAID"
   ],
-  "versionDefines": []
+  "versionDefines": [
+    {
+      "name": "com.longleap.xsollaid",
+      "expression": "0.0.0",
+      "define": "LONGLEAP_XSOLLAID"
+    }
+  ]
 }

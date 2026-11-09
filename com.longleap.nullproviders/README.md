@@ -21,7 +21,7 @@ It is never a silent fallback for a real backend that failed.
 | `NullAdsProvider` | `IAdsProvider` | Not available, never ready or showing. `ShowRewarded` / `ShowInterstitial` call back once, synchronously, with `AdResult.Unavailable` and log to `AdsDebug`. |
 | `NullPortalLocale` | `IPortalLocale` | `TryGetLocale` always returns `false`, so the game's own language setting applies. |
 
-¹ In the `LongLeap.Null.XsollaId` assembly (`Runtime.XsollaId/`), compiled only with `XSOLLA_ID`: the leaderboard and league interfaces live in `com.longleap.xsollaid` and exist only with that define. This package does not declare a dependency on `com.longleap.xsollaid`; that assembly needs it present.
+¹ In the `LongLeap.Null.XsollaId` assembly (`Runtime.XsollaId/`), compiled only with `XSOLLA_ID`: the leaderboard and league interfaces live in `com.longleap.xsollaid` and exist only with that define. `com.longleap.xsollaid` is an optional dependency: it is not in `package.json`, and the assembly also requires the `LONGLEAP_XSOLLAID` version define, so without that package it is simply not compiled instead of failing.
 
 The null backends for other seams live next to their interfaces, so this package
 does not pull in feature packages:

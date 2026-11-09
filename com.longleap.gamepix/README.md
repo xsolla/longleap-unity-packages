@@ -16,10 +16,14 @@ GamePix Unity plugin behind the LongLeap seams (`IAdsProvider`, `IPortalLocale`,
 
 ## Setup
 
-1. Import the vendor plugin into `Assets/Plugins/GamePix`.
-2. **GamePix / Required / Plugin Has defineConstraints** — restores the `GAMEPIX`
-   constraint in the plugin's asmdefs (every plugin update wipes it; without it a plain
-   WebGL build pulls the plugin in).
+1. Import the vendor plugin `.unitypackage` (*Assets ▸ Import Package ▸ Custom Package*).
+   It installs itself into `Assets/Plugins/GamePix`; keep it there — the vendor code
+   is hard-wired to that path, so it can't ship inside this package or be moved.
+2. Nothing to do for the plugin's asmdefs: every plugin import overwrites them without
+   the `GAMEPIX` constraint (and a plain WebGL build would then pull the plugin in), so
+   `GamePixPluginImportWatcher` puts it back right after the import and logs it.
+   **GamePix / Required / Plugin Has defineConstraints** does the same by hand — use it
+   if the plugin was updated before this package was in the project.
 3. **GamePix / Required / Plugin Enabled (GAMEPIX)**.
 4. If the plugin has no `Assets/Plugins/GamePix/User` folder, also turn on
    **GamePix / Optional / Xsolla ID via JS Bridge (GAMEPIX_JS)** (see below).
