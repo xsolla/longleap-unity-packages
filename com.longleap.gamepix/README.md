@@ -16,10 +16,12 @@ GamePix Unity plugin behind the LongLeap seams (`IAdsProvider`, `IPortalLocale`,
 
 ## Setup
 
-1. Import the vendor plugin `.unitypackage` (*Assets ▸ Import Package ▸ Custom Package*).
-   It installs itself into `Assets/Plugins/GamePix`; keep it there — the vendor code
-   is hard-wired to that path, so it can't ship inside this package or be moved.
-2. Nothing to do for the plugin's asmdefs: every plugin import overwrites them without
+1. Download the plugin `.zip` for your Unity version from the GamePix site (there is one
+   archive per Unity range) and extract it into `Assets`, so it ends up at
+   `Assets/Plugins/GamePix`. Keep it there — the vendor code is hard-wired to that path,
+   so it can't ship inside this package or be moved.
+2. Nothing to do for the plugin's asmdefs: every plugin update (a new archive extracted
+   over the old one) overwrites them without
    the `GAMEPIX` constraint (and a plain WebGL build would then pull the plugin in), so
    `GamePixPluginImportWatcher` puts it back right after the import and logs it.
    **GamePix / Required / Plugin Has defineConstraints** does the same by hand — use it

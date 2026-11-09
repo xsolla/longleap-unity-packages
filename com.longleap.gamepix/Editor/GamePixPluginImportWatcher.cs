@@ -5,8 +5,8 @@ using UnityEngine;
 namespace LongLeap.GamePix.Editor
 {
     // Puts the GAMEPIX constraint back into the vendor plugin asmdefs whenever
-    // they are imported: every plugin update (re-import of the .unitypackage)
-    // overwrites them without it, and a regular WebGL build then pulls the
+    // they are imported: every plugin update (a new .zip from GamePix extracted
+    // into Assets) overwrites them without it, and a regular WebGL build then pulls the
     // plugin's externs and auto-bootstrap in. The manual repair (menu item and
     // Build Manager row) stays for projects where this watcher was not loaded at
     // import time, e.g. the plugin was updated before this package was added.

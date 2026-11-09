@@ -42,8 +42,8 @@ Four packages are internal and not released; they are described separately in
 
 **Unity 6000.0 – 6000.4.** The floor is what every `package.json` declares
 (`"unity": "6000.0"`). The ceiling comes from the **GamePix plugin**, not from the
-packages themselves — **Unity 6000.5 requires updating the GamePix plugin** before
-the project will build. Treat an Editor upgrade past 6000.4 as a GamePix task first.
+packages themselves — **Unity 6000.5 requires updating the GamePix plugin** (GamePix
+ships a separate archive for 6000.5+) before the project will build. Treat an Editor upgrade past 6000.4 as a GamePix task first.
 
 ---
 
@@ -824,8 +824,8 @@ xsollaid, buildmanager). WebGL only.
 
 **How to use.**
 
-1. Import the vendor plugin `.unitypackage`; it installs into **`Assets/Plugins/GamePix`**. Keep it there — the vendor code is hard-wired to that path, so it cannot ship inside this package.
-2. Nothing to do for the plugin's asmdefs: every plugin import strips their `GAMEPIX` constraint, and the package puts it back automatically right after the import (logged in the console). **GamePix ▸ Required ▸ Plugin Has defineConstraints** does the same by hand, e.g. if the plugin was updated before this package was added.
+1. Download the plugin `.zip` for your Unity version from the GamePix site (one archive per Unity range — 6000.0–6000.4 and 6000.5+ are different downloads) and extract it into `Assets`, so the plugin ends up at **`Assets/Plugins/GamePix`**. Keep it there — the vendor code is hard-wired to that path, so it cannot ship inside this package.
+2. Nothing to do for the plugin's asmdefs: every plugin update (extracting a new archive over the old one) strips their `GAMEPIX` constraint, and the package puts it back automatically right after the import (logged in the console). **GamePix ▸ Required ▸ Plugin Has defineConstraints** does the same by hand, e.g. if the plugin was updated before this package was added.
 3. **GamePix ▸ Required ▸ Plugin Enabled (GAMEPIX)**.
 4. If the plugin has no `Assets/Plugins/GamePix/User` folder, also enable **GamePix ▸ Optional ▸ Xsolla ID via JS Bridge (GAMEPIX_JS)**.
 5. In code:
