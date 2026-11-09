@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using LongLeap.Backpack;
 using TMPro;
@@ -112,6 +113,12 @@ namespace LongLeap.UI
         /// <summary>The "activate" button — the window attaches its handler to it.</summary>
         public Button ActivateButton => _activateButton;
 
+        /// <summary>The state last set by the window — see <see cref="SetState"/>.</summary>
+        public BackPackItemState State { get; private set; }
+
+        /// <summary>Raised by <see cref="SetState"/>: lets a game-side skin restyle the card.</summary>
+        public event Action<BackPackItemState> StateChanged;
+
         public void Show(BackPackRewardItem item)
         {
             Item = item;
@@ -171,6 +178,8 @@ namespace LongLeap.UI
 
         public void SetState(BackPackItemState state)
         {
+            State = state;
+
             if (_activateButton != null)
                 _activateButton.interactable = state != BackPackItemState.Unavailable;
 
@@ -179,6 +188,8 @@ namespace LongLeap.UI
 
             if (_background != null && frame != null)
                 _background.sprite = frame;
+
+            StateChanged?.Invoke(state);
 
             if (_activateLabel == null) return;
 

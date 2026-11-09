@@ -1,3 +1,5 @@
+using System;
+
 namespace LongLeap.UI
 {
     /// <summary>The UI's own sounds. The game decides which clip each one is.</summary>
@@ -34,5 +36,14 @@ namespace LongLeap.UI
     /// </summary>
     public interface IOwnClickSound
     {
+    }
+
+    /// <summary>
+    /// A button that decides itself when to play <see cref="UiSound.Hover"/> (e.g. only when it
+    /// lights up, not on every pointer enter): <see cref="MenuClickAudioBinder"/> hands it the sound.
+    /// </summary>
+    public interface IHoverSound
+    {
+        Action PlayHover { set; }
     }
 }

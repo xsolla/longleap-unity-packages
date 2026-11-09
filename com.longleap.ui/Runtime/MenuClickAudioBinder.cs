@@ -6,7 +6,7 @@ namespace LongLeap.UI
 {
     /// <summary>
     /// Connects UI buttons, including ones created after the UI root has initialized,
-    /// to the click sound and press feedback.
+    /// to the click sound and press feedback, and <see cref="IHoverSound"/> buttons to the hover sound.
     /// </summary>
     public sealed class MenuClickAudioBinder : MonoBehaviour
     {
@@ -32,6 +32,9 @@ namespace LongLeap.UI
             {
                 if (!_bound.Add(button)) continue;
 
+                if (button.TryGetComponent<IHoverSound>(out var hover))
+                    hover.PlayHover = PlayHover;
+
                 // Buttons with their own sounds (reward cards) stay silent here.
                 if (button.GetComponent<IOwnClickSound>() != null) continue;
 
@@ -43,6 +46,8 @@ namespace LongLeap.UI
         }
 
         private void PlayClick() => _sounds?.Play(UiSound.Click);
+
+        private void PlayHover() => _sounds?.Play(UiSound.Hover);
 
         private void OnDestroy()
         {
