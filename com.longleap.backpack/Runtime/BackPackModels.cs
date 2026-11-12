@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace LongLeap.Backpack
 {
@@ -126,9 +127,13 @@ namespace LongLeap.Backpack
     // Sku is the item type, Id is the concrete instance in the backpack (items are
     // deleted by it: deleting by sku removes ALL items of that type).
     //
-    // Rewards are reward keys from the server's reward_items.json by SKU: what the
-    // game grants for this item. What each key means is known to the game, not the
-    // server.
+    // RawAttributes and RawCustomAttributes are Backpack's own JSON, passed through by
+    // the server unparsed (PlayerRewardItem). BackPackService parses them into
+    // Attributes / CustomAttributes (see BackPackAttributes).
+    //
+    // The package does not interpret attributes: which ones exist ("reward", "merge", …)
+    // and what their values mean is up to the client, e.g.
+    // CustomAttributes.ValueIds("reward") or CustomAttributes.Find("merge").
     public sealed class BackPackRewardItem
     {
         [JsonProperty("id")] public string Id;
@@ -136,8 +141,20 @@ namespace LongLeap.Backpack
         [JsonProperty("name")] public string Name;
         [JsonProperty("description")] public string Description;
         [JsonProperty("iconUrl")] public string IconUrl;
+
+        // ISO 8601 as the server wrote it; kept as text — nothing here sorts by it.
         [JsonProperty("createdAt")] public string CreatedAt;
-        [JsonProperty("rewards")] public string[] Rewards;
+
+        // The Xsolla project the item was granted in; null if the server didn't say.
+        // The backpack holds items of every project, so this tells this game's items from others'.
+        [JsonProperty("projectId")] public long? ProjectId;
+
+        [JsonProperty("attributes")] public JToken RawAttributes;
+        [JsonProperty("customAttributes")] public JToken RawCustomAttributes;
+
+        // Filled by BackPackService from the raw JSON above; never null.
+        [JsonIgnore] public IReadOnlyList<BackPackAttribute> Attributes = BackPackAttributes.None;
+        [JsonIgnore] public IReadOnlyList<BackPackAttribute> CustomAttributes = BackPackAttributes.None;
     }
 
     // A parsed reply to the backpack request.

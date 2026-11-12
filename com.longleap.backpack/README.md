@@ -85,7 +85,7 @@ foreach (BackPackRewardItem item in rewards.Items) // Never null; empty on failu
 
 BackPackDeleteResult result = await backPack.DeleteItemAsync(item.Id);
 if (result.IsDeleted)
-	GrantInGame(item.Rewards);
+	GrantInGame(item.CustomAttributes.ValueIds("reward")); // Attribute ids and meaning are up to the game.
 ```
 
 `CheckConnectionAsync` uses a shorter timeout (5 seconds) because the player waits on it. `DeleteItemAsync` removes exactly one item instance; `IsDeleted` is `true` only when the server reports that this instance was deleted now, so it is safe to grant the in-game reward based on it.
