@@ -17,9 +17,9 @@ namespace LongLeap.Skins
     /// (ScriptableObject один на всех, кто на него смотрит).
     ///
     /// Ссылка на <see cref="SkeletonDataAsset"/> — не для рантайма, а только чтобы
-    /// выпадающие списки <c>[SpineSkin]</c> и <c>[SpineSlot]</c> в инспекторе САМОГО
-    /// ассета знали, к какому скелету предлагать варианты (см. <c>IHasSkeletonDataAsset</c>
-    /// в SpineAttributeDrawers).
+    /// инспектор САМОГО ассета знал, к какому скелету предлагать варианты: выпадающие
+    /// списки <c>[SpineSkin]</c> (см. <c>IHasSkeletonDataAsset</c> в SpineAttributeDrawers)
+    /// и окно выбора слотов у зон и правил (drawer'ы в Editor-сборке пакета).
     /// </summary>
     [CreateAssetMenu(menuName = "LongLeap/Skins/Spine Appearance Config", fileName = "SpineAppearanceConfig")]
     public sealed class SpineAppearanceConfig : ScriptableObject, IHasSkeletonDataAsset
@@ -35,9 +35,8 @@ namespace LongLeap.Skins
             [Tooltip("Цвет зоны по умолчанию. Белый — «как нарисовано»: умножение на белый ничего не меняет.")]
             public Color Color = Color.white;
 
-            [Tooltip("Слоты скелета, которые красит зона. Выбираются из списка самого " +
-                     "скелета, поэтому опечататься нельзя.")]
-            [SpineSlot]
+            [Tooltip("Слоты скелета, которые красит зона. Выбираются в окне выбора из " +
+                     "списка самого скелета, поэтому опечататься нельзя.")]
             public string[] Slots = new string[0];
         }
 
@@ -51,7 +50,6 @@ namespace LongLeap.Skins
             public string Skin = "";
 
             [Tooltip("Слоты, которые гаснут, пока скин надет.")]
-            [SpineSlot]
             public string[] Slots = new string[0];
         }
 
