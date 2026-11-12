@@ -21,4 +21,11 @@ The host project must provide the Spine runtime with its standard assembly names
 colour zones, icons and hide rules. Icons are written to the `SkinLayoutSourceSO` whose Layout field points at
 the open JSON.
 
+Slots of colour zones and hide rules are picked in `SlotPickerPopup`, opened by the **Выбрать…** button of a
+`Slots` list (in the `SpineAppearanceConfig` inspector and in the config panel of the Skin Layout Editor) and by
+the **Прячет** button of a skin row. The popup has a search box (space-separated terms, matched against slot
+and bone names), slots grouped by bone, a filter by the slots a skin folder uses, and checkboxes that stay open
+for several picks. Every change is written at once, with Undo. Slots that are no longer in the skeleton are
+shown in red, so they can be removed.
+
 EditorPrefs keys: `LongLeap.SkinLayout.*`.

@@ -51,7 +51,6 @@ namespace LongLeap.Skins.EditorTools
 
         private SkinLayout _layout;
         private Dictionary<string, List<string>> _groups = new Dictionary<string, List<string>>();
-        private List<string> _slotNames = new List<string>();
         private int _selected = -1;
 
         private ReorderableList _categoryList;
@@ -104,8 +103,7 @@ namespace LongLeap.Skins.EditorTools
         private void Reload()
         {
             _groups = LoadGroups(_skeleton);
-            _slotNames = LoadSlotNames(_skeleton);
-            _layout = _json != null ? SkinLayout.FromJson(_json.text) : null;
+            _layout =_json != null ? SkinLayout.FromJson(_json.text) : null;
             _iconSource = FindIconSource(_json);
             _selected = _layout != null && _layout.categories.Count > 0 ? 0 : -1;
             hasUnsavedChanges = false;
@@ -123,21 +121,6 @@ namespace LongLeap.Skins.EditorTools
                 Debug.LogWarning($"[SkinLayout] не удалось прочитать скелет '{asset.name}'.", asset);
 
             return SkinLayout.CollectGroups(data);
-        }
-
-        /// <summary>Имена всех слотов скелета — для меню Hide Rule (см. <see cref="ShowHideSlotsMenu"/>).</summary>
-        private static List<string> LoadSlotNames(SkeletonDataAsset asset)
-        {
-            var names = new List<string>();
-            if (asset == null) return names;
-
-            var data = asset.GetSkeletonData(true);
-            if (data == null) return names;
-
-            foreach (var slot in data.Slots)
-                names.Add(slot.Name);
-
-            return names;
         }
 
         /// <summary>
@@ -417,10 +400,7 @@ namespace LongLeap.Skins.EditorTools
                 GUILayout.FlexibleSpace();
 
                 if (GUILayout.Button("Обновить скелет", EditorStyles.toolbarButton))
-                {
                     _groups = LoadGroups(_skeleton);
-                    _slotNames = LoadSlotNames(_skeleton);
-                }
 
                 using (new EditorGUI.DisabledScope(!hasUnsavedChanges))
                 {
@@ -990,59 +970,46 @@ namespace LongLeap.Skins.EditorTools
                     : "Слоты скелета, которые гаснут, пока этот скин надет (SpineAppearanceConfig.HideRule).";
 
                 if (EditorGUI.DropdownButton(rect, new GUIContent(label, tooltip), FocusType.Passive))
-                    ShowHideSlotsMenu(skinName);
+                    ShowHideSlotsPicker(rect, skinName);
             }
         }
 
-        private void ShowHideSlotsMenu(string skinName)
+        /// <summary>
+        /// Окно выбора слотов (<see cref="SlotPickerPopup"/>) для правила этого скина.
+        /// Конфиг запоминается сейчас: окно выбора живёт дольше прохода GUI, а поле
+        /// окна раскладки за это время могут перенацелить.
+        /// </summary>
+        private void ShowHideSlotsPicker(Rect activator, string skinName)
         {
-            if (_appearanceConfig == null) return;
+            var config = _appearanceConfig;
+            if (config == null) return;
 
-            var rule = _appearanceConfig.FindHideRule(skinName);
-            var current = rule?.Slots ?? new string[0];
-
-            var menu = new GenericMenu();
-
-            foreach (var slotName in _slotNames)
-            {
-                var capturedSlot = slotName;
-                var isHidden = Array.IndexOf(current, capturedSlot) >= 0;
-                menu.AddItem(new GUIContent(capturedSlot), isHidden, () => ToggleHideSlot(skinName, capturedSlot));
-            }
-
-            foreach (var slotName in current)
-            {
-                if (_slotNames.Contains(slotName)) continue;
-                var staleSlot = slotName;
-                menu.AddItem(new GUIContent($"Удалить отсутствующий/{staleSlot}"), true,
-                    () => ToggleHideSlot(skinName, staleSlot));
-            }
-
-            if (_slotNames.Count == 0)
-                menu.AddDisabledItem(new GUIContent("В скелете нет слотов"));
-
-            menu.ShowAsContext();
+            SlotPickerPopup.Show(
+                activator,
+                _skeleton,
+                $"Прячет: {skinName}",
+                () => config.FindHideRule(skinName)?.Slots ?? Array.Empty<string>(),
+                slots => SetHideSlots(config, skinName, slots));
         }
 
-        private void ToggleHideSlot(string skinName, string slotName)
+        /// <summary>Записать слоты правила; правило без слотов не хранится.</summary>
+        private static void SetHideSlots(SpineAppearanceConfig config, string skinName, string[] slots)
         {
-            if (_appearanceConfig == null) return;
+            if (config == null) return;
 
-            Undo.RecordObject(_appearanceConfig, "Toggle Hide Slot");
+            Undo.RecordObject(config, "Hide Slots");
 
-            var rule = _appearanceConfig.GetOrAddHideRule(skinName);
-            var slots = new List<string>(rule.Slots);
+            if (slots.Length > 0)
+            {
+                config.GetOrAddHideRule(skinName).Slots = slots;
+            }
+            else
+            {
+                var rule = config.FindHideRule(skinName);
+                if (rule != null) config.RemoveHideRule(rule);
+            }
 
-            if (!slots.Remove(slotName))
-                slots.Add(slotName);
-
-            rule.Slots = slots.ToArray();
-
-            if (rule.Slots.Length == 0)
-                _appearanceConfig.RemoveHideRule(rule);
-
-            EditorUtility.SetDirty(_appearanceConfig);
-            Repaint();
+            EditorUtility.SetDirty(config);
         }
 
         /// <summary>
