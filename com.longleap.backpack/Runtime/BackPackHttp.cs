@@ -13,6 +13,10 @@ namespace LongLeap.Backpack
         public const string Post = "POST";
         public const string Delete = "DELETE";
 
+        // The header the server reads the player's token from (UserTokenHeader in the
+        // reward server, USER_TOKEN_HEADER in backpack_service).
+        public const string UserTokenHeader = "X-User-Token";
+
         public string Method { get; }
         public string Url { get; }
 
@@ -21,14 +25,20 @@ namespace LongLeap.Backpack
 
         public int TimeoutSeconds { get; }
 
-        public BackPackHttpCall(string method, string url, string body, int timeoutSeconds)
+        // The signed-in player's Xsolla ID token, sent in UserTokenHeader; null for a guest.
+        public string UserToken { get; }
+
+        public BackPackHttpCall(string method, string url, string body, int timeoutSeconds,
+            string userToken = null)
         {
             Method = method;
             Url = url;
             Body = body;
             TimeoutSeconds = timeoutSeconds;
+            UserToken = string.IsNullOrEmpty(userToken) ? null : userToken;
         }
 
+        // The token is never printed: whoever holds it is the player (see AccessToken).
         public override string ToString() => $"{Method} {Url}";
     }
 
@@ -108,6 +118,9 @@ namespace LongLeap.Backpack
             // server's report would be lost.
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Accept", "application/json");
+
+            if (call.UserToken != null)
+                request.SetRequestHeader(BackPackHttpCall.UserTokenHeader, call.UserToken);
 
             if (call.Body != null)
             {

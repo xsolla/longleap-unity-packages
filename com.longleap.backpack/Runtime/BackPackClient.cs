@@ -22,6 +22,7 @@ namespace LongLeap.Backpack
         public const string Disposed = "disposed";
 
         private readonly Func<string> _xsollaIdProvider;
+        private readonly Func<bool, Task<string>> _userTokenProvider;
         private readonly IBackPackTransport _transport;
 
         // The owner's lifetime: Stop aborts everything still in flight. Not
@@ -32,9 +33,16 @@ namespace LongLeap.Backpack
         // xsollaIdProvider is a delegate rather than a string: the xsollaID does
         // not exist when the service is created — it appears when the player signs
         // in (or a session is silently restored) and changes on sign-out/sign-in.
-        public BackPackClient(Func<string> xsollaIdProvider, BackPackEndpoint endpoint, IBackPackTransport transport)
+        //
+        // userTokenProvider is async: it may have to refresh an expired token before
+        // answering. Its argument is "refresh even if it looks valid" — asked after the
+        // server refused the token with 401. null or an empty answer — the request goes
+        // without the token.
+        public BackPackClient(Func<string> xsollaIdProvider, BackPackEndpoint endpoint, IBackPackTransport transport,
+            Func<bool, Task<string>> userTokenProvider = null)
         {
             _xsollaIdProvider = xsollaIdProvider;
+            _userTokenProvider = userTokenProvider;
             _transport = transport ?? new UnityWebRequestBackPackTransport();
 
             string baseUrl = endpoint?.BaseUrl;
@@ -109,6 +117,24 @@ namespace LongLeap.Backpack
             return SendAsync(BackPackHttpCall.Delete, url.ToString(), null, DefaultTimeoutSeconds, cancellationToken);
         }
 
+        // A failed token lookup is not a failed request: it goes without the token, and
+        // the server decides whether a guest may do this.
+        private async Task<string> UserTokenAsync(bool forceRefresh)
+        {
+            if (_userTokenProvider == null)
+                return null;
+
+            try
+            {
+                return await _userTokenProvider(forceRefresh);
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogWarning($"[BackPack] couldn't get the player's token — sending without it: {e.Message}");
+                return null;
+            }
+        }
+
         // No exceptions escape except the cancellation the caller asked for: any
         // other failure comes back as a reply. Sending is called from background
         // tasks and button handlers, where a thrown exception would vanish silently.
@@ -122,12 +148,31 @@ namespace LongLeap.Backpack
             if (IsStopped)
                 return BackPackHttpReply.NotSent(Disposed);
 
-            var call = new BackPackHttpCall(method, url, body, timeoutSeconds);
-
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, cancellationToken);
+
+            var call = new BackPackHttpCall(method, url, body, timeoutSeconds);
 
             try
             {
+                string token = await UserTokenAsync(forceRefresh: false);
+                linked.Token.ThrowIfCancellationRequested();
+
+                call = new BackPackHttpCall(method, url, body, timeoutSeconds, token);
+                BackPackHttpReply reply = await _transport.SendAsync(call, linked.Token);
+
+                // 401 to a request that carried the token: it expired or was revoked earlier
+                // than its expiry said. The server asks for a fresh one and a retry — once:
+                // a second 401 is a real refusal, not a stale token.
+                if (reply.StatusCode != 401 || call.UserToken == null)
+                    return reply;
+
+                string fresh = await UserTokenAsync(forceRefresh: true);
+                linked.Token.ThrowIfCancellationRequested();
+
+                if (string.IsNullOrEmpty(fresh) || fresh == token)
+                    return reply;
+
+                call = new BackPackHttpCall(method, url, body, timeoutSeconds, fresh);
                 return await _transport.SendAsync(call, linked.Token);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

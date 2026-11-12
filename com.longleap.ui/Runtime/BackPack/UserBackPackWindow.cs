@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using LongLeap.Backpack;
@@ -24,7 +25,9 @@ namespace LongLeap.UI
     /// description, rewards in a column (icon and what the player gets) and an "activate" button.
     ///
     /// What an item grants is decided by the game, not the server: the server attaches
-    /// reward keys to the item (Rewards, from reward_items.json by SKU), and a key is a product id
+    /// attributes to the item as they are, the game splits them into categories
+    /// (<see cref="IBackPackItemCategorizer"/>) and the window takes reward keys from them
+    /// (<see cref="IBackPackItemCategories.Rewards"/>); a key is a product id
     /// (<see cref="IBackPackProduct.Id"/>, catalog — <see cref="IBackPackProductCatalog"/>).
     /// Activating an item means granting these products to the player.
     ///
@@ -150,8 +153,42 @@ namespace LongLeap.UI
         /// <summary>Xsolla ID sign-in. Provided by loading, like <see cref="_backPack"/>.</summary>
         private IXsollaIdAuth _auth;
 
+        /// <summary>Splits items into categories (reward keys among them). Provided by loading.</summary>
+        private IBackPackItemCategorizer _categorizer;
+
+        /// <summary>
+        /// Categories per item instance: the window asks for reward keys on every redraw, while an item's
+        /// attributes don't change. Items arrive as new objects on every reload, so stale entries go with them.
+        /// </summary>
+        private ConditionalWeakTable<BackPackRewardItem, IBackPackItemCategories> _categories =
+            new ConditionalWeakTable<BackPackRewardItem, IBackPackItemCategories>();
+
+        private static readonly string[] NoKeys = Array.Empty<string>();
+
+        /// <summary>The item's categories, or null if there is no categorizer.</summary>
+        public IBackPackItemCategories CategoriesOf(BackPackRewardItem item)
+        {
+            if (item == null || _categorizer == null) return null;
+
+            if (!_categories.TryGetValue(item, out var categories))
+            {
+                categories = _categorizer.Categorize(item);
+                if (categories == null) return null;
+                _categories.Add(item, categories);
+            }
+
+            return categories;
+        }
+
+        /// <summary>The item's reward keys (<see cref="IBackPackItemCategories.Rewards"/>); never null.</summary>
+        private IReadOnlyList<string> RewardKeysOf(BackPackRewardItem item) =>
+            CategoriesOf(item)?.Rewards ?? NoKeys;
+
         /// <summary>Products — their ids are the reward keys. Provided by loading.</summary>
         private IBackPackProductCatalog _catalog;
+
+        /// <summary>How an activated item is spent. Provided by loading; null — deleted on the server.</summary>
+        private IBackPackItemSpender _spender;
 
         /// <summary>Whether a run is in progress when the product is granted. Provided by loading.</summary>
         private Func<bool> _isRunActive;
@@ -270,11 +307,22 @@ namespace LongLeap.UI
             _backPack.CheckConnectionAsync(cancellationToken);
 
         /// <summary>
-        /// Give the window the product catalog (their ids are the items' reward keys) and a way to tell
-        /// whether the run to grant them into is in progress. Called by loading.
+        /// Give the window the item categorizer (it yields each item's reward keys), the product catalog
+        /// (their ids are the reward keys) and a way to tell whether the run to grant them into is
+        /// in progress. Called by loading.
         /// </summary>
-        public void BindRewards(IBackPackProductCatalog catalog, Func<bool> isRunActive)
+        /// <summary>
+        /// Give the window the way activated items are spent. Called by loading; without it (null)
+        /// every item is deleted on the server.
+        /// </summary>
+        public void BindSpender(IBackPackItemSpender spender) => _spender = spender;
+
+        public void BindRewards(IBackPackItemCategorizer categorizer, IBackPackProductCatalog catalog, Func<bool> isRunActive)
         {
+            if (!ReferenceEquals(categorizer, _categorizer))
+                _categories = new ConditionalWeakTable<BackPackRewardItem, IBackPackItemCategories>();
+
+            _categorizer = categorizer;
             _catalog = catalog;
             _isRunActive = isRunActive;
 
@@ -309,11 +357,11 @@ namespace LongLeap.UI
             _selected.Clear();
             RefreshItemStates();
 
-            if (_catalog == null || _isRunActive == null || !_backPack.IsAvailable)
+            if (_categorizer == null || _catalog == null || _isRunActive == null || !_backPack.IsAvailable)
             {
                 Debug.LogError(
                     $"[BackPack] {items.Length} selected items can't be activated: the window wasn't given " +
-                    "the product catalog or run state (BindRewards), or BackPack is disabled. Items stay in the backpack.", this);
+                    "the item categorizer, product catalog or run state (BindRewards), or BackPack is disabled. Items stay in the backpack.", this);
                 return 0;
             }
 
@@ -325,7 +373,7 @@ namespace LongLeap.UI
                 if (!TryResolveProducts(item, products))
                 {
                     Debug.LogWarning(
-                        $"[BackPack] item '{item.Sku}': rewards [{Describe(item.Rewards)}] are not among " +
+                        $"[BackPack] item '{item.Sku}': rewards [{Describe(RewardKeysOf(item))}] are not among " +
                         "the catalog products — not spending it, the item stays in the backpack.", this);
                     continue;
                 }
@@ -341,7 +389,7 @@ namespace LongLeap.UI
 
                 // No cancellation: an aborted DELETE may already have deleted the item on the server,
                 // and then the player would be left with neither the item nor the product.
-                var deleted = await _backPack.DeleteItemAsync(item.Id);
+                var deleted = await SpendAsync(item);
 
                 if (this == null) return activated;
 
@@ -351,8 +399,8 @@ namespace LongLeap.UI
                     // (another tab, another device), and granting a product for it would be giving it away.
                     Debug.LogWarning(
                         deleted.Outcome == BackPackDeleteResult.OutcomeAlreadyGone
-                            ? $"[BackPack] item '{item.Sku}' ({item.Id}) is no longer in the backpack — not granting the product."
-                            : $"[BackPack] item '{item.Sku}' ({item.Id}) was not deleted on the server ({deleted.Error}) — " +
+                            ? $"[BackPack] item '{item.Sku}' ({item.Id}) is already spent — not granting the product."
+                            : $"[BackPack] item '{item.Sku}' ({item.Id}) was not spent ({deleted.Error}) — " +
                               "not granting the product, the item stays in the backpack.",
                         this);
                     continue;
@@ -373,12 +421,32 @@ namespace LongLeap.UI
 
                 activated++;
                 Debug.Log(
-                    $"[BackPack] item '{item.Sku}' activated: deleted on the server, granted " +
-                    $"[{Describe(item.Rewards)}].", this);
+                    $"[BackPack] item '{item.Sku}' activated: spent, granted " +
+                    $"[{Describe(RewardKeysOf(item))}].", this);
                 ItemActivated?.Invoke(item);
             }
 
             return activated;
+        }
+
+        /// <summary>
+        /// Spend an activated item: the game's way (<see cref="BindSpender"/>), otherwise delete it on the server.
+        /// A failing spender spends nothing: an exception must not turn into a granted product.
+        /// </summary>
+        private async Task<BackPackDeleteResult> SpendAsync(BackPackRewardItem item)
+        {
+            if (_spender == null)
+                return await _backPack.DeleteItemAsync(item.Id);
+
+            try
+            {
+                return await _spender.SpendAsync(item, _backPack);
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e, this);
+                return BackPackDeleteResult.Failed($"spender: {e.Message}");
+            }
         }
 
         public override async Task OpenAsync()
@@ -519,11 +587,42 @@ namespace LongLeap.UI
                 return;
             }
 
-            KeepSelectionOf(reply.Items);
-            BuildItems(reply.Items);
+            // Only items the game wants shown; the selection is kept against the same list,
+            // so a hidden item can't stay selected and get activated unseen.
+            var items = Shown(reply.Items);
+
+            KeepSelectionOf(items);
+            BuildItems(items);
             RefreshItemRewards();
             RefreshItemStates();
             ShowStatus(_itemViews.Count == 0 ? _emptyText : null);
+        }
+
+        /// <summary>
+        /// Items that become cards — which ones is decided by the game
+        /// (<see cref="IBackPackItemCategorizer.SelectShown"/>). Skipped items stay in the backpack.
+        /// Without a categorizer every item is shown (none can be activated then anyway).
+        /// </summary>
+        private IReadOnlyList<BackPackRewardItem> Shown(IReadOnlyList<BackPackRewardItem> items)
+        {
+            if (_categorizer == null) return items;
+
+            var selected = _categorizer.SelectShown(items);
+            var result = new List<BackPackRewardItem>(selected?.Count ?? 0);
+
+            if (selected != null)
+            {
+                foreach (var item in selected)
+                {
+                    if (item != null)
+                        result.Add(item);
+                }
+            }
+
+            if (result.Count < items.Count)
+                Debug.Log($"[BackPack] {items.Count - result.Count} items skipped by the game — not shown in the backpack.", this);
+
+            return result;
         }
 
         private void CancelLoad()
@@ -693,11 +792,11 @@ namespace LongLeap.UI
         {
             _rewardsScratch.Clear();
 
-            if (_catalog == null || item.Rewards == null) return _rewardsScratch;
+            if (_catalog == null) return _rewardsScratch;
 
             _productsScratch.Clear();
 
-            foreach (var key in item.Rewards)
+            foreach (var key in RewardKeysOf(item))
             {
                 if (_catalog.TryGetProduct(key, out var product))
                     _productsScratch.Add(product);
@@ -791,10 +890,11 @@ namespace LongLeap.UI
         {
             products.Clear();
 
-            if (_catalog == null || item.Rewards == null || item.Rewards.Length == 0)
+            var keys = RewardKeysOf(item);
+            if (_catalog == null || keys.Count == 0)
                 return false;
 
-            foreach (var key in item.Rewards)
+            foreach (var key in keys)
             {
                 if (!_catalog.TryGetProduct(key, out var product))
                 {
@@ -844,9 +944,7 @@ namespace LongLeap.UI
 
             foreach (var selected in _selected)
             {
-                if (selected.Rewards == null) continue;
-
-                foreach (var key in selected.Rewards)
+                foreach (var key in RewardKeysOf(selected))
                 {
                     if (string.Equals(key?.Trim(), productId, StringComparison.Ordinal))
                         count++;
@@ -900,8 +998,8 @@ namespace LongLeap.UI
             ReferenceEquals(a, b) ||
             (!string.IsNullOrEmpty(a.Id) && string.Equals(a.Id, b.Id, StringComparison.Ordinal));
 
-        private static string Describe(string[] keys) =>
-            keys == null || keys.Length == 0 ? "" : string.Join(", ", keys);
+        private static string Describe(IReadOnlyList<string> keys) =>
+            keys == null || keys.Count == 0 ? "" : string.Join(", ", keys);
 
         // =========================================================
         // XSOLLA ID SIGN-IN

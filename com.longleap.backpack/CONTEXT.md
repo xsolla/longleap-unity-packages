@@ -6,7 +6,7 @@ Client for the BackPack service: player events grant inventory rewards, the game
 A named game occurrence sent as `POST {eventsPath}` with `{gameId, xsollaId, event, eventId}`. For achievements, the event name is the achievement ID. `eventId` is the idempotency key: by default it is derived deterministically from `(gameId, xsollaId, eventName)` (`BackPackService.StableEventId`), so a retry never grants a reward twice.
 
 **Reward / Backpack item**:
-What the server grants for an accepted event. Read via `GetRewardsAsync` (`GET {rewardsPath}`) as `BackPackRewardItem`: `Sku` is the item type, `Id` is the concrete instance. `Rewards` are game-defined keys for what the item gives in game.
+What the server grants for an accepted event. Read via `GetRewardsAsync` (`GET {rewardsPath}`) as `BackPackRewardItem`: `Sku` is the item type, `Id` is the concrete instance. All `attributes` / `custom_attributes` are parsed as they are into `Attributes` / `CustomAttributes` (`BackPackAttributes`). The package gives attributes no meaning: which ones exist (`reward`, `merge`, …) and what their values mean is decided by the client, e.g. `CustomAttributes.ValueIds("reward")`, `CustomAttributes.Find("merge")`.
 
 **Spending**:
 The game spends an item by deleting that one instance (`DeleteItemAsync(itemId)`). Success is decided by the per-item outcome in the response body (`item_deleted`), not by the HTTP status — the server answers 200 for every outcome.

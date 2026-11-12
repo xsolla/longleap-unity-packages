@@ -18,7 +18,7 @@ cards). Notifications are the exception: they live in this package and always co
 | `LongLeap.UI.Achievements` | achievements, localization | `AchievementsWindow`, `AchievementItemView`. |
 | `LongLeap.UI.DailyRewards` | dailyrewards, localization (+ tools) | `DailyRewardsScreen`, `DailyRewardDayView`. |
 | `LongLeap.UI.DailyQuests` | dailyquests, localization | `DailyQuestPanel`, `DailyQuestItemView`, `DailyQuestRewardFlyout`, `PlayerStatRowView`, seam `IPlayerStatsSource`. |
-| `LongLeap.UI.BackPack` | backpack, xsollaid | `UserBackPackWindow`, `BackPackItemView`, `BackPackRewardView`, seams `IBackPackProduct` / `IBackPackProductCatalog`. |
+| `LongLeap.UI.BackPack` | backpack, xsollaid | `UserBackPackWindow`, `BackPackItemView`, `BackPackRewardView`, seams `IBackPackProduct` / `IBackPackProductCatalog` / `IBackPackItemCategorizer` / `IBackPackItemCategories`. |
 | `LongLeap.Notifications` | — | Notification core in `Runtime/Notifications/Core`: priority queue (`INotificationService`, `NotificationService`, `NotificationData`), `NotificationSystemView` base, `ITimer` / `CoroutineTimer`. No LongLeap dependencies. |
 | `LongLeap.UI.Notifications` | — | `NotificationBootstrapper` (static `Show`, queues until ready), `GameNotificationView`, `NotificationPopup` (Animator or a code fade). |
 
@@ -63,7 +63,7 @@ them during loading:
 | `SettingsWindow.Bind(service, save)` | settings | the game's `ISettingsService` and its save |
 | `DailyRewardsScreen.Bind(service, sounds, rewardIcon)` | reward cards | icons from the game config |
 | `IPlayerStatsSource` | `DailyQuestPanel` | game stats + wallet |
-| `IBackPackProductCatalog` + `BindRewards(catalog, isRunActive)` | backpack | what each reward key gives the player |
+| `IBackPackItemCategorizer` + `IBackPackProductCatalog` + `BindRewards(categorizer, catalog, isRunActive)` | backpack | which items are shown (`SelectShown`), how an item's attributes split into categories (reward keys among them) and what each reward key gives the player |
 
 The main menu, the intro and the window prefabs are game code: every game has its own.
 

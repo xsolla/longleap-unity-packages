@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using static LongLeap.Backpack.Tests.BackPackTestData;
@@ -13,7 +14,8 @@ namespace LongLeap.Backpack.Tests
         {
             var transport = new FakeBackPackTransport(BackPackHttpReply.Ok(
                 "{\"xsollaId\":\"player-1\",\"gameId\":\"game_01\",\"items\":[" +
-                "{\"id\":\"i1\",\"sku\":\"shield\",\"name\":\"Shield\",\"rewards\":[\"shield_1\"]},null]}"));
+                "{\"id\":\"i1\",\"sku\":\"shield\",\"name\":\"Shield\"," +
+                "\"customAttributes\":[{\"external_id\":\"reward\",\"values\":[{\"external_id\":\"shield_1\"}]}]},null]}"));
 
             BackPackRewardsReply reply = await Service(transport).GetRewardsAsync();
 
@@ -25,7 +27,34 @@ namespace LongLeap.Backpack.Tests
             Assert.AreEqual(1, reply.Items.Count);
             Assert.AreEqual("i1", reply.Items[0].Id);
             Assert.AreEqual("shield", reply.Items[0].Sku);
-            CollectionAssert.AreEqual(new[] { "shield_1" }, reply.Items[0].Rewards);
+            CollectionAssert.AreEqual(new[] { "shield_1" }, reply.Items[0].CustomAttributes.ValueIds("reward"));
+        }
+
+        [Test]
+        public async Task GetRewards_ParsesAttributesAsTheyAre()
+        {
+            var transport = new FakeBackPackTransport(BackPackHttpReply.Ok(
+                "{\"xsollaId\":\"player-1\",\"gameId\":\"game_01\",\"items\":[" +
+                "{\"id\":\"i1\",\"sku\":\"pack\",\"iconUrl\":\"https://x/i.png\"," +
+                "\"createdAt\":\"2026-11-10T08:00:00Z\"," +
+                "\"attributes\":[{\"external_id\":\"reward\",\"values\":[{\"external_id\":\"shield_1\"}]}]," +
+                "\"customAttributes\":[" +
+                "{\"name\":{\"en\":\"Reward\"},\"values\":[{\"value\":{\"en\":\"cash_10\"},\"external_id\":\"cash_10\"}],\"external_id\":\"reward\"}," +
+                "{\"name\":{\"en\":\"Merge\"},\"values\":[{\"value\":{\"en\":\"first_climb\"},\"external_id\":\"first_climb\"}],\"external_id\":\"merge\"}]}," +
+                "{\"id\":\"i2\",\"sku\":\"old\",\"rewards\":[\"cash_100\"]," +
+                "\"attributes\":[{\"external_id\":\"reward\",\"values\":[{\"external_id\":\"shield_1\"}]}]}]}"));
+
+            BackPackRewardsReply reply = await Service(transport).GetRewardsAsync();
+
+            Assert.IsTrue(reply.Success);
+            Assert.AreEqual("https://x/i.png", reply.Items[0].IconUrl);
+            Assert.AreEqual("2026-11-10T08:00:00Z", reply.Items[0].CreatedAt);
+            Assert.AreEqual(2, reply.Items[0].CustomAttributes.Count);
+            CollectionAssert.AreEqual(new[] { "cash_10" }, reply.Items[0].CustomAttributes.ValueIds("reward"));
+            Assert.AreEqual("first_climb", reply.Items[0].CustomAttributes.Find("merge").Values[0].ExternalId);
+            Assert.AreEqual("shield_1", reply.Items[0].Attributes.Find("reward").Values[0].ExternalId);
+
+            CollectionAssert.IsEmpty(reply.Items[1].CustomAttributes);
         }
 
         [Test]
@@ -212,6 +241,76 @@ namespace LongLeap.Backpack.Tests
             Assert.IsFalse(result.IsConnected);
             Assert.AreEqual("not_configured", result.Error);
             Assert.AreEqual(0, transport.Calls.Count);
+        }
+
+        [Test]
+        public async Task GetRewards_SignedIn_SendsTheUserTokenHeader()
+        {
+            var transport = new FakeBackPackTransport(BackPackHttpReply.Ok("{}"));
+            var service = new BackPackService(() => XsollaId, Endpoint(), transport,
+                userTokenProvider: _ => Task.FromResult("token-1"));
+
+            await service.GetRewardsAsync();
+
+            Assert.AreEqual("token-1", transport.LastCall.UserToken);
+            StringAssert.DoesNotContain("token-1", transport.LastCall.ToString());
+        }
+
+        [Test]
+        public async Task GetRewards_NoToken_SendsNoHeader()
+        {
+            var transport = new FakeBackPackTransport(BackPackHttpReply.Ok("{}"));
+            var service = new BackPackService(() => XsollaId, Endpoint(), transport,
+                userTokenProvider: _ => Task.FromResult<string>(null));
+
+            await service.GetRewardsAsync();
+
+            Assert.IsNull(transport.LastCall.UserToken);
+        }
+
+        [Test]
+        public async Task GetRewards_TokenLookupThrows_RequestStillGoesWithoutIt()
+        {
+            var transport = new FakeBackPackTransport(BackPackHttpReply.Ok("{}"));
+            var service = new BackPackService(() => XsollaId, Endpoint(), transport,
+                userTokenProvider: _ => throw new InvalidOperationException("refresh failed"));
+
+            BackPackRewardsReply reply = await service.GetRewardsAsync();
+
+            Assert.IsTrue(reply.Success);
+            Assert.IsNull(transport.LastCall.UserToken);
+        }
+
+        [Test]
+        public async Task GetRewards_TokenRefused_RefreshesAndRetriesOnce()
+        {
+            var transport = new FakeBackPackTransport(
+                BackPackHttpReply.Status(401, "{\"error\":\"invalid_user_token\"}"),
+                BackPackHttpReply.Ok("{}"));
+            var service = new BackPackService(() => XsollaId, Endpoint(), transport,
+                userTokenProvider: force => Task.FromResult(force ? "fresh" : "stale"));
+
+            BackPackRewardsReply reply = await service.GetRewardsAsync();
+
+            Assert.IsTrue(reply.Success);
+            Assert.AreEqual(2, transport.Calls.Count);
+            Assert.AreEqual("stale", transport.Calls[0].UserToken);
+            Assert.AreEqual("fresh", transport.Calls[1].UserToken);
+        }
+
+        [Test]
+        public async Task GetRewards_TokenRefusedAgain_DoesNotLoop()
+        {
+            var transport = new FakeBackPackTransport(
+                BackPackHttpReply.Status(401), BackPackHttpReply.Status(401), BackPackHttpReply.Ok("{}"));
+            var service = new BackPackService(() => XsollaId, Endpoint(), transport,
+                userTokenProvider: force => Task.FromResult(force ? "fresh" : "stale"));
+
+            BackPackRewardsReply reply = await service.GetRewardsAsync();
+
+            Assert.IsFalse(reply.Success);
+            Assert.AreEqual(401, reply.StatusCode);
+            Assert.AreEqual(2, transport.Calls.Count);
         }
     }
 }

@@ -885,7 +885,7 @@ achievements, buildmanager). Assembly `LongLeap.Backpack`.
 
    var rewards = await backPack.GetRewardsAsync();
    var del = await backPack.DeleteItemAsync(item.Id);
-   if (del.IsDeleted) GrantInGame(item.Rewards);   // safe to grant only on IsDeleted
+   if (del.IsDeleted) GrantInGame(item.CustomAttributes.ValueIds("reward"));   // safe to grant only on IsDeleted; attribute ids are game-defined
    ```
 
 4. Achievements: wrap your store — `new BackPackAchievementStateStore(existingStore, backPack)`; unlocks persist only after BackPack accepts the event.

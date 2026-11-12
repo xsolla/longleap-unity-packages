@@ -39,9 +39,10 @@ namespace LongLeap.Backpack
         public BackPackService(
             Func<string> xsollaIdProvider,
             BackPackEndpoint endpoint,
-            IBackPackTransport transport = null)
+            IBackPackTransport transport = null,
+            Func<bool, Task<string>> userTokenProvider = null)
         {
-            _client = new BackPackClient(xsollaIdProvider, endpoint, transport);
+            _client = new BackPackClient(xsollaIdProvider, endpoint, transport, userTokenProvider);
         }
 
         public bool IsAvailable => _client.IsConfigured;
@@ -265,7 +266,7 @@ namespace LongLeap.Backpack
 
             try
             {
-                parsed = JsonConvert.DeserializeObject<BackPackRewardsReplyBody>(raw.Body);
+                parsed = JsonConvert.DeserializeObject<BackPackRewardsReplyBody>(raw.Body, RewardsJson);
             }
             catch (Exception e)
             {
@@ -283,8 +284,13 @@ namespace LongLeap.Backpack
             {
                 foreach (var item in parsed.Items)
                 {
-                    if (item != null)
-                        items.Add(item);
+                    if (item == null)
+                        continue;
+
+                    item.Attributes = BackPackAttributes.Parse(item.RawAttributes);
+                    item.CustomAttributes = BackPackAttributes.Parse(item.RawCustomAttributes);
+
+                    items.Add(item);
                 }
             }
 
@@ -346,6 +352,13 @@ namespace LongLeap.Backpack
             [JsonProperty("outcome")] public string Outcome;
             [JsonProperty("error")] public string Error;
         }
+
+        // Dates stay text: by default Newtonsoft turns an ISO string into a DateTime and
+        // back into a culture-dependent string, both in CreatedAt and inside attributes.
+        private static readonly JsonSerializerSettings RewardsJson = new JsonSerializerSettings
+        {
+            DateParseHandling = DateParseHandling.None
+        };
 
         // The reply body of GET /rewards. Private, like BackPackEventReplyBody:
         // BackPackRewardsReply is what goes outside.

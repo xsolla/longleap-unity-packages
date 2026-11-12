@@ -27,9 +27,10 @@ namespace LongLeap.Backpack
         public BackPackDebugApi(
             Func<string> xsollaIdProvider,
             BackPackEndpoint endpoint,
-            IBackPackTransport transport = null)
+            IBackPackTransport transport = null,
+            Func<bool, Task<string>> userTokenProvider = null)
         {
-            _client = new BackPackClient(xsollaIdProvider, endpoint, transport);
+            _client = new BackPackClient(xsollaIdProvider, endpoint, transport, userTokenProvider);
         }
 
         // DELETE {itemsPath}?xsollaId=…[&sku=…][&itemId=…]
