@@ -10,11 +10,22 @@ The package does not talk to any server itself. A provider (`IRemoteConfigProvid
 | `NullRemoteConfigProvider` | this package | Offline builds and tests. Every fetch fails, so cached values or inline defaults are used |
 | your own | — | Implement `IRemoteConfigProvider` (see [Custom provider](#custom-provider)) |
 
+## Install (Unity Package Manager)
+
+Unity 6 (6000.0 – 6000.4), WebGL build target. In Unity: **Window → Package Manager → + → Add package from git URL**. Add the packages in this order: a package installed from Git does not pull in other Git packages, so the LongLeap packages it needs go first.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.core
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.remoteconfig
+```
+
+Pin a version by adding `#v1.0.0` at the end of each URL. Unity packages this one uses are installed automatically. All packages and their dependencies: [root README](../README.md#install-unity-package-manager).
+
 ## Dependencies
 
 | Package | Version | Role |
 |---|---|---|
-| `com.longleap.core` | 0.2.0 | `IPlayerPrefs`, `IExperimentInfoProvider`, `AbExperimentInfo`; `InMemoryPlayerPrefs` for tests |
+| `com.longleap.core` | 1.0.0 | `IPlayerPrefs`, `IExperimentInfoProvider`, `AbExperimentInfo`; `InMemoryPlayerPrefs` for tests |
 | `com.unity.nuget.newtonsoft-json` | 3.0.2 | Cache serialization, `GetJson<T>` |
 
 ## Quick start

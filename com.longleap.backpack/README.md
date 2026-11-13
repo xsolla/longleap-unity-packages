@@ -2,12 +2,26 @@
 
 Unity package for the LongLeap BackPack service. It sends player events that can grant inventory rewards, reads and spends the items in the player's backpack, and adapts the LongLeap Achievements state store so achievement unlocks are sent to BackPack before they are persisted.
 
+## Install (Unity Package Manager)
+
+Unity 6 (6000.0 – 6000.4), WebGL build target. In Unity: **Window → Package Manager → + → Add package from git URL**. Add the packages in this order: a package installed from Git does not pull in other Git packages, so the LongLeap packages it needs go first.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.core
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.stats
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.achievements
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.buildmanager
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.backpack
+```
+
+Pin a version by adding `#v1.0.0` at the end of each URL. Unity packages this one uses are installed automatically. Rewards are granted by your own reward server, which holds your merchant secrets. It is set up per game and is not part of this library. All packages and their dependencies: [root README](../README.md#install-unity-package-manager).
+
 ## Requirements and Dependencies
 
 - Unity 6.0 (`6000.0`) or later.
-- `com.longleap.achievements` `0.1.0`.
-- `com.longleap.buildmanager` `0.1.0` (editor only: the environment option and config warnings in the Build Manager).
-- `com.longleap.core` `0.1.0`.
+- `com.longleap.achievements` `1.0.0`.
+- `com.longleap.buildmanager` `1.0.0` (editor only: the environment option and config warnings in the Build Manager).
+- `com.longleap.core` `1.0.0`.
 
 The dependencies are declared in this package's `package.json`. In this repository, the LongLeap packages are embedded under `Packages/` and Unity resolves them there. In another project, add this package with Unity Package Manager using **Add package from disk** and its `package.json`, or install it from your organization's package source. Make the declared LongLeap dependencies available to that project as well. `com.longleap.core` depends on `com.unity.nuget.newtonsoft-json` `3.0.2`, which Unity resolves through the package dependency graph.
 

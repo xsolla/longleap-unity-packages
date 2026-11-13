@@ -1,6 +1,6 @@
 {
   "name": "com.longleap.settings",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "displayName": "LongLeap Settings",
   "description": "Typed settings (numeric, bool, enum, key binding) grouped into cloud-saved groups, plus a code-built settings panel driven by per-device ScriptableObject configs, with sliders, toggles and key rebinding.",
   "unity": "6000.0",
@@ -8,14 +8,14 @@
   "author": {
     "name": "LongLeap"
   },
-  "license": "SEE LICENSE IN LICENSE.md",
-  "documentationUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.settings/README.md",
-  "changelogUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.settings/CHANGELOG.md",
-  "licensesUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.settings/LICENSE.md",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.settings/README.md",
+  "changelogUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.settings/CHANGELOG.md",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.settings/LICENSE.md",
   "dependencies": {
-    "com.longleap.core": "0.1.0",
-    "com.longleap.localization": "0.1.0",
-    "com.longleap.tools": "0.1.0",
+    "com.longleap.core": "1.0.0",
+    "com.longleap.localization": "1.0.0",
+    "com.longleap.tools": "1.0.0",
     "com.unity.ugui": "2.0.0",
     "com.unity.inputsystem": "1.19.0"
   }

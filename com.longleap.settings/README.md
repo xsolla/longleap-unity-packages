@@ -2,6 +2,19 @@
 
 Typed settings system. Define settings in code as group classes; values persist to cloud via `ICloudSaveService`; the settings UI is built in code by `SettingsPanel` from a `SettingsWindowConfig` asset (see [Config-driven settings panel](#config-driven-settings-panel)).
 
+## Install (Unity Package Manager)
+
+Unity 6 (6000.0 – 6000.4), WebGL build target. In Unity: **Window → Package Manager → + → Add package from git URL**. Add the packages in this order: a package installed from Git does not pull in other Git packages, so the LongLeap packages it needs go first.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.core
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.localization
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.tools
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.settings
+```
+
+Pin a version by adding `#v1.0.0` at the end of each URL. Unity packages this one uses are installed automatically. All packages and their dependencies: [root README](../README.md#install-unity-package-manager).
+
 ## Assemblies
 
 | Assembly | Folder | Contents |

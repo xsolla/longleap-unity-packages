@@ -1,12 +1,16 @@
 {
   "name": "com.longleap.dailyrewards",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "displayName": "LongLeap Daily Rewards",
   "description": "Daily rewards system with streak tracking, cycle management, and configurable claim windows.",
   "unity": "6000.0",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.dailyrewards/README.md",
+  "changelogUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.dailyrewards/CHANGELOG.md",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.dailyrewards/LICENSE.md",
   "keywords": ["daily", "rewards", "streak", "calendar", "longleap"],
   "dependencies": {
-    "com.longleap.core": "0.2.0",
+    "com.longleap.core": "1.0.0",
     "com.unity.nuget.newtonsoft-json": "3.0.2"
   }
 }

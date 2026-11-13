@@ -154,12 +154,13 @@ namespace LongLeap.Backpack
 
         public const string DefaultLocalBaseUrl = "http://127.0.0.1:5066";
 
-        // Staging and production — by DOMAIN and https only. Both names lead to the
-        // same server, but it must not be reached by IP: only 80 and 443 are open,
-        // on Cloudflare, which picks the service by host name and holds the
-        // certificate. By IP the request either does not arrive or hits a TLS error.
-        public const string DefaultDevelopmentBaseUrl = "https://api-dev-blood.longtalegames.net";
-        public const string DefaultProductionBaseUrl = "https://api-blood.longtalegames.net";
+        // Staging and production have no default: they are the game's own servers,
+        // set in the asset. Use the https DOMAIN name, not an IP address — a server
+        // behind a CDN/proxy picks the service by host name and holds the certificate,
+        // so a request by IP either does not arrive or hits a TLS error. The asset
+        // checks report an empty address before it reaches a build.
+        public const string DefaultDevelopmentBaseUrl = "";
+        public const string DefaultProductionBaseUrl = "";
 
         public const string DefaultGameId = "game_01";
 
@@ -175,12 +176,12 @@ namespace LongLeap.Backpack
             new BackPackEndpoint(DefaultLocalBaseUrl, DefaultGameId);
 
         [Header("Development")]
-        [Tooltip("The shared staging server. https only: only Cloudflare is exposed.")]
+        [Tooltip("The shared staging server. https domain name, not an IP address.")]
         [SerializeField] private BackPackEndpoint _development =
             new BackPackEndpoint(DefaultDevelopmentBaseUrl, DefaultGameId);
 
         [Header("Production")]
-        [Tooltip("The production server. Same domain as staging, without -dev.")]
+        [Tooltip("The production server. https domain name, not an IP address.")]
         [SerializeField] private BackPackEndpoint _production =
             new BackPackEndpoint(DefaultProductionBaseUrl, DefaultGameId);
 

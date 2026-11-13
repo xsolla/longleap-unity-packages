@@ -1,11 +1,14 @@
 {
   "name": "com.longleap.skins.spine",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "displayName": "LongLeap Skins (Spine)",
   "description": "Spine-backed skin layout: groups Spine skin folders into customization categories (JSON), the SkinLayoutSource and SpineAppearanceConfig assets, and the Skin Layout Editor window. Requires the host project to provide the spine-unity and spine-csharp assemblies.",
   "unity": "6000.0",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.skins.spine/README.md",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.skins.spine/LICENSE.md",
   "keywords": ["skins", "spine", "customization", "editor", "longleap"],
   "dependencies": {
-    "com.longleap.skins": "0.1.0"
+    "com.longleap.skins": "1.0.0"
   }
 }

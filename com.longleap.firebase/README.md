@@ -4,6 +4,18 @@ Production Firebase backends for LongLeap services: anonymous auth, cloud saves,
 
 ---
 
+## Install (Unity Package Manager)
+
+Unity 6 (6000.0 – 6000.4), WebGL build target. In Unity: **Window → Package Manager → + → Add package from git URL**. Add the packages in this order: a package installed from Git does not pull in other Git packages, so the LongLeap packages it needs go first.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.core
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.remoteconfig
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.firebase
+```
+
+Pin a version by adding `#v1.0.0` at the end of each URL. Unity packages this one uses are installed automatically. All packages and their dependencies: [root README](../README.md#install-unity-package-manager).
+
 ## Overview
 
 | Feature | Provider interface | Firebase implementation | Firebase product |

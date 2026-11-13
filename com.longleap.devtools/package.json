@@ -1,12 +1,14 @@
 {
   "name": "com.longleap.devtools",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "displayName": "LongLeap DevTools",
   "description": "In-build debug tooling for LongLeap packages. Currently a cloud save viewer; intended as the home for future debug widgets. The runtime assembly only exists when the LONGLEAP_DEBUG scripting define is set.",
   "unity": "6000.0",
+  "license": "MIT",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.devtools/LICENSE.md",
   "keywords": ["debug", "devtools", "cloudsave", "longleap"],
   "dependencies": {
-    "com.longleap.buildmanager": "0.1.0",
-    "com.longleap.core": "0.1.0"
+    "com.longleap.buildmanager": "1.0.0",
+    "com.longleap.core": "1.0.0"
   }
 }

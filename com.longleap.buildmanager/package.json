@@ -1,6 +1,6 @@
 {
   "name": "com.longleap.buildmanager",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "displayName": "LongLeap Build Manager",
   "description": "Editor window that stages scripting-define and asset-backed build options declared by other packages, applies them in a single batch, and dispatches the build. Option tables, presets, warnings and build targets are discovered through LongLeap.BuildManager.Options, so this package never references the feature packages and works in projects that lack them.",
   "unity": "6000.0",
@@ -14,9 +14,9 @@
   "author": {
     "name": "LongLeap"
   },
-  "license": "SEE LICENSE IN LICENSE.md",
-  "documentationUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.buildmanager/README.md",
-  "changelogUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.buildmanager/CHANGELOG.md",
-  "licensesUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.buildmanager/LICENSE.md",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.buildmanager/README.md",
+  "changelogUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.buildmanager/CHANGELOG.md",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.buildmanager/LICENSE.md",
   "dependencies": {}
 }

@@ -1,9 +1,12 @@
 {
   "name": "com.longleap.bootstrap",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "displayName": "LongLeap Bootstrap",
   "description": "Startup infrastructure: a sequential loading pipeline of small tasks with progress, a service container and a static access point to it, optional Addressables loading.",
   "unity": "6000.0",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.bootstrap/README.md",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.bootstrap/LICENSE.md",
   "keywords": ["bootstrap", "loading", "services", "longleap"],
   "dependencies": {
     "com.unity.addressables": "2.9.1"

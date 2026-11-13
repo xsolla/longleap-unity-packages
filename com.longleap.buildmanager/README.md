@@ -18,6 +18,16 @@ Open it from **LongLeap / Build Manager**.
 - Scripting defines are written for **WebGL** only (see [Limits](#limits)).
 - Addressables is optional.
 
+## Install (Unity Package Manager)
+
+Unity 6 (6000.0 – 6000.4), WebGL build target. In Unity: **Window → Package Manager → + → Add package from git URL**. This package needs no other LongLeap package.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.buildmanager
+```
+
+Pin a version by adding `#v1.0.0` at the end of each URL. Unity packages this one uses are installed automatically. All packages and their dependencies: [root README](../README.md#install-unity-package-manager).
+
 ## Why
 
 A menu checkmark that toggles a scripting define writes `PlayerSettings`

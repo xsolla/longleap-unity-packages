@@ -2,6 +2,17 @@
 
 Hierarchical stat system with wildcard subscriptions, accumulate/max cascading, and cloud save persistence.
 
+## Install (Unity Package Manager)
+
+Unity 6 (6000.0 – 6000.4), WebGL build target. In Unity: **Window → Package Manager → + → Add package from git URL**. Add the packages in this order: a package installed from Git does not pull in other Git packages, so the LongLeap packages it needs go first.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.core
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.stats
+```
+
+Pin a version by adding `#v1.0.0` at the end of each URL. Unity packages this one uses are installed automatically. All packages and their dependencies: [root README](../README.md#install-unity-package-manager).
+
 ## Data Sources
 
 Leaf values (`Value`, `MaxValue`) are saved one by one through an `IStatPersistence` the game provides; non-leaf aggregates are recalculated on load. The package ships no persistence — a cloud-save one typically stores each leaf under its own key, e.g. `stat_kill:monk:grunt` → `"3"`, `stat_bighit:monk` → `"50"`.

@@ -2,9 +2,20 @@
 
 Daily reward calendar system with streak tracking, configurable cycles, grace periods, and cloud-backed state persistence.
 
+## Install (Unity Package Manager)
+
+Unity 6 (6000.0 – 6000.4), WebGL build target. In Unity: **Window → Package Manager → + → Add package from git URL**. Add the packages in this order: a package installed from Git does not pull in other Git packages, so the LongLeap packages it needs go first.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.core
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.dailyrewards
+```
+
+Pin a version by adding `#v1.0.0` at the end of each URL. Unity packages this one uses are installed automatically. All packages and their dependencies: [root README](../README.md#install-unity-package-manager).
+
 ## Quick start
 
-1. **Add the packages** to `Packages/manifest.json` (`com.longleap.core` 0.2.0+ is required; Newtonsoft comes as a dependency):
+1. **Add the packages** to `Packages/manifest.json` (`com.longleap.core` is required; Newtonsoft comes as a dependency):
 
    ```json
    "com.longleap.core": "file:LongLeap/com.longleap.core",

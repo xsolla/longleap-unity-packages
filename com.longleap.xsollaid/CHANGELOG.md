@@ -5,7 +5,9 @@ All notable changes to this package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0] - 2026-11-13
+
+First public release, under the MIT license.
 
 ### Added
 
@@ -22,6 +24,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The editor assembly now references `LongLeap.BuildManager.Options` (from
   `com.longleap.buildmanager`, new dependency) instead of `LongLeap.Core.Editor`,
   which moved there.
+- `xid-callback.html` no longer hardcodes game origins: the build fills its list
+  from `allowedGameOrigins` of the config asset, so a game installed from Git can
+  add its own domains. An empty list logs a build warning; the page then posts
+  the sign-in result only to its own origin.
 
 ## [0.1.0] - 2026-11-02
 

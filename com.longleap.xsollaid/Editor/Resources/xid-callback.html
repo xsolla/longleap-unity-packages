@@ -23,18 +23,15 @@
   //
   // A list is needed because this page and the game do NOT have to share an
   // origin: in a portal build the portal serves the game, while this page can
-  // live on our own domain. Add new game origins here.
-  // For a portal, list both origins: the game runs in an iframe whose origin
+  // live on our own domain.
+  //
+  // Do not edit the list here: the build fills it from allowedGameOrigins of
+  // the Xsolla ID config asset (XsollaIdCallbackPagePostprocessor). For a
+  // portal, list both origins there: the game runs in an iframe whose origin
   // differs from the portal's game page (e.g. www.gamepix.com/play/<slug>),
   // and the opener of this window is that iframe. An extra entry costs
   // nothing: mismatching messages are dropped by the browser.
-  var ALLOWED_GAME_ORIGINS = [
-    'http://127.0.0.1:8081',
-    'https://blood-red-snow.pages.dev',
-    'https://bloodredsnow.hel1.your-objectstorage.com',
-    'https://play.gamepix.com',
-    'https://www.gamepix.com'
-  ];
+  var ALLOWED_GAME_ORIGINS = [/*ALLOWED_GAME_ORIGINS*/];
 
   var params = new URLSearchParams(window.location.search);
 

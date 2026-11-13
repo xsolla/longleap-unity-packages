@@ -40,7 +40,9 @@ namespace LongLeap.XsollaId
         [Header("Allowed game origins")]
         [Tooltip("Which addresses may open sign-in at all. They need NOT match " +
                  "the redirect uri: in the portal build GamePix serves the game " +
-                 "from its own origin. Empty list — do not check.")]
+                 "from its own origin. Empty list — do not check. The build also " +
+                 "writes this list into xid-callback.html: the sign-in result is " +
+                 "delivered only to these origins and the page's own origin.")]
         [SerializeField]
         private string[] _allowedGameOrigins =
         {

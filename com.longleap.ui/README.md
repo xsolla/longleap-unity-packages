@@ -3,6 +3,17 @@
 The team's UI toolkit: a window system and ready-made windows for the LongLeap features.
 Logic only — prefabs, art and fonts stay in the game.
 
+## Install (Unity Package Manager)
+
+Unity 6 (6000.0 – 6000.4), WebGL build target. In Unity: **Window → Package Manager → + → Add package from git URL**. Add the packages in this order: a package installed from Git does not pull in other Git packages, so the LongLeap packages it needs go first.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.tools
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.ui
+```
+
+Pin a version by adding `#v1.0.0` at the end of each URL. Unity packages this one uses are installed automatically. Each feature module (settings, achievements, daily rewards, daily quests, backpack) compiles only when its feature package is installed. All packages and their dependencies: [root README](../README.md#install-unity-package-manager).
+
 ## Modules
 
 Every feature module is a separate assembly that compiles **only when its feature package

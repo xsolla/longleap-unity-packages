@@ -1,12 +1,15 @@
 {
   "name": "com.longleap.analytics",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "displayName": "LongLeap Analytics",
   "description": "Analytics event pipeline for GA4 Measurement Protocol: validated events, batching with retry and backoff, sessions and engagement time, consent switch, A/B experiment tagging. Pluggable backends (GA4, console, null) and HTTP transports, including a WebGL sendBeacon transport that survives tab close and a page-visibility hook that flushes when the tab is hidden.",
   "unity": "6000.0",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.analytics/README.md",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.analytics/LICENSE.md",
   "keywords": ["analytics", "ga4", "longleap"],
   "dependencies": {
-    "com.longleap.core": "0.1.0",
+    "com.longleap.core": "1.0.0",
     "com.unity.nuget.newtonsoft-json": "3.0.2",
     "com.unity.modules.unitywebrequest": "1.0.0"
   }

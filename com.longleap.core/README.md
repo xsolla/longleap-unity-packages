@@ -14,6 +14,16 @@ Requires Unity 6000.0+ and `com.unity.nuget.newtonsoft-json`.
 
 ---
 
+## Install (Unity Package Manager)
+
+Unity 6 (6000.0 – 6000.4), WebGL build target. In Unity: **Window → Package Manager → + → Add package from git URL**. This package needs no other LongLeap package.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.core
+```
+
+Pin a version by adding `#v1.0.0` at the end of each URL. Unity packages this one uses are installed automatically. All packages and their dependencies: [root README](../README.md#install-unity-package-manager).
+
 ## Contents
 
 | Module | Namespace | Defines | Implemented elsewhere |

@@ -9,7 +9,8 @@ using UnityEngine;
 
 namespace LongLeap.XsollaId.Editor
 {
-    // Copies xid-callback.html into the root of the built game.
+    // Writes xid-callback.html into the root of the built game, with the
+    // allowedGameOrigins of the config asset filled in (see XsollaIdCallbackPage).
     //
     // The page must be reachable at EXACTLY the registered address: the server
     // compares redirect_uri character by character. Hence the build root —
@@ -61,9 +62,36 @@ namespace LongLeap.XsollaId.Editor
                 return;
             }
 
-            File.Copy(source, destination, overwrite: true);
+            string[] origins = XsollaIdConfigAccess.LoadAllowedGameOrigins();
+            string page;
 
-            Debug.Log($"XsollaId: {FileName} copied into the build ({destination}).");
+            try
+            {
+                page = XsollaIdCallbackPage.Render(File.ReadAllText(source), origins);
+            }
+            catch (System.FormatException e)
+            {
+                Debug.LogError($"XsollaId: {e.Message} Sign-in will not work in the built game.");
+                return;
+            }
+
+            File.WriteAllText(destination, page, new System.Text.UTF8Encoding(false));
+
+            int count = XsollaIdCallbackPage.Normalize(origins).Count;
+
+            if (count == 0)
+            {
+                // Not an error: a game served from the same origin as the page
+                // still works. A portal build (game in a third-party iframe)
+                // does not.
+                Debug.LogWarning(
+                    $"XsollaId: allowedGameOrigins in {XsollaIdConfigAccess.ConfigAssetPath} is empty, " +
+                    $"so {FileName} delivers the sign-in result only to its own origin. " +
+                    "A game served from another origin (e.g. a portal iframe) will not get it — " +
+                    "list the game's origins in the config.");
+            }
+
+            Debug.Log($"XsollaId: {FileName} written into the build ({destination}) with {count} allowed game origin(s).");
         }
 
         private static bool IsXsollaIdEnabled()

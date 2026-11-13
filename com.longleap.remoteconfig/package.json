@@ -1,6 +1,6 @@
 {
   "name": "com.longleap.remoteconfig",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "displayName": "LongLeap Remote Config",
   "description": "Typed remote game parameters with inline defaults: PlayerPrefs cache, fetch deduplication, deferred activation, fetch throttling and A/B experiment info for analytics tagging. Backend-agnostic; the Firebase provider lives in com.longleap.firebase.",
   "unity": "6000.0",
@@ -13,12 +13,12 @@
   "author": {
     "name": "LongLeap"
   },
-  "license": "SEE LICENSE IN LICENSE.md",
-  "documentationUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.remoteconfig/README.md",
-  "changelogUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.remoteconfig/CHANGELOG.md",
-  "licensesUrl": "https://gitea.longleap.games/Long_Leap_Games/Packages/src/branch/main/com.longleap.remoteconfig/LICENSE.md",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.remoteconfig/README.md",
+  "changelogUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.remoteconfig/CHANGELOG.md",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.remoteconfig/LICENSE.md",
   "dependencies": {
-    "com.longleap.core": "0.2.0",
+    "com.longleap.core": "1.0.0",
     "com.unity.nuget.newtonsoft-json": "3.0.2"
   }
 }

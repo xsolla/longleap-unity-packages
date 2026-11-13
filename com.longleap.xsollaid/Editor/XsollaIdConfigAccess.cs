@@ -18,6 +18,8 @@ namespace LongLeap.XsollaId.Editor
         public const string StageEnumName = "Stage";
         public const string ProductionEnumName = "Production";
 
+        public const string AllowedGameOriginsProperty = "_allowedGameOrigins";
+
         public static SerializedProperty LoadEnvironmentProperty(out SerializedObject config)
         {
             var asset = AssetDatabase.LoadAssetAtPath<Object>(ConfigAssetPath);
@@ -52,6 +54,28 @@ namespace LongLeap.XsollaId.Editor
 
         public static string GetString(SerializedObject config, string field) =>
             config?.FindProperty(field)?.stringValue;
+
+        // The allowedGameOrigins list as written in the asset, or null if there
+        // is no asset.
+        public static string[] LoadAllowedGameOrigins()
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<Object>(ConfigAssetPath);
+
+            if (asset == null)
+                return null;
+
+            SerializedProperty list = new SerializedObject(asset).FindProperty(AllowedGameOriginsProperty);
+
+            if (list == null || !list.isArray)
+                return System.Array.Empty<string>();
+
+            var origins = new string[list.arraySize];
+
+            for (int i = 0; i < origins.Length; i++)
+                origins[i] = list.GetArrayElementAtIndex(i).stringValue;
+
+            return origins;
+        }
 
         public static void SelectConfigAsset()
         {

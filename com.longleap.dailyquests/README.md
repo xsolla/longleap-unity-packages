@@ -6,6 +6,18 @@ Daily quests modelled on `com.longleap.achievements`: quests are described in JS
 - progress counts **from the moment of issue** (`delta`) by default, not over the player's lifetime;
 - the reward is **claimed by the player** (`ClaimAsync`) — it is not granted automatically.
 
+## Install (Unity Package Manager)
+
+Unity 6 (6000.0 – 6000.4), WebGL build target. In Unity: **Window → Package Manager → + → Add package from git URL**. Add the packages in this order: a package installed from Git does not pull in other Git packages, so the LongLeap packages it needs go first.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.core
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.stats
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.dailyquests
+```
+
+Pin a version by adding `#v1.0.0` at the end of each URL. Unity packages this one uses are installed automatically. All packages and their dependencies: [root README](../README.md#install-unity-package-manager).
+
 ## Adding a quest
 
 Add an object to the JSON — that's all. No code changes needed.

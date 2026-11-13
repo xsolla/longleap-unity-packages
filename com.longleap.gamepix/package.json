@@ -1,14 +1,18 @@
 {
   "name": "com.longleap.gamepix",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "displayName": "LongLeap GamePix Backend",
   "description": "GamePix portal backend: ads (interstitial, rewarded, score), portal language, Xsolla ID sign-in through the portal SDK, and editor tooling (GamePix menu, Build Manager options and build target, index.html postprocess, HTML5 zip packager). Requires the GamePix Unity plugin at Assets/Plugins/GamePix and the GAMEPIX scripting define.",
   "unity": "6000.0",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.gamepix/README.md",
+  "changelogUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.gamepix/CHANGELOG.md",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.gamepix/LICENSE.md",
   "keywords": ["gamepix", "ads", "portal", "webgl", "backend", "longleap"],
   "dependencies": {
-    "com.longleap.buildmanager": "0.1.0",
-    "com.longleap.core": "0.1.0",
-    "com.longleap.xsollaid": "0.1.0",
+    "com.longleap.buildmanager": "1.0.0",
+    "com.longleap.core": "1.0.0",
+    "com.longleap.xsollaid": "1.0.0",
     "com.unity.nuget.newtonsoft-json": "3.0.2"
   }
 }

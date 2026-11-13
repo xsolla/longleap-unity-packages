@@ -2,6 +2,16 @@
 
 Shared tools for every game. Currently: the **global device profile** (runtime), **page visibility** in the browser (runtime), **building blocks for code-built UI** (runtime) and the **WebGL page mode** (editor).
 
+## Install (Unity Package Manager)
+
+Unity 6 (6000.0 – 6000.4), WebGL build target. In Unity: **Window → Package Manager → + → Add package from git URL**. This package needs no other LongLeap package.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.tools
+```
+
+Pin a version by adding `#v1.0.0` at the end of each URL. Unity packages this one uses are installed automatically. All packages and their dependencies: [root README](../README.md#install-unity-package-manager).
+
 ## Runtime UI
 
 `RuntimeUi` (assembly `LongLeap.Tools.UI`, namespace `LongLeap.Tools.UI`) — text, background, slider, button, layout columns and rows. The settings panel (`com.longleap.settings`) and the `com.longleap.ui` windows build themselves with it: one class for everyone, so a change in the theme shows up in every window at once. It is a separate assembly so that `LongLeap.Tools` (the device profile) does not drag in UGUI and TextMeshPro.

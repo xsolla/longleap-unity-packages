@@ -4,6 +4,19 @@ OAuth2/OIDC authorization code + PKCE. The package is **self-contained**: nothin
 needs to be copied into the project's `Assets/` — no scripts, no plugins, no
 callback page.
 
+## Install (Unity Package Manager)
+
+Unity 6 (6000.0 – 6000.4), WebGL build target. In Unity: **Window → Package Manager → + → Add package from git URL**. Add the packages in this order: a package installed from Git does not pull in other Git packages, so the LongLeap packages it needs go first.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.core
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.localization
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.buildmanager
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.xsollaid
+```
+
+Pin a version by adding `#v1.0.0` at the end of each URL. Unity packages this one uses are installed automatically. All packages and their dependencies: [root README](../README.md#install-unity-package-manager).
+
 ## What's inside
 
 | Where | What |
@@ -78,6 +91,8 @@ The receiver object name (`XsollaIdCallbacks`) is duplicated in the jslib and in
 - Place `xid-callback.html` next to the build by hand:
   `XsollaIdCallbackPagePostprocessor` puts it into the root of the WebGL build
   itself when the define is on, and removes it when it is off.
+- Edit the origin list inside `xid-callback.html`: the build fills it from
+  `allowedGameOrigins` of the config asset. Add your game's origins there.
 - Create a `XsollaIdCallbacks` object in the scene: it is created by
   `XsollaIdCallbackReceiver.Instance`.
 
@@ -365,7 +380,7 @@ await league.SubmitScoreAsync(runScore);
 
 ## Tests
 
-EditMode tests, one assembly per runtime assembly:
+EditMode tests, one assembly per runtime assembly, plus one for the editor code:
 
 | Assembly | Covers | Needs |
 |---|---|---|
@@ -373,6 +388,7 @@ EditMode tests, one assembly per runtime assembly:
 | `LongLeap.XsollaId.Web.Tests` | HTTP helpers, discovery, token client, browser callback receiver, avatar loader, cloud save provider and scope, leaderboard and league services, providers and `BoardId` | `XSOLLA_ID` |
 | `LongLeap.XsollaId.UI.Tests` | account widget state logic | — |
 | `LongLeap.XsollaId.Accounts.Tests` | startup gate, save switch, merge rules | — |
+| `LongLeap.XsollaId.Editor.Tests` | rendering `xid-callback.html` with the allowed game origins | — |
 
 Unity runs package tests only for packages listed in the project's
 `Packages/manifest.json` under `testables`:

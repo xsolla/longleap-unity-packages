@@ -15,6 +15,16 @@ resulting services live. The steps themselves are game code.
 | `OptionalAddressable` | Load an Addressable that may be missing: absent key → `null` and a warning, not an exception. Loaded assets are released when the container is disposed. |
 | `LoadSceneTask` | Load a scene under the current screen, report its progress and activate it once ready. Critical. |
 
+## Install (Unity Package Manager)
+
+Unity 6 (6000.0 – 6000.4), WebGL build target. In Unity: **Window → Package Manager → + → Add package from git URL**. This package needs no other LongLeap package.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.bootstrap
+```
+
+Pin a version by adding `#v1.0.0` at the end of each URL. Unity packages this one uses are installed automatically. All packages and their dependencies: [root README](../README.md#install-unity-package-manager).
+
 ## Using it
 
 The game keeps its own entry point (a `MonoBehaviour` created before the first scene)

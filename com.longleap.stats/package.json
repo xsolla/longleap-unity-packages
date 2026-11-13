@@ -1,11 +1,14 @@
 {
   "name": "com.longleap.stats",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "displayName": "LongLeap Stats",
   "description": "Hierarchical stat system with wildcard subscriptions, accumulate/max cascading, and cloud save persistence.",
   "unity": "6000.0",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.stats/README.md",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.stats/LICENSE.md",
   "keywords": ["stats", "longleap"],
   "dependencies": {
-    "com.longleap.core": "0.1.0"
+    "com.longleap.core": "1.0.0"
   }
 }

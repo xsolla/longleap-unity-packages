@@ -1,13 +1,17 @@
 {
   "name": "com.longleap.achievements",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "displayName": "LongLeap Achievements",
   "description": "Achievement system with stat-tracking objectives, cascading unlocks, and hidden achievements.",
   "unity": "6000.0",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.achievements/README.md",
+  "changelogUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.achievements/CHANGELOG.md",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.achievements/LICENSE.md",
   "keywords": ["achievements", "goals", "rewards", "longleap"],
   "dependencies": {
-    "com.longleap.core": "0.1.0",
-    "com.longleap.stats": "0.1.0",
+    "com.longleap.core": "1.0.0",
+    "com.longleap.stats": "1.0.0",
     "com.unity.nuget.newtonsoft-json": "3.0.2"
   }
 }

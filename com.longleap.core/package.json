@@ -1,9 +1,13 @@
 {
   "name": "com.longleap.core",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "displayName": "LongLeap Core",
   "description": "Foundation of the LongLeap packages: service contracts (auth, cloud saves, ads, storage, A/B experiments), the backend-agnostic cloud save service, and shared types.",
   "unity": "6000.0",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.core/README.md",
+  "changelogUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.core/CHANGELOG.md",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.core/LICENSE.md",
   "keywords": ["longleap", "core", "services", "auth", "cloud-save", "ads", "storage"],
   "dependencies": {
     "com.unity.nuget.newtonsoft-json": "3.0.2"

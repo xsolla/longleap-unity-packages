@@ -1,12 +1,11 @@
 # LongLeap Packages
-<https://gitea.longleap.games/Long_Leap_Games/Packages>
+<https://github.com/xsolla/longleap-unity-packages>
 
-Shared Unity package library for LongLeap games: **22 UPM packages** in one Git
-repo, consumed as a submodule at `Packages/LongLeap` and referenced from the host
-project with `file:` paths.
-
-Every package is embedded (local), so an Editor change is live at once — there is
-no publish step.
+Shared Unity package library for web games: **22 UPM packages** in one Git repo,
+MIT-licensed. Install them through the Unity Package Manager by Git URL — see
+[Install (Unity Package Manager)](#install-unity-package-manager). Our own games
+consume the repo as a submodule instead; see
+[Installing from the submodule](#installing-from-the-submodule-longleap-games).
 
 This file is the single entry point: what every package is, how to add it, and how
 to use it. Each released package also keeps its own `README.md` (full API tables,
@@ -19,7 +18,8 @@ Four packages are internal and not released; they are described separately in
 ## Contents
 
 - [Unity version](#unity-version)
-- [Installing packages](#installing-packages)
+- [Install (Unity Package Manager)](#install-unity-package-manager)
+- [Installing from the submodule (LongLeap games)](#installing-from-the-submodule-longleap-games)
 - [Package map](#package-map)
 - [Architecture](#architecture)
 - [Typical startup order](#typical-startup-order)
@@ -47,7 +47,64 @@ ships a separate archive for 6000.5+) before the project will build. Treat an Ed
 
 ---
 
-## Installing packages
+## Install (Unity Package Manager)
+
+**Requirements:** Unity 6 (6000.0 – 6000.4), WebGL build target.
+
+In Unity: **Window → Package Manager → + → Add package from git URL**, then add the
+packages you need. **Add dependencies first:** a package installed from Git does not
+pull in other Git packages, so every LongLeap package it needs must already be in
+the project. Unity packages (Newtonsoft JSON, Addressables, Localization, Input
+System, uGUI) are installed automatically.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.core
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.stats
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.achievements
+```
+
+Pin a version by adding `#v1.0.0` at the end of the URL, e.g.
+`https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.core#v1.0.0`.
+
+The same in `Packages/manifest.json`:
+
+```json
+"com.longleap.core": "https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.core#v1.0.0",
+"com.longleap.stats": "https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.stats#v1.0.0",
+"com.longleap.achievements": "https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.achievements#v1.0.0"
+```
+
+### Dependencies
+
+The list includes indirect dependencies, in install order.
+
+| Package | Needs |
+|---|---|
+| `core`, `localization`, `tools`, `buildmanager`, `bootstrap` | nothing |
+| `stats`, `dailyrewards`, `analytics`, `remoteconfig`, `nullproviders` | core |
+| `achievements`, `dailyquests` | core, stats |
+| `settings` | core, localization, tools |
+| `firebase` | core, remoteconfig |
+| `xsollaid` | core, localization, buildmanager |
+| `gamepix` | core, localization, buildmanager, xsollaid (+ the GamePix plugin in `Assets/Plugins/GamePix`) |
+| `backpack` | core, stats, achievements, buildmanager (+ your own reward server) |
+| `ui` | tools |
+
+### Good to know
+
+- Built and tested for web games (WebGL).
+- Each package has its own README with examples. Packages need some wiring in your
+  game code — see the package sections below.
+- Backpack rewards are granted by a small server that holds your merchant secrets.
+  It is set up per game and is not part of this library.
+- Questions: [GitHub Issues](https://github.com/xsolla/longleap-unity-packages/issues).
+
+---
+
+## Installing from the submodule (LongLeap games)
+
+Our own games consume the repo as a Git submodule and reference the packages with
+`file:` paths, so an Editor change is live at once.
 
 ### 1. Get the submodule
 
@@ -77,9 +134,6 @@ where the submodule lives: `file:LongLeap/...` resolves only if the submodule si
 at `Packages/LongLeap`. **The location is a convention, not a requirement** — you
 can mount it elsewhere, but then `.gitmodules` and every `file:` entry have to
 change together.
-
-> `manifest.json` at the repo root is **not** read by consumers — Unity only reads
-> the host project's `Packages/manifest.json`.
 
 ### 3. Reference the assemblies
 
@@ -205,7 +259,9 @@ How the packages fit together in a game's boot sequence. Each step is usually on
 # Packages
 
 Every section follows the same order: **what it is**, **install**, **how to use**,
-**pitfalls**, **details**.
+**pitfalls**, **details**. The **Install** lines show the submodule `file:` form; when
+installing from Git, use the package's Git URL instead (see
+[Install (Unity Package Manager)](#install-unity-package-manager)).
 
 ---
 
@@ -489,7 +545,7 @@ tracking with a configurable grace period, cycles that run `Once` or `Loop`, a
 calendar view-model for the UI, and crash-safe "save, then grant" claiming.
 
 **Install.** `"com.longleap.dailyrewards": "file:LongLeap/com.longleap.dailyrewards"`
-(+ core 0.2.0+). Assemblies to reference: `LongLeap.DailyRewards`, `LongLeap.Core`.
+(+ core). Assemblies to reference: `LongLeap.DailyRewards`, `LongLeap.Core`.
 
 **How to use.**
 
@@ -541,7 +597,7 @@ JSON, progress comes from `IStatSystem`, state is stored through
 - rewards are **claimed by the player** (`ClaimAsync`), not granted automatically.
 
 **Install.** `"com.longleap.dailyquests": "file:LongLeap/com.longleap.dailyquests"`
-(+ core 0.2.0+, stats). Assembly `LongLeap.DailyQuests`.
+(+ core, stats). Assembly `LongLeap.DailyQuests`.
 
 **How to use.**
 
@@ -933,7 +989,7 @@ is not a compile error, so this is the first place to look when the account bloc
 
 Shared: `scopes` (default `openid offline email profile` — **`offline`, not
 `offline_access`**, or refresh can fail with `invalid_scope`) and
-`allowedGameOrigins` (checked before the window opens; default `http://127.0.0.1:8081` for local testing — add your real game origins, or empty the list to skip the check). Build
+`allowedGameOrigins` (checked before the window opens; default `http://127.0.0.1:8081` for local testing — add your real game origins, or empty the list to skip the check). The build also writes this list into `xid-callback.html`: the sign-in result is posted only to these origins and the page's own origin, so a portal build must list the portal's origins here. Build
 Manager blocks the build when `XSOLLA_ID` is on and `clientId` / `redirectUri` is
 empty.
 
@@ -1364,7 +1420,7 @@ one shape:
 | `LocKey` | localization | null and `""` are the same empty key (`IsEmpty`); the only one that is not a `readonly struct` (Unity serialization) |
 
 **Versions and dependencies.** Each package keeps its own version in
-`package.json` (most are `0.1.0`). These are embedded packages, so no registry
+`package.json` (all are `1.0.0`). These are embedded packages, so no registry
 checks that `package.json` matches what the `.asmdef` files reference — run the
 check before a release instead:
 

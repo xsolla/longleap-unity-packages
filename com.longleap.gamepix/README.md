@@ -4,6 +4,20 @@ Backend for the [GamePix](https://www.gamepix.com) web portal. It wraps the vend
 GamePix Unity plugin behind the LongLeap seams (`IAdsProvider`, `IPortalLocale`,
 `IXsollaIdAuth`) and adds the editor tooling a portal build needs.
 
+## Install (Unity Package Manager)
+
+Unity 6 (6000.0 – 6000.4), WebGL build target. In Unity: **Window → Package Manager → + → Add package from git URL**. Add the packages in this order: a package installed from Git does not pull in other Git packages, so the LongLeap packages it needs go first.
+
+```
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.core
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.localization
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.buildmanager
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.xsollaid
+https://github.com/xsolla/longleap-unity-packages.git?path=/com.longleap.gamepix
+```
+
+Pin a version by adding `#v1.0.0` at the end of each URL. Unity packages this one uses are installed automatically. It also needs the vendor GamePix plugin in `Assets/Plugins/GamePix` — see below. All packages and their dependencies: [root README](../README.md#install-unity-package-manager).
+
 ## Requirements
 
 - Unity 6000.0+, WebGL.

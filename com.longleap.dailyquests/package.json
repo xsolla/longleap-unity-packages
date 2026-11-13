@@ -1,13 +1,17 @@
 {
   "name": "com.longleap.dailyquests",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "displayName": "LongLeap Daily Quests",
   "description": "Daily quests: a JSON-defined pool rotated every UTC reset window, progress derived from stats, rewards claimed manually by the player.",
   "unity": "6000.0",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.dailyquests/README.md",
+  "changelogUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.dailyquests/CHANGELOG.md",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.dailyquests/LICENSE.md",
   "keywords": ["quests", "daily", "missions", "rewards", "longleap"],
   "dependencies": {
-    "com.longleap.core": "0.2.0",
-    "com.longleap.stats": "0.1.0",
+    "com.longleap.core": "1.0.0",
+    "com.longleap.stats": "1.0.0",
     "com.unity.nuget.newtonsoft-json": "3.0.2"
   }
 }

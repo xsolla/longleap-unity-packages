@@ -1,13 +1,16 @@
 {
   "name": "com.longleap.customization",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "displayName": "LongLeap Customization",
   "description": "Character customization: the player's skin inventory, equipped outfit and zone colours (with cloud-save persistence), and the UGUI customization panel that drives them. Skeleton-agnostic: the host implements ISkinTarget / IColorTarget / IPreviewPose for its own character.",
   "unity": "6000.0",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.customization/README.md",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.customization/LICENSE.md",
   "keywords": ["customization", "skins", "inventory", "equipment", "ui", "longleap"],
   "dependencies": {
-    "com.longleap.core": "0.1.0",
-    "com.longleap.skins": "0.1.0",
+    "com.longleap.core": "1.0.0",
+    "com.longleap.skins": "1.0.0",
     "com.unity.ugui": "2.0.0"
   }
 }
