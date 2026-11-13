@@ -1,0 +1,17 @@
+{
+    "name": "LongLeap.Quests",
+    "rootNamespace": "LongLeap.Quests",
+    "references": [
+        "LongLeap.Core",
+        "LongLeap.Achievements"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

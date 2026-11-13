@@ -1,0 +1,13 @@
+{
+  "name": "com.longleap.quests",
+  "version": "0.1.0",
+  "displayName": "LongLeap Quests",
+  "description": "Client for the LongLeap Quests service: reports completed achievements as quest events and reads the project's quests and the player's progress.",
+  "unity": "6000.0",
+  "keywords": ["quests", "achievements", "longleap"],
+  "dependencies": {
+    "com.longleap.achievements": "0.1.0",
+    "com.longleap.core": "0.1.0",
+    "com.unity.nuget.newtonsoft-json": "3.0.2"
+  }
+}
