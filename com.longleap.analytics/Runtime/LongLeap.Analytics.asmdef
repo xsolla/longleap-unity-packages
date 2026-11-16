@@ -1,0 +1,16 @@
+{
+  "name": "LongLeap.Analytics",
+  "rootNamespace": "LongLeap.Analytics",
+  "references": [
+    "Newtonsoft.Json",
+    "LongLeap.Core"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

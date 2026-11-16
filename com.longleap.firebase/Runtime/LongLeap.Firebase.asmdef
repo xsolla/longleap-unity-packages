@@ -1,0 +1,19 @@
+{
+  "name": "LongLeap.Firebase",
+  "rootNamespace": "LongLeap.Firebase",
+  "references": [
+    "LongLeap.Core",
+    "LongLeap.RemoteConfig",
+    "Newtonsoft.Json",
+    "UnityEngine.CoreModule",
+    "UnityEngine.UnityWebRequestModule"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

@@ -1,0 +1,27 @@
+{
+  "name": "LongLeap.Firebase.Leaderboards",
+  "rootNamespace": "LongLeap.Firebase",
+  "references": [
+    "LongLeap.Core",
+    "LongLeap.Firebase",
+    "LongLeap.XsollaId.Web",
+    "Newtonsoft.Json"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "XSOLLA_ID",
+    "LONGLEAP_XSOLLAID"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.longleap.xsollaid",
+      "expression": "0.0.0",
+      "define": "LONGLEAP_XSOLLAID"
+    }
+  ]
+}

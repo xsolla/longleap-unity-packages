@@ -1,0 +1,19 @@
+{
+  "name": "LongLeap.GamePix.Tests",
+  "rootNamespace": "",
+  "references": [
+    "LongLeap.Core",
+    "LongLeap.XsollaId",
+    "LongLeap.GamePix",
+    "GamePix",
+    "UnityEngine.TestRunner",
+    "NUnit.Framework"
+  ],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS", "GAMEPIX"]
+}

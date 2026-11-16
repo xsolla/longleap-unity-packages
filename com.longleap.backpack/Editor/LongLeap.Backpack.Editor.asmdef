@@ -1,0 +1,18 @@
+{
+    "name": "LongLeap.Backpack.Editor",
+    "rootNamespace": "LongLeap.Backpack.Editor",
+    "references": [
+        "LongLeap.BuildManager.Options"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

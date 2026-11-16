@@ -1,0 +1,22 @@
+{
+  "name": "com.longleap.settings",
+  "version": "1.0.0",
+  "displayName": "LongLeap Settings",
+  "description": "Typed settings (numeric, bool, enum, key binding) grouped into cloud-saved groups, plus a code-built settings panel driven by per-device ScriptableObject configs, with sliders, toggles and key rebinding.",
+  "unity": "6000.0",
+  "keywords": ["settings", "preferences", "options", "key bindings", "longleap"],
+  "author": {
+    "name": "LongLeap"
+  },
+  "license": "MIT",
+  "documentationUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.settings/README.md",
+  "changelogUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.settings/CHANGELOG.md",
+  "licensesUrl": "https://github.com/xsolla/longleap-unity-packages/blob/main/com.longleap.settings/LICENSE.md",
+  "dependencies": {
+    "com.longleap.core": "1.0.0",
+    "com.longleap.localization": "1.0.0",
+    "com.longleap.tools": "1.0.0",
+    "com.unity.ugui": "2.0.0",
+    "com.unity.inputsystem": "1.19.0"
+  }
+}

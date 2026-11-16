@@ -1,0 +1,16 @@
+{
+    "name": "LongLeap.Settings",
+    "rootNamespace": "LongLeap.Settings",
+    "references": [
+        "LongLeap.Core",
+        "LongLeap.Localization"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": []
+}

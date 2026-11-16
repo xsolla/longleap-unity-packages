@@ -1,0 +1,18 @@
+{
+    "name": "LongLeap.Notifications.PlayModeTests",
+    "rootNamespace": "",
+    "references": [
+        "LongLeap.Notifications",
+        "UnityEngine.TestRunner",
+        "NUnit.Framework"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}

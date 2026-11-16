@@ -1,0 +1,17 @@
+{
+  "name": "LongLeap.Achievements",
+  "rootNamespace": "LongLeap.Achievements",
+  "references": [
+    "LongLeap.Core",
+    "LongLeap.Stats",
+    "Newtonsoft.Json"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

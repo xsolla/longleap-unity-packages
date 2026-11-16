@@ -1,0 +1,18 @@
+{
+    "name": "LongLeap.Settings.UI.Editor",
+    "rootNamespace": "LongLeap.Settings.UI.Editor",
+    "references": [
+        "LongLeap.Settings",
+        "LongLeap.Settings.UI"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": []
+}

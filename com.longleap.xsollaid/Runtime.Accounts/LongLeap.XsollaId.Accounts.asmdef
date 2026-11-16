@@ -1,0 +1,16 @@
+{
+  "name": "LongLeap.XsollaId.Accounts",
+  "rootNamespace": "LongLeap.XsollaId.Accounts",
+  "references": [
+    "LongLeap.Core",
+    "LongLeap.XsollaId"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": []
+}

@@ -1,0 +1,33 @@
+{
+  "name": "LongLeap.UI.BackPack",
+  "rootNamespace": "LongLeap.UI",
+  "references": [
+    "LongLeap.UI",
+    "UnityEngine.UI",
+    "Unity.TextMeshPro",
+    "LongLeap.Backpack",
+    "LongLeap.XsollaId"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "LONGLEAP_BACKPACK",
+    "LONGLEAP_XSOLLAID"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.longleap.backpack",
+      "expression": "0.0.0",
+      "define": "LONGLEAP_BACKPACK"
+    },
+    {
+      "name": "com.longleap.xsollaid",
+      "expression": "0.0.0",
+      "define": "LONGLEAP_XSOLLAID"
+    }
+  ]
+}

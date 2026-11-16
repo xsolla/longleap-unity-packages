@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Signing in…</title>
+<style>
+  html, body {
+    margin: 0; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    background: #231F20; color: #f2f2f2;
+    font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+</style>
+</head>
+<body>
+<p id="status">Signing in…</p>
+<script>
+(function () {
+  // Origins the result may be delivered to. postMessage needs a specific
+  // targetOrigin: with '*' any site able to open this page could read a live
+  // authorization code. The browser silently drops a message whose
+  // targetOrigin does not match, so we simply try each entry — nothing leaks.
+  //
+  // A list is needed because this page and the game do NOT have to share an
+  // origin: in a portal build the portal serves the game, while this page can
+  // live on our own domain.
+  //
+  // Do not edit the list here: the build fills it from allowedGameOrigins of
+  // the Xsolla ID config asset (XsollaIdCallbackPagePostprocessor). For a
+  // portal, list both origins there: the game runs in an iframe whose origin
+  // differs from the portal's game page (e.g. www.gamepix.com/play/<slug>),
+  // and the opener of this window is that iframe. An extra entry costs
+  // nothing: mismatching messages are dropped by the browser.
+  var ALLOWED_GAME_ORIGINS = [/*ALLOWED_GAME_ORIGINS*/];
+
+  var params = new URLSearchParams(window.location.search);
+
+  var payload = {
+    type: 'xsolla-id-auth',
+    code: params.get('code') || '',
+    state: params.get('state') || '',
+    // May be access_denied — the player pressed "cancel".
+    error: params.get('error') || params.get('error_description') || ''
+  };
+
+  var target = window.opener;
+
+  if (!target) {
+    // Opened directly, not from the game. No point showing the code here.
+    document.getElementById('status').textContent =
+      'Nothing to do here — open the game and sign in from there.';
+    return;
+  }
+
+  // Always deliver to our own origin: the case where page and game sit together.
+  var origins = ALLOWED_GAME_ORIGINS.slice();
+  if (origins.indexOf(window.location.origin) === -1) {
+    origins.push(window.location.origin);
+  }
+
+  for (var i = 0; i < origins.length; i++) {
+    try {
+      target.postMessage(payload, origins[i]);
+    } catch (e) {
+      // Mismatching origin — the browser drops it anyway; move on.
+    }
+  }
+
+  // The game closes this window once it gets the message. Close ourselves
+  // too, in case it does not.
+  window.setTimeout(function () {
+    window.close();
+  }, 300);
+})();
+</script>
+</body>
+</html>
